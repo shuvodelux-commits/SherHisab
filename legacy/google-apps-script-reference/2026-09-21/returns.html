@@ -1,0 +1,306 @@
+<!-- ================= New Return ================= -->
+<div class="card" id="rtSearchCard" style="margin-bottom:16px;">
+  <label>Find Invoice by Invoice Number or Customer Phone</label>
+  <div style="display:flex; gap:8px;">
+    <input id="rtSearchInput" type="text" placeholder="e.g. INV-000012 or 01911-100001" style="flex:1;">
+    <button class="btn btn-primary" id="rtFindBtn">Find Invoice</button>
+    <button class="btn" id="rtClearBtn">Clear</button>
+  </div>
+  <div id="rtSearchResults" style="margin-top:12px;"></div>
+  <div class="empty-state" id="rtSearchEmpty" hidden>Invoice not found.</div>
+</div>
+
+<div id="rtInvoiceArea" hidden>
+  <div class="card" style="margin-bottom:16px;">
+    <div class="form-grid">
+      <div><label>Invoice</label><div class="mono" id="rtInvId"></div></div>
+      <div><label>Date</label><div id="rtInvDate"></div></div>
+      <div><label>Customer</label><div id="rtInvCustomer"></div></div>
+      <div><label>Phone</label><div id="rtInvPhone"></div></div>
+      <div class="full"><label>Address</label><div id="rtInvAddress"></div></div>
+    </div>
+    <div class="return-invoice-summary" style="display:flex; gap:24px; flex-wrap:wrap; margin-top:14px; border-top:1px solid var(--color-border); padding-top:12px;">
+      <div><div class="stat-label">Original Total</div><div class="mono" id="rtInvGrandTotal"></div></div>
+      <div><div class="stat-label">Paid</div><div class="mono" id="rtInvPaid"></div></div>
+      <div><div class="stat-label">Cash Refund Available</div><div class="mono" id="rtCashRefundAvailable"></div></div>
+      <div><div class="stat-label">Due</div><div class="mono" id="rtInvDue"></div></div>
+      <div><div class="stat-label">Previously Returned</div><div class="mono" id="rtInvPrevReturned"></div></div>
+      <div><div class="stat-label">Net Sale</div><div class="mono" id="rtInvNetSale"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="font-size:14px; margin-bottom:10px;">Return Cart <span class="bn-hint" style="display:inline;">— ফেরত দেওয়া মাল</span></h3>
+    <table class="mobile-card-table mobile-return-cart-table">
+      <thead>
+        <tr><th>Product</th><th class="num">Sold</th><th class="num">Returned</th><th class="num">Available</th><th class="num">Return Qty</th><th class="num">Return Price</th><th class="num">Line Total</th></tr>
+      </thead>
+      <tbody id="rtCartBody"></tbody>
+    </table>
+
+    <div class="form-grid" style="margin-top:18px;">
+      <div>
+        <label>Refund Method *</label>
+        <select id="rtRefundMethod">
+          <option value="Cash">Cash Refund</option>
+          <option value="Store Credit">Adjust to Customer Due (Store Credit)</option>
+        </select>
+        <div id="rtRefundHint" class="stat-label" style="margin-top:6px;"></div>
+      </div>
+      <div><label>Return Reason</label><input id="rtReason" type="text" placeholder="Optional"></div>
+      <div class="full"><label>Note</label><input id="rtNote" type="text" placeholder="Optional"></div>
+      <div><label>Return Date</label><input id="rtDate" type="date"></div>
+      <div id="rtBackdatedReasonRow" class="full" style="display:none;"><label>Reason for Backdating *</label><input id="rtBackdatedReason" type="text" placeholder="Why is this dated in the past?"></div>
+    </div>
+
+    <div style="max-width:320px; margin-left:auto; margin-top:14px;">
+      <div class="totals-row grand"><span>Total Return Amount</span><span class="v" id="rtTotalReturn">0</span></div>
+    </div>
+
+    <div class="field-error" id="rtFormError"></div>
+    <div style="text-align:right; margin-top:14px;">
+      <button class="btn" id="rtCancelBtn">Cancel</button>
+      <button class="btn btn-primary btn-lg" id="rtCompleteBtn">Complete Return</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var rtState = { invoice: null, currencySymbol: '', editingReturnId: null, editQtyByProduct: {} };
+
+  // ---------------- Search ----------------
+  document.getElementById('rtFindBtn').addEventListener('click', rtSearch_);
+  document.getElementById('rtSearchInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') rtSearch_(); });
+
+  function rtSearch_() {
+    var q = document.getElementById('rtSearchInput').value.trim();
+    if (!q) return;
+    withLoader(serverCall('searchInvoicesForReturn', authToken, q)).then(function (matches) {
+      var box = document.getElementById('rtSearchResults');
+      box.innerHTML = '';
+      document.getElementById('rtSearchEmpty').hidden = matches.length > 0;
+      if (!matches.length) return;
+      // Exact single invoice ID match -> load directly.
+      if (matches.length === 1 && !matches[0].duplicateInvoiceId && matches[0].invoiceId.toLowerCase() === q.toLowerCase()) {
+        returnsLoadInvoiceById_(matches[0].invoiceId);
+        return;
+      }
+      var table = document.createElement('table');
+      table.innerHTML = '<thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th class="num">Total</th><th>Status</th><th></th></tr></thead>';
+      var tbody = document.createElement('tbody');
+      matches.forEach(function (m) {
+        var tr = document.createElement('tr');
+        var integrityBadge = m.duplicateInvoiceId ? ' <span class="badge badge-danger">Duplicate ID</span>' : '';
+        var disabled = m.duplicateInvoiceId ? ' disabled aria-disabled="true" title="Duplicate invoice ID must be repaired before return"' : '';
+        tr.innerHTML =
+          '<td class="mono">' + escapeHtml(m.invoiceId) + integrityBadge + '</td><td>' + escapeHtml(m.date) + '</td>' +
+          '<td>' + escapeHtml(m.customerName) + '</td><td class="num mono">' + formatMoney(m.grandTotal) + '</td>' +
+          '<td>' + escapeHtml(m.paymentStatus) + '</td><td><button class="btn" data-id="' + escapeHtml(m.invoiceId) + '"' + disabled + '>Load</button></td>';
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      box.appendChild(table);
+      box.querySelectorAll('button[data-id]').forEach(function (b) {
+        b.addEventListener('click', function () { returnsLoadInvoiceById_(b.dataset.id); });
+      });
+    }).catch(function (err) { showToast(err.message, 'error'); });
+  }
+
+  document.getElementById('rtClearBtn').addEventListener('click', rtReset_);
+
+  function rtReset_() {
+    rtState.invoice = null;
+    rtState.editingReturnId = null;
+    rtState.editQtyByProduct = {};
+    document.getElementById('rtSearchCard').hidden = false;
+    document.getElementById('rtCompleteBtn').textContent = 'Complete Return';
+    document.getElementById('rtSearchInput').value = '';
+    document.getElementById('rtSearchResults').innerHTML = '';
+    document.getElementById('rtSearchEmpty').hidden = true;
+    document.getElementById('rtInvoiceArea').hidden = true;
+    document.getElementById('rtDate').value = rtToday_();
+    document.getElementById('rtBackdatedReason').value = '';
+    document.getElementById('rtBackdatedReasonRow').style.display = 'none';
+    var refundSelect = document.getElementById('rtRefundMethod');
+    var cashOption = refundSelect.querySelector('option[value="Cash"]');
+    if (cashOption) cashOption.disabled = false;
+    refundSelect.value = 'Cash';
+    document.getElementById('rtRefundHint').textContent = '';
+  }
+
+  /** Global entry point — called from search results, or jumped to directly from Sales Management's "Sales Return" button. */
+  function returnsLoadInvoiceById_(invoiceId) {
+    if (!document.getElementById('rtDate').value) document.getElementById('rtDate').value = rtToday_();
+    return withLoader(serverCall('getInvoiceForReturn', authToken, invoiceId)).then(function (inv) {
+      rtState.invoice = inv;
+      document.getElementById('rtSearchResults').innerHTML = '';
+      document.getElementById('rtSearchEmpty').hidden = true;
+
+      document.getElementById('rtInvId').textContent = inv.invoiceId;
+      document.getElementById('rtInvDate').textContent = inv.date;
+      document.getElementById('rtInvCustomer').textContent = inv.customerName || 'Walk-in Customer';
+      document.getElementById('rtInvPhone').textContent = inv.customerPhone || '—';
+      document.getElementById('rtInvAddress').textContent = inv.customerAddress || '—';
+      document.getElementById('rtInvGrandTotal').textContent = formatMoney(inv.grandTotal);
+      document.getElementById('rtInvPaid').textContent = formatMoney(inv.paidAmount);
+      document.getElementById('rtCashRefundAvailable').textContent = formatMoney(inv.cashRefundAvailable || 0);
+      document.getElementById('rtInvDue').textContent = formatMoney(inv.dueAmount);
+      document.getElementById('rtInvPrevReturned').textContent = formatMoney(inv.previouslyReturnedAmount);
+      document.getElementById('rtInvNetSale').textContent = formatMoney(inv.netSale);
+
+      rtRenderCart_();
+      rtApplyRefundAvailability_();
+      document.getElementById('rtInvoiceArea').hidden = false;
+    }).catch(function (err) { showToast(err.message, 'error'); });
+  }
+
+  function rtRenderCart_() {
+    var body = document.getElementById('rtCartBody');
+    body.innerHTML = '';
+    rtState.invoice.items.forEach(function (item, i) {
+      var tr = document.createElement('tr');
+      var existingQty = Number(rtState.editQtyByProduct[String(item.productId)] || 0);
+      var maxQty = Number(item.availableQty || 0) + existingQty;
+      item._editMaxQty = maxQty;
+      item._returnQty = existingQty;
+      var disabled = maxQty <= 0;
+      var otherReturnedQty = Math.max(0, Number(item.previouslyReturnedQty || 0) - existingQty);
+      tr.innerHTML =
+        '<td class="return-product-cell">' + escapeHtml(item.name) + '<div style="font-size:11px;color:var(--color-text-muted);">' + escapeHtml(item.supplierName || '') + '</div></td>' +
+        '<td class="num mono" data-label="Sold">' + item.soldQty + '</td>' +
+        '<td class="num mono" data-label="Returned">' + (rtState.editingReturnId ? otherReturnedQty : item.previouslyReturnedQty) + '</td>' +
+        '<td class="num mono" data-label="Available">' + maxQty + '</td>' +
+        '<td class="num return-qty-cell" data-label="Return Qty"><input type="number" min="0" max="' + maxQty + '" value="' + existingQty + '" ' + (disabled ? 'disabled' : '') + ' data-i="' + i + '" data-f="qty"></td>' +
+        '<td class="num mono return-price-cell" data-label="Return Price">' + formatMoney(Number(item.unitPrice) || 0) + '</td>' +
+        '<td class="num mono return-line-total" data-label="Line Total" id="rtLineTotal' + i + '">' + formatMoney(existingQty * (Number(item.unitPrice) || 0)) + '</td>';
+      body.appendChild(tr);
+    });
+    rtRecalcTotal_();
+  }
+
+  document.getElementById('rtCartBody').addEventListener('input', function (e) {
+    if (e.target.tagName !== 'INPUT' || e.target.dataset.f !== 'qty') return;
+    var i = Number(e.target.dataset.i);
+    var item = rtState.invoice.items[i];
+    var q = Number(e.target.value);
+    item._returnQty = (isNaN(q) || q < 0) ? 0 : Math.min(q, item._editMaxQty === undefined ? item.availableQty : item._editMaxQty);
+    document.getElementById('rtLineTotal' + i).textContent = formatMoney((item._returnQty || 0) * (Number(item.unitPrice) || 0));
+    rtRecalcTotal_();
+  });
+
+  function rtReturnTotal_() {
+    if (!rtState.invoice || !rtState.invoice.items) return 0;
+    return rtState.invoice.items.reduce(function (sum, item) {
+      return sum + (item._returnQty || 0) * (Number(item.unitPrice) || 0);
+    }, 0);
+  }
+
+  function rtApplyRefundAvailability_() {
+    var refundSelect = document.getElementById('rtRefundMethod');
+    var cashOption = refundSelect.querySelector('option[value="Cash"]');
+    var hint = document.getElementById('rtRefundHint');
+    var cashRefundAvailable = Number(rtState.invoice && rtState.invoice.cashRefundAvailable) || 0;
+    var total = rtReturnTotal_();
+    cashOption.disabled = cashRefundAvailable <= 0;
+    if (cashRefundAvailable <= 0 && refundSelect.value === 'Cash') {
+      refundSelect.value = 'Store Credit';
+    }
+    if (cashRefundAvailable <= 0) {
+      hint.textContent = 'No cash was collected on this invoice. The return will reduce customer due / create store credit.';
+    } else if (refundSelect.value === 'Cash' && total > cashRefundAvailable + 0.005) {
+      hint.textContent = 'Cash refund available: ' + formatMoney(cashRefundAvailable) + '. Choose Adjust to Customer Due / Store Credit for a larger return.';
+    } else {
+      hint.textContent = 'Cash refund available: ' + formatMoney(cashRefundAvailable) + '.';
+    }
+  }
+
+  function rtRecalcTotal_() {
+    var total = rtReturnTotal_();
+    document.getElementById('rtTotalReturn').textContent = formatMoney(total);
+    rtApplyRefundAvailability_();
+  }
+
+  function rtToday_() {
+    var d = new Date();
+    var m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + day;
+  }
+
+  document.getElementById('rtDate').addEventListener('change', function () {
+    var val = document.getElementById('rtDate').value;
+    document.getElementById('rtBackdatedReasonRow').style.display = (val && val < rtToday_()) ? '' : 'none';
+  });
+
+
+  document.getElementById('rtRefundMethod').addEventListener('change', rtApplyRefundAvailability_);
+
+  document.getElementById('rtCancelBtn').addEventListener('click', rtReset_);
+
+  document.getElementById('rtCompleteBtn').addEventListener('click', function () {
+    var errEl = document.getElementById('rtFormError');
+    errEl.style.display = 'none';
+
+    var items = rtState.invoice.items
+      .filter(function (item) { return (item._returnQty || 0) > 0; })
+      .map(function (item) {
+        return { productId: item.productId, supplierId: item.supplierId, name: item.name, qty: item._returnQty };
+      });
+
+    if (!items.length) { errEl.textContent = 'Enter a return quantity for at least one product.'; errEl.style.display = 'block'; return; }
+
+    var rtDate = document.getElementById('rtDate').value || rtToday_();
+    var rtBackdatedReason = document.getElementById('rtBackdatedReason').value.trim();
+    if (!rtState.editingReturnId && rtDate < rtToday_() && !rtBackdatedReason) { errEl.textContent = 'A reason is required when dating a return in the past.'; errEl.style.display = 'block'; return; }
+
+    var payload = {
+      invoiceId: rtState.invoice.invoiceId, items: items,
+      refundMethod: document.getElementById('rtRefundMethod').value,
+      reason: document.getElementById('rtReason').value.trim(),
+      notes: document.getElementById('rtNote').value.trim(),
+      date: rtDate,
+      backdatedReason: rtBackdatedReason
+    };
+
+    var salesReturnTotal = rtReturnTotal_();
+    var cashRefundAvailable = Number(rtState.invoice.cashRefundAvailable) || 0;
+    if (payload.refundMethod === 'Cash' && salesReturnTotal > cashRefundAvailable + 0.005) {
+      errEl.textContent = 'Cash refund available is ' + formatMoney(cashRefundAvailable) + '. Choose Adjust to Customer Due / Store Credit for the remaining return value.';
+      errEl.style.display = 'block';
+      return;
+    }
+    runConfirmedAction({
+      type: 'financial',
+      title: rtState.editingReturnId ? 'Update Sales Return?' : 'Complete Sales Return?',
+      message: 'This will change stock and customer accounting.',
+      details: [
+        { label: 'Invoice', value: rtState.invoice.invoiceId, emphasis: true },
+        { label: 'Customer', value: rtState.invoice.customerName || 'Walk-in Customer' },
+        { label: 'Return Amount', value: formatMoney(salesReturnTotal), emphasis: true },
+        { label: 'In words', value: banglaAmountInWords_(salesReturnTotal) },
+        { label: 'Items Returning', value: String(items.length) },
+        { label: 'Refund Method', value: payload.refundMethod },
+        { label: 'Reason', value: payload.reason },
+        { label: 'Date', value: payload.date }
+      ],
+      confirmLabel: rtState.editingReturnId ? 'Update Return' : 'Complete Return',
+      loadingLabel: rtState.editingReturnId ? 'Updating...' : 'Completing...',
+      trigger: document.getElementById('rtCompleteBtn')
+    }, function () {
+      return withLoader(serverCall('completeReturn', authToken, payload)).then(function (res) {
+        showToast('Return ' + res.returnId + ' completed — ' + formatMoney(res.totalReturnAmount) + ' refunded', 'success');
+        rtReset_();
+      });
+    }).catch(function (err) { errEl.textContent = err.message; errEl.style.display = 'block'; });
+  });
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var origGoToPage = goToPage;
+    goToPage = function (key) {
+      origGoToPage(key);
+      if (key === 'returns' && !rtState._loaded) {
+        rtState._loaded = true;
+        if (!document.getElementById('rtDate').value) document.getElementById('rtDate').value = rtToday_();
+      }
+    };
+  });
+</script>

@@ -1,0 +1,726 @@
+<div class="toolbar">
+  <div class="smart-search-box prod-search-box">
+    <input class="search-input" id="prodSearch" type="search" autocomplete="off" spellcheck="false" placeholder="Smart search: name, brand, barcode, category, unit..." aria-label="Search products" style="max-width:none;">
+    <button type="button" class="smart-search-clear" id="prodSearchClear" aria-label="Clear product search" title="Clear search" hidden>&#10005;</button>
+  </div>
+  <select id="prodCategoryFilter" style="max-width:180px;">
+    <option value="">All categories</option>
+  </select>
+  <select id="prodBrandFilter" style="max-width:180px;">
+    <option value="">All brands</option>
+  </select>
+  <div class="toolbar-spacer"></div>
+  <button class="btn btn-primary" id="prodAddBtn">+ Add Product</button>
+</div>
+
+<div class="card" style="padding:0;">
+  <div class="table-scroll">
+    <table id="prodTable" class="mobile-card-table">
+      <thead>
+        <tr>
+          <th aria-sort="none"><button type="button" class="prod-sort-button" data-sort-key="name">Product <span class="prod-sort-indicator" aria-hidden="true">↕</span></button></th>
+          <th aria-sort="none"><button type="button" class="prod-sort-button" data-sort-key="category">Category <span class="prod-sort-indicator" aria-hidden="true">↕</span></button></th>
+          <th class="num prod-sort-th" aria-sort="none"><button type="button" class="prod-sort-button" data-sort-key="purchasePrice">Purchase Price <span class="prod-sort-indicator" aria-hidden="true">↕</span></button></th>
+          <th class="num prod-sort-th" aria-sort="none"><button type="button" class="prod-sort-button" data-sort-key="sellingPrice">Selling Price <span class="prod-sort-indicator" aria-hidden="true">↕</span></button></th>
+          <th class="num prod-sort-th" aria-sort="none"><button type="button" class="prod-sort-button" data-sort-key="stockQty">Stock Qty <span class="prod-sort-indicator" aria-hidden="true">↕</span></button></th>
+          <th class="num prod-sort-th" aria-sort="none"><button type="button" class="prod-sort-button" data-sort-key="stockValue">Stock Value <span class="prod-sort-indicator" aria-hidden="true">↕</span></button></th>
+          <th aria-sort="none"><button type="button" class="prod-sort-button" data-sort-key="status">Status <span class="prod-sort-indicator" aria-hidden="true">↕</span></button></th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="prodTableBody"></tbody>
+    </table>
+  </div>
+  <div class="empty-state" id="prodEmptyState" hidden>No products yet. Click "Add Product" or load demo data from the Sheet menu.</div>
+</div>
+
+<!-- Add / Edit Product modal -->
+<div class="modal-overlay" id="prodModal" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <div><h3 id="prodModalTitle">Add Product</h3><span class="bn-hint">পণ্যের তথ্য</span></div>
+      <button class="modal-close" onclick="closeModal('prodModal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="full">
+          <label>Product Name *<br><span class="bn-hint" style="display:inline;">পণ্যের নাম</span></label>
+          <input id="prodName" type="text" placeholder="e.g. PVC Pipe 1&quot;">
+        </div>
+        <div>
+          <label>Brand (optional)<br><span class="bn-hint" style="display:inline;">ব্র্যান্ড (ঐচ্ছিক)</span></label>
+          <input id="prodBrand" type="text" placeholder="e.g. ACI, Samsung">
+        </div>
+        <div>
+          <label>Category<br><span class="bn-hint" style="display:inline;">ধরন</span></label>
+          <div style="display:flex; gap:8px;">
+            <select id="prodCategory" style="flex:1;"><option value="">Select category...</option></select>
+            <button type="button" class="btn" id="prodManageCategoriesBtn" title="Add or remove categories">Manage</button>
+          </div>
+        </div>
+        <div>
+          <label>Unit<br><span class="bn-hint" style="display:inline;">একক</span></label>
+          <div style="display:flex; gap:8px;">
+            <select id="prodUnit" style="flex:1;"><option value="">Select unit...</option></select>
+            <button type="button" class="btn" id="prodManageUnitsBtn" title="Add or remove units">Manage</button>
+          </div>
+        </div>
+        <div>
+          <label>Purchase Price *<br><span class="bn-hint" style="display:inline;">কেনা দাম</span></label>
+          <input id="prodPurchasePrice" type="number" min="0" step="0.01">
+        </div>
+        <div>
+          <label>Selling Price *<br><span class="bn-hint" style="display:inline;">বিক্রির দাম</span></label>
+          <input id="prodSellingPrice" type="number" min="0" step="0.01">
+        </div>
+        <div>
+          <label>Opening / Current Stock *<br><span class="bn-hint" style="display:inline;">শুরুর/বর্তমান মজুদ</span></label>
+          <input id="prodStock" type="number" min="0" step="1">
+        </div>
+        <div>
+          <label>Minimum Stock *<br><span class="bn-hint" style="display:inline;">সর্বনিম্ন মজুদ</span></label>
+          <input id="prodMinStock" type="number" min="0" step="1" value="5">
+        </div>
+        <div class="full">
+          <label>Barcode (optional)<br><span class="bn-hint" style="display:inline;">বারকোড (ঐচ্ছিক)</span></label>
+          <input id="prodBarcode" type="text">
+        </div>
+      </div>
+      <div class="field-error" id="prodFormError"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('prodModal')">Cancel</button>
+      <button class="btn btn-primary" id="prodSaveBtn">Save Product</button>
+    </div>
+  </div>
+</div>
+
+<!-- Adjust stock modal -->
+<div class="modal-overlay" id="prodStockModal" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Adjust Stock <span class="bn-hint" style="display:inline;">— স্টক ঠিক করুন</span> &mdash; <span id="prodStockName"></span></h3>
+      <button class="modal-close" onclick="closeModal('prodStockModal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--color-text-muted); font-size:13px;">Current stock: <strong id="prodStockCurrent"></strong>. Use a positive number to add stock, negative to remove (e.g. damage or recount).</p>
+      <label>Adjustment</label>
+      <input id="prodStockDelta" type="number" step="1" placeholder="e.g. 10 or -3">
+      <div style="height:10px;"></div>
+      <label>Note</label>
+      <input id="prodStockNote" type="text" placeholder="Reason for adjustment">
+      <div class="field-error" id="prodStockError"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('prodStockModal')">Cancel</button>
+      <button class="btn btn-primary" id="prodStockSaveBtn">Save Adjustment</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="prodLotsModal" hidden>
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>Stock Lots <span class="bn-hint" style="display:inline;">— কোন চালানের পণ্য</span> &mdash; <span id="prodLotsName"></span></h3>
+      <button class="modal-close" onclick="closeModal('prodLotsModal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--color-text-muted); font-size:13px;">Total remaining: <strong id="prodLotsTotalQty"></strong> &mdash; Total stock value: <strong id="prodLotsTotalValue"></strong></p>
+      <table class="mobile-card-table">
+        <thead><tr><th>Lot ID</th><th>Source</th><th>Supplier</th><th>Date</th><th class="num">Purchase Price</th><th class="num">Original Qty</th><th class="num">Remaining Qty</th><th class="num">Value</th><th>Status</th></tr></thead>
+        <tbody id="prodLotsBody"></tbody>
+      </table>
+      <div class="empty-state" id="prodLotsEmpty" hidden>No lots recorded for this product yet.</div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('prodLotsModal')">Close</button></div>
+  </div>
+</div>
+
+<!-- Manage Categories / Manage Units — shared modal, mode picked by prodManageListMode_ -->
+<div class="modal-overlay" id="prodManageListModal" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <div><h3 id="prodManageListTitle">Manage Categories</h3><span class="bn-hint">যোগ বা বাদ দিন</span></div>
+      <button class="modal-close" onclick="closeModal('prodManageListModal')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex; gap:8px;">
+        <input id="prodManageListNewName" type="text" placeholder="New name" style="flex:1;">
+        <button type="button" class="btn btn-primary" id="prodManageListAddBtn">Add</button>
+      </div>
+      <div class="field-error" id="prodManageListError"></div>
+      <div style="height:12px;"></div>
+      <table>
+        <thead><tr><th>Name</th><th></th></tr></thead>
+        <tbody id="prodManageListBody"></tbody>
+      </table>
+      <div class="empty-state" id="prodManageListEmpty" hidden>None yet &mdash; add one above.</div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('prodManageListModal')">Close</button></div>
+  </div>
+</div>
+
+<div id="prodActionMenu" class="action-menu" role="menu" hidden></div>
+
+<script>
+  var prodState = { products: [], categories: [], units: [], lowStockThreshold: 5, editingId: null, stockEditingId: null, stockEditingName: '', stockEditingCurrent: 0, sortKey: '', sortDir: 'asc' };
+  var prodManageListMode_ = null; // 'category' | 'unit' — which list the shared Manage modal is currently showing
+
+   /** Product delete. The server refuses if stock is non-zero or it is in use. */
+  function prodDelete_(id, name) {
+    confirmDelete({
+      title: 'Delete product',
+      summary: '<p><b>' + escapeHtml(name || id) + '</b></p>',
+      fn: 'deleteProduct', args: [id], reloadPages: ['products']
+    });
+  }
+
+  function prodLoad() {
+    return withLoader(serverCall('getProductsBootstrap', authToken)).then(function (data) {
+      prodState.products = data.products;
+      smartIndexProducts_(prodState.products);
+      prodState.categories = data.categories;
+      prodState.units = data.units;
+      prodState.lowStockThreshold = data.lowStockThreshold;
+      prodFillCategoryAndUnitSelects_();
+      prodRender();
+    }).catch(function (err) { showToast(err.message, 'error'); });
+  }
+
+  /** Repopulates the toolbar category filter plus the Category/Unit selects in the Add/Edit modal from prodState. Preserves whatever was already selected. */
+  function prodFillCategoryAndUnitSelects_() {
+    var filter = document.getElementById('prodCategoryFilter');
+    var filterCurrent = filter.value;
+    filter.innerHTML = '<option value="">All categories</option>';
+    prodState.categories.forEach(function (c) {
+      filter.innerHTML += '<option value="' + escapeHtml(c.name) + '">' + escapeHtml(c.name) + '</option>';
+    });
+    filter.value = filterCurrent;
+
+    var brandFilter = document.getElementById('prodBrandFilter');
+    var brandCurrent = brandFilter.value;
+    var brands = [];
+    prodState.products.forEach(function (p) {
+      var brand = String(p['Brand'] || '').trim();
+      if (brand && brands.indexOf(brand) === -1) brands.push(brand);
+    });
+    brands.sort(function (a, b) { return a.localeCompare(b); });
+    brandFilter.innerHTML = '<option value="">All brands</option>';
+    brands.forEach(function (brand) {
+      var opt = document.createElement('option');
+      opt.value = brand;
+      opt.textContent = brand;
+      brandFilter.appendChild(opt);
+    });
+    brandFilter.value = brands.indexOf(brandCurrent) !== -1 ? brandCurrent : '';
+
+    var catSel = document.getElementById('prodCategory');
+    var catCurrent = catSel.value;
+    catSel.innerHTML = '<option value="">Select category...</option>';
+    prodState.categories.forEach(function (c) {
+      catSel.innerHTML += '<option value="' + escapeHtml(c.name) + '">' + escapeHtml(c.name) + '</option>';
+    });
+    catSel.value = catCurrent;
+
+    var unitSel = document.getElementById('prodUnit');
+    var unitCurrent = unitSel.value;
+    unitSel.innerHTML = '<option value="">Select unit...</option>';
+    prodState.units.forEach(function (u) {
+      unitSel.innerHTML += '<option value="' + escapeHtml(u.name) + '">' + escapeHtml(u.name) + '</option>';
+    });
+    unitSel.value = unitCurrent;
+  }
+
+  /** A product edited before its category/unit was deactivated (or before this managed list existed) can hold a value the select has no option for — without this, assigning .value would silently leave the field blank and Save would overwrite it. Injects a labeled option for that value so the current selection is preserved and visible. */
+  function prodEnsureSelectHasOption_(selectEl, value) {
+    if (!value) return;
+    var exists = Array.prototype.some.call(selectEl.options, function (o) { return o.value === value; });
+    if (!exists) {
+      var opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = value + ' (inactive)';
+      selectEl.appendChild(opt);
+    }
+  }
+
+  var prodActionMenuState_ = { productId: null, trigger: null };
+
+  function prodCloseActionMenu_() {
+    var menu = document.getElementById('prodActionMenu');
+    if (prodActionMenuState_.trigger) prodActionMenuState_.trigger.setAttribute('aria-expanded', 'false');
+    menu.hidden = true;
+    menu.innerHTML = '';
+    prodActionMenuState_.productId = null;
+    prodActionMenuState_.trigger = null;
+  }
+
+  function prodOpenActionMenu_(trigger, product) {
+    var menu = document.getElementById('prodActionMenu');
+    if (prodActionMenuState_.trigger === trigger && !menu.hidden) {
+      prodCloseActionMenu_();
+      return;
+    }
+    prodCloseActionMenu_();
+    prodActionMenuState_.productId = product['Product ID'];
+    prodActionMenuState_.trigger = trigger;
+    trigger.setAttribute('aria-expanded', 'true');
+    menu.innerHTML =
+      '<button type="button" class="action-menu-item" role="menuitem" data-menu-act="edit">Edit</button>' +
+      '<button type="button" class="action-menu-item" role="menuitem" data-menu-act="stock">Adjust Stock</button>' +
+      '<button type="button" class="action-menu-item" role="menuitem" data-menu-act="lots">View Lots</button>' +
+      '<button type="button" class="action-menu-item" role="menuitem" data-menu-act="toggle">' + (product['Status'] === 'Active' ? 'Deactivate' : 'Activate') + '</button>' +
+      '<div class="action-menu-divider" role="separator"></div>' +
+      '<button type="button" class="action-menu-item danger" role="menuitem" data-menu-act="del">Delete</button>';
+    menu.hidden = false;
+
+    var triggerRect = trigger.getBoundingClientRect();
+    var menuRect = menu.getBoundingClientRect();
+    var left = Math.max(8, Math.min(window.innerWidth - menuRect.width - 8, triggerRect.right - menuRect.width));
+    var top = triggerRect.bottom + 6;
+    if (top + menuRect.height > window.innerHeight - 8 && triggerRect.top - menuRect.height - 6 >= 8) {
+      top = triggerRect.top - menuRect.height - 6;
+    }
+    menu.style.left = Math.round(left) + 'px';
+    menu.style.top = Math.round(Math.max(8, top)) + 'px';
+  }
+
+  function prodRunActionMenuItem_(action) {
+    var id = prodActionMenuState_.productId;
+    var product = prodState.products.filter(function (p) { return p['Product ID'] === id; })[0];
+    prodCloseActionMenu_();
+    if (!product) return;
+    if (action === 'edit') prodOpenEdit_(product);
+    if (action === 'stock') prodOpenStock_(product);
+    if (action === 'lots') prodOpenLots_(product);
+    if (action === 'toggle') prodToggleStatus_(product, product['Status']);
+    if (action === 'del') prodDelete_(product['Product ID'], product['Product Name']);
+  }
+
+  function prodSyncSearchClear_() {
+    var input = document.getElementById('prodSearch');
+    var clearBtn = document.getElementById('prodSearchClear');
+    if (!input || !clearBtn) return;
+    clearBtn.hidden = !String(input.value || '').length;
+  }
+
+  function prodSortValue_(product, key) {
+    var fieldByKey = {
+      name: 'Product Name',
+      category: 'Category',
+      purchasePrice: 'Purchase Price',
+      sellingPrice: 'Selling Price',
+      stockQty: 'Current Stock',
+      stockValue: 'Stock Value',
+      status: 'Status'
+    };
+    return product[fieldByKey[key]];
+  }
+
+  function prodSortRows_(rows) {
+    var key = prodState.sortKey;
+    if (!key) return rows;
+    var numeric = key === 'purchasePrice' || key === 'sellingPrice' || key === 'stockQty' || key === 'stockValue';
+    var dir = prodState.sortDir === 'desc' ? -1 : 1;
+    return rows.slice().sort(function (a, b) {
+      var av = prodSortValue_(a, key);
+      var bv = prodSortValue_(b, key);
+      var cmp;
+      if (numeric) {
+        cmp = (Number(av) || 0) - (Number(bv) || 0);
+      } else {
+        cmp = String(av == null ? '' : av).localeCompare(String(bv == null ? '' : bv), undefined, { numeric: true, sensitivity: 'base' });
+      }
+      if (cmp === 0 && key !== 'name') {
+        cmp = String(a['Product Name'] || '').localeCompare(String(b['Product Name'] || ''), undefined, { numeric: true, sensitivity: 'base' });
+      }
+      return cmp * dir;
+    });
+  }
+
+  function prodUpdateSortHeaders_() {
+    document.querySelectorAll('#prodTable thead .prod-sort-button[data-sort-key]').forEach(function (button) {
+      var key = button.dataset.sortKey;
+      var active = prodState.sortKey === key;
+      button.classList.toggle('is-active', active);
+      var indicator = button.querySelector('.prod-sort-indicator');
+      if (indicator) indicator.textContent = active ? (prodState.sortDir === 'asc' ? '↑' : '↓') : '↕';
+      var th = button.closest('th');
+      if (th) th.setAttribute('aria-sort', active ? (prodState.sortDir === 'asc' ? 'ascending' : 'descending') : 'none');
+    });
+  }
+
+  function prodSortKey_(key) {
+    if (!key) return;
+    if (prodState.sortKey === key) {
+      prodState.sortDir = prodState.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      prodState.sortKey = key;
+      prodState.sortDir = 'asc';
+    }
+    prodRender();
+  }
+
+  function prodRender() {
+    prodCloseActionMenu_();
+    var q = document.getElementById('prodSearch').value || '';
+    var cat = document.getElementById('prodCategoryFilter').value;
+    var brand = document.getElementById('prodBrandFilter').value;
+    // Preserve the existing filters first; smart search then ranks only the
+    // already-filtered inventory list, so category/brand behavior is unchanged.
+    var filtered = prodState.products.filter(function (p) {
+      return (!cat || p['Category'] === cat) && (!brand || p['Brand'] === brand);
+    });
+    var rows = smartSearchProducts_(filtered, q);
+    rows = prodSortRows_(rows);
+
+    var body = document.getElementById('prodTableBody');
+    body.innerHTML = '';
+    rows.forEach(function (p) {
+      var lowStock = Number(p['Current Stock']) <= Number(p['Minimum Stock']);
+      var statusBadge = p['Status'] === 'Active' ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Inactive</span>';
+      var stockCell = '<span class="mono">' + p['Current Stock'] + '</span>' + (lowStock ? ' <span class="badge badge-warning">Low</span>' : '');
+
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + escapeHtml(p['Product Name']) + '<div style="font-size:11px;color:var(--color-text-muted);">' +
+          escapeHtml([p['Brand'] || '', p['Unit'] || ''].filter(Boolean).join(' · ')) + '</div></td>' +
+        '<td>' + escapeHtml(p['Category'] || '') + '</td>' +
+        '<td class="num mono">' + formatMoney(p['Purchase Price']) + '</td>' +
+        '<td class="num mono">' + formatMoney(p['Selling Price']) + '</td>' +
+        '<td class="num">' + stockCell + '</td>' +
+        '<td class="num mono">' + formatMoney(p['Stock Value']) + '</td>' +
+        '<td>' + statusBadge + '</td>' +
+        '<td style="white-space:nowrap;">' +
+          '<button class="btn" data-act="menu" data-id="' + p['Product ID'] + '" aria-haspopup="menu" aria-expanded="false">Actions &#9662;</button>' +
+        '</td>';
+      body.appendChild(tr);
+    });
+
+    document.getElementById('prodEmptyState').hidden = rows.length > 0;
+    prodSyncSearchClear_();
+    prodUpdateSortHeaders_();
+  }
+
+  var prodSearchInput_ = document.getElementById('prodSearch');
+  var prodSearchClear_ = document.getElementById('prodSearchClear');
+  prodSearchInput_.addEventListener('input', function () {
+    prodSyncSearchClear_();
+    prodRender();
+  });
+  prodSearchClear_.addEventListener('click', function () {
+    prodSearchInput_.value = '';
+    prodSyncSearchClear_();
+    prodRender();
+    prodSearchInput_.focus();
+  });
+  document.querySelector('#prodTable thead').addEventListener('click', function (e) {
+    var sortButton = e.target.closest('.prod-sort-button[data-sort-key]');
+    if (!sortButton) return;
+    prodSortKey_(sortButton.dataset.sortKey);
+  });
+  prodSyncSearchClear_();
+  document.getElementById('prodCategoryFilter').addEventListener('change', prodRender);
+  document.getElementById('prodBrandFilter').addEventListener('change', prodRender);
+
+  document.getElementById('prodTableBody').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    var id = btn.dataset.id;
+    var product = prodState.products.filter(function (p) { return p['Product ID'] === id; })[0];
+    if (btn.dataset.act === 'menu') prodOpenActionMenu_(btn, product);
+  });
+
+  document.getElementById('prodTableBody').addEventListener('keydown', function (e) {
+    var btn = e.target.closest('button[data-act="menu"]');
+    if (!btn || e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    var product = prodState.products.filter(function (p) { return p['Product ID'] === btn.dataset.id; })[0];
+    if (!product) return;
+    prodOpenActionMenu_(btn, product);
+    var first = document.querySelector('#prodActionMenu [data-menu-act]');
+    if (first) first.focus();
+  });
+
+  document.getElementById('prodActionMenu').addEventListener('click', function (e) {
+    var item = e.target.closest('[data-menu-act]');
+    if (!item) return;
+    prodRunActionMenuItem_(item.dataset.menuAct);
+  });
+
+  document.getElementById('prodActionMenu').addEventListener('keydown', function (e) {
+    var items = Array.prototype.slice.call(this.querySelectorAll('[data-menu-act]'));
+    var index = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') {
+      var trigger = prodActionMenuState_.trigger;
+      prodCloseActionMenu_();
+      if (trigger) trigger.focus();
+      return;
+    }
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && items.length) {
+      e.preventDefault();
+      var next = e.key === 'ArrowDown' ? (index + 1 + items.length) % items.length : (index - 1 + items.length) % items.length;
+      items[next].focus();
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('#prodActionMenu') || e.target.closest('button[data-act="menu"]')) return;
+    prodCloseActionMenu_();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !document.getElementById('prodActionMenu').hidden) prodCloseActionMenu_();
+  });
+  window.addEventListener('resize', prodCloseActionMenu_);
+  window.addEventListener('scroll', prodCloseActionMenu_, true);
+
+  document.getElementById('prodAddBtn').addEventListener('click', function () {
+    prodState.editingId = null;
+    document.getElementById('prodModalTitle').textContent = 'Add Product';
+    ['prodName', 'prodBrand', 'prodCategory', 'prodUnit', 'prodPurchasePrice', 'prodSellingPrice', 'prodBarcode'].forEach(function (id) { document.getElementById(id).value = ''; });
+    document.getElementById('prodStock').value = 0;
+    document.getElementById('prodMinStock').value = 5;
+    document.getElementById('prodStock').disabled = false;
+    document.getElementById('prodFormError').style.display = 'none';
+    openModal('prodModal');
+  });
+
+  function prodOpenEdit_(product) {
+    prodState.editingId = product['Product ID'];
+    document.getElementById('prodModalTitle').textContent = 'Edit Product';
+    document.getElementById('prodName').value = product['Product Name'];
+    document.getElementById('prodBrand').value = product['Brand'] || '';
+    var catSel = document.getElementById('prodCategory');
+    prodEnsureSelectHasOption_(catSel, product['Category']);
+    catSel.value = product['Category'] || '';
+    var unitSel = document.getElementById('prodUnit');
+    prodEnsureSelectHasOption_(unitSel, product['Unit']);
+    unitSel.value = product['Unit'] || '';
+    document.getElementById('prodPurchasePrice').value = product['Purchase Price'];
+    document.getElementById('prodSellingPrice').value = product['Selling Price'];
+    document.getElementById('prodStock').value = product['Current Stock'];
+    document.getElementById('prodStock').disabled = false; // editable here too — updateProduct logs any change as a Stock Movement, same as the dedicated Stock action
+    document.getElementById('prodMinStock').value = product['Minimum Stock'];
+    document.getElementById('prodBarcode').value = product['Barcode'];
+    document.getElementById('prodFormError').style.display = 'none';
+    openModal('prodModal');
+  }
+
+  document.getElementById('prodManageCategoriesBtn').addEventListener('click', function () { prodOpenManageList_('category'); });
+  document.getElementById('prodManageUnitsBtn').addEventListener('click', function () { prodOpenManageList_('unit'); });
+
+  function prodOpenManageList_(mode) {
+    prodManageListMode_ = mode;
+    document.getElementById('prodManageListTitle').textContent = mode === 'category' ? 'Manage Categories' : 'Manage Units';
+    document.getElementById('prodManageListNewName').value = '';
+    document.getElementById('prodManageListError').style.display = 'none';
+    prodRenderManageList_();
+    openModal('prodManageListModal');
+  }
+
+  function prodRenderManageList_() {
+    var items = prodManageListMode_ === 'category' ? prodState.categories : prodState.units;
+    var body = document.getElementById('prodManageListBody');
+    body.innerHTML = '';
+    items.forEach(function (item) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + escapeHtml(item.name) + '</td>' +
+        '<td style="text-align:right;"><button class="btn btn-danger" data-act="del-item" data-id="' + item.id + '">Delete</button></td>';
+      body.appendChild(tr);
+    });
+    document.getElementById('prodManageListEmpty').hidden = items.length > 0;
+  }
+
+  document.getElementById('prodManageListAddBtn').addEventListener('click', function () {
+    var name = document.getElementById('prodManageListNewName').value.trim();
+    var errEl = document.getElementById('prodManageListError');
+    errEl.style.display = 'none';
+    if (!name) return;
+    var fn = prodManageListMode_ === 'category' ? 'addProductCategory' : 'addProductUnit';
+    withLoader(serverCall(fn, authToken, { name: name })).then(function (res) {
+      var list = prodManageListMode_ === 'category' ? prodState.categories : prodState.units;
+      list.push({ id: res.id, name: res.name });
+      document.getElementById('prodManageListNewName').value = '';
+      prodRenderManageList_();
+      prodFillCategoryAndUnitSelects_();
+      showToast((prodManageListMode_ === 'category' ? 'Category' : 'Unit') + ' added', 'success');
+    }).catch(function (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    });
+  });
+
+  document.getElementById('prodManageListBody').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-act="del-item"]');
+    if (!btn) return;
+    var mode = prodManageListMode_;
+    var list = mode === 'category' ? prodState.categories : prodState.units;
+    var item = list.filter(function (i) { return i.id === btn.dataset.id; })[0];
+    if (!item) return;
+    var fn = mode === 'category' ? 'setProductCategoryStatus' : 'setProductUnitStatus';
+    runConfirmedAction({
+      type: 'state-change',
+      title: 'Remove ' + (mode === 'category' ? 'Category' : 'Unit') + '?',
+      message: 'Products already using it keep their current value — it just won’t be offered for new selections.',
+      details: [
+        { label: mode === 'category' ? 'Category' : 'Unit', value: item.name, emphasis: true },
+        { label: 'New Status', value: 'Inactive' }
+      ],
+      confirmLabel: 'Remove',
+      loadingLabel: 'Removing...',
+      trigger: btn
+    }, function () {
+      return withLoader(serverCall(fn, authToken, item.id, 'Inactive')).then(function () {
+        var idx = list.indexOf(item);
+        if (idx !== -1) list.splice(idx, 1);
+        prodRenderManageList_();
+        prodFillCategoryAndUnitSelects_();
+        showToast((mode === 'category' ? 'Category' : 'Unit') + ' removed', 'success');
+      });
+    }).catch(function (err) { showToast(err.message, 'error'); });
+  });
+
+  document.getElementById('prodSaveBtn').addEventListener('click', function () {
+    var payload = {
+      name: document.getElementById('prodName').value.trim(),
+      brand: document.getElementById('prodBrand').value.trim(),
+      category: document.getElementById('prodCategory').value.trim(),
+      unit: document.getElementById('prodUnit').value.trim(),
+      purchasePrice: document.getElementById('prodPurchasePrice').value,
+      sellingPrice: document.getElementById('prodSellingPrice').value,
+      stock: document.getElementById('prodStock').value,
+      minStock: document.getElementById('prodMinStock').value,
+      barcode: document.getElementById('prodBarcode').value.trim()
+    };
+    var errEl = document.getElementById('prodFormError');
+    errEl.style.display = 'none';
+
+    var call = prodState.editingId ? serverCall('updateProduct', authToken, prodState.editingId, payload) : serverCall('addProduct', authToken, payload);
+    withLoader(call).then(function () {
+      closeModal('prodModal');
+      showToast('Product saved', 'success');
+      prodLoad();
+      reloadPage_('pos');
+    }).catch(function (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    });
+  });
+
+  function prodOpenStock_(product) {
+    prodState.stockEditingId = product['Product ID'];
+    prodState.stockEditingName = product['Product Name'];
+    prodState.stockEditingCurrent = Number(product['Current Stock']) || 0;
+    document.getElementById('prodStockName').textContent = product['Product Name'];
+    document.getElementById('prodStockCurrent').textContent = product['Current Stock'];
+    document.getElementById('prodStockDelta').value = '';
+    document.getElementById('prodStockNote').value = '';
+    document.getElementById('prodStockError').style.display = 'none';
+
+    openModal('prodStockModal');
+  }
+
+  document.getElementById('prodStockSaveBtn').addEventListener('click', function () {
+    var delta = document.getElementById('prodStockDelta').value;
+    var note = document.getElementById('prodStockNote').value.trim();
+    var errEl = document.getElementById('prodStockError');
+    errEl.style.display = 'none';
+
+    var deltaNumber = Number(delta);
+    if (!isFinite(deltaNumber) || deltaNumber === 0) { errEl.textContent = 'Enter a non-zero stock adjustment.'; errEl.style.display = 'block'; return; }
+    var currentStock = prodState.stockEditingCurrent;
+    var resultingStock = currentStock + deltaNumber;
+    var stockPayload = { productId: prodState.stockEditingId, delta: delta, note: note };
+    runConfirmedAction({
+      type: 'financial',
+      title: 'Adjust Stock?',
+      message: 'This will directly change available inventory.',
+      details: [
+        { label: 'Product', value: prodState.stockEditingName, emphasis: true },
+        { label: 'Current Stock', value: String(currentStock) },
+        { label: 'Adjustment', value: String(deltaNumber), emphasis: true },
+        { label: 'Resulting Stock', value: String(resultingStock), emphasis: true },
+        { label: 'Note', value: note }
+      ],
+      confirmLabel: 'Adjust Stock',
+      loadingLabel: 'Adjusting...',
+      trigger: document.getElementById('prodStockSaveBtn')
+    }, function () {
+      return withLoader(serverCall('adjustStock', authToken, stockPayload.productId, stockPayload.delta, stockPayload.note)).then(function () {
+        closeModal('prodStockModal');
+        showToast('Stock updated', 'success');
+        prodLoad();
+        reloadPage_('pos');
+      });
+    }).catch(function (err) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    });
+  });
+
+  function prodToggleStatus_(product, currentStatus) {
+    var next = currentStatus === 'Active' ? 'Inactive' : 'Active';
+    runConfirmedAction({
+      type: 'state-change',
+      title: (next === 'Inactive' ? 'Deactivate' : 'Activate') + ' Product?',
+      message: next === 'Inactive' ? 'This product will not be available for new transactions.' : 'This product will be available for new transactions.',
+      details: [{ label: 'Product', value: product['Product Name'], emphasis: true }, { label: 'New Status', value: next }],
+      confirmLabel: next === 'Inactive' ? 'Deactivate' : 'Activate',
+      loadingLabel: 'Updating...'
+    }, function () {
+      return withLoader(serverCall('setProductStatus', authToken, product['Product ID'], next)).then(function () {
+        showToast('Product ' + next.toLowerCase(), 'success');
+        prodLoad();
+      });
+    }).catch(function (err) { showToast(err.message, 'error'); });
+  }
+
+  /** Opens the "View Lots" drill-down for one product — fetched on demand, not part of the bootstrap payload. */
+function prodOpenLots_(product) {
+  document.getElementById('prodLotsName').textContent = product['Product Name'];
+  withLoader(serverCall('getProductLots', authToken, product['Product ID'])).then(function (lots) {
+    var body = document.getElementById('prodLotsBody');
+    body.innerHTML = '';
+    var totalQty = 0, totalValue = 0;
+    lots.forEach(function (l) {
+      var remaining = l.remainingQuantity;
+      var value = remaining * l.purchasePrice;
+      totalQty += remaining;
+      totalValue += value;
+      var statusBadge = remaining > 0 ? '<span class="badge badge-success">Active</span>' : (remaining < 0 ? '<span class="badge badge-danger">Oversold</span>' : '<span class="badge badge-danger">Depleted</span>');
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="mono">' + escapeHtml(l.lotId) + '</td>' +
+        '<td class="mono">' + escapeHtml(l.purchaseId || '') + '</td>' +
+        '<td>' + escapeHtml(l.supplierName || 'Unattributed') + '</td>' +
+        '<td>' + escapeHtml(formatDateShort_(l.purchaseDate)) + '</td>' +
+        '<td class="num mono">' + formatMoney(l.purchasePrice) + '</td>' +
+        '<td class="num mono">' + l.originalQuantity + '</td>' +
+        '<td class="num mono">' + remaining + '</td>' +
+        '<td class="num mono">' + formatMoney(value) + '</td>' +
+        '<td>' + statusBadge + '</td>';
+      body.appendChild(tr);
+    });
+    document.getElementById('prodLotsTotalQty').textContent = totalQty;
+    document.getElementById('prodLotsTotalValue').textContent = formatMoney(totalValue);
+    document.getElementById('prodLotsEmpty').hidden = lots.length > 0;
+    openModal('prodLotsModal');
+  }).catch(function (err) { showToast(err.message, 'error'); });
+}
+
+function formatDateShort_(val) {
+  var d = new Date(val);
+  if (isNaN(d.getTime())) return String(val);
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+  // Load once the Products page is first shown, not on every app boot.
+  document.addEventListener('DOMContentLoaded', function () {
+    var origGoToPage = goToPage;
+    goToPage = function (key) {
+      origGoToPage(key);
+      if (key === 'products' && !prodState._loaded) { prodState._loaded = true; prodLoad(); }
+    };
+  });
+</script>
