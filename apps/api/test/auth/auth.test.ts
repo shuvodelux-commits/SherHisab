@@ -169,4 +169,41 @@ describe.skipIf(!hasDatabase)('authentication foundation', () => {
 
     expect(response.status).toBe(401)
   })
+
+  it('marks production session cookies as Secure', async () => {
+    const fixture = await createFixture()
+    const previousNodeEnv = process.env.NODE_ENV
+
+    process.env.NODE_ENV = 'production'
+
+    try {
+      const response = await app.request(
+        'http://localhost/api/auth/login',
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            tenantSlug: fixture.tenant.slug,
+            email: fixture.user.email,
+            password: fixture.password,
+          }),
+        },
+      )
+
+      expect(response.status).toBe(200)
+      expect(
+        response.headers.get('set-cookie')?.toLowerCase(),
+      ).toContain('secure')
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV
+      } else {
+        process.env.NODE_ENV = previousNodeEnv
+      }
+    }
+  })
+
+
 })
