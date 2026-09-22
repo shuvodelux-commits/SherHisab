@@ -1,3 +1,5 @@
 import { app } from '../app'
 
-export default app
+export const cloudflareWorker = app
+
+export default cloudflareWorker

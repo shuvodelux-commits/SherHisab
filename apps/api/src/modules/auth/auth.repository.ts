@@ -45,7 +45,11 @@ function mapUser(row: UserRow): AuthUser {
 }
 
 export class AuthRepository {
-  constructor(private readonly db: DatabaseClient = getPool()) {}
+  constructor(private readonly database?: DatabaseClient) {}
+
+  private get db(): DatabaseClient {
+    return this.database ?? getPool()
+  }
 
   async findTenantIdBySlug(slug: string): Promise<string | null> {
     const result = await this.db.query<{ id: string }>(
