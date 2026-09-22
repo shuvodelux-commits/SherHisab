@@ -16,10 +16,7 @@ interface SidebarProps {
 
 export function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
   return (
-    <aside
-      className={mobile ? 'sidebar sidebar-mobile' : 'sidebar'}
-      aria-label="Primary navigation"
-    >
+    <aside className={mobile ? 'sidebar sidebar-mobile' : 'sidebar'}>
       <div className="sidebar-brand">
         <span className="sidebar-brand-mark">S</span>
         <div>
@@ -28,7 +25,7 @@ export function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
         </div>
       </div>
 
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav" aria-label="Primary navigation">
         {navigationItems.map((item, index) => (
           <button
             className={index === 0 ? 'sidebar-link is-active' : 'sidebar-link'}
