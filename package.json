@@ -1,0 +1,13 @@
+{
+  "name": "sherhisab",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@11.26.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel --if-present dev",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test"
+  }
+}
