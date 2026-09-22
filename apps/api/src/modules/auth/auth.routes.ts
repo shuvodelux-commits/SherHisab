@@ -9,7 +9,10 @@ import {
 const authService = new AuthService()
 
 function secureCookieForRequest(url: string): boolean {
-  return new URL(url).protocol === 'https:'
+  return (
+    process.env.NODE_ENV === 'production' ||
+    new URL(url).protocol === 'https:'
+  )
 }
 
 export const authRoutes = new Hono()
