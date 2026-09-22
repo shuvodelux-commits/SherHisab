@@ -2,12 +2,13 @@
   box-sizing: border-box;
 }
 
-html {
+:root {
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  color: #111827;
-  background: #f8fafc;
+  color: #172033;
+  background: #f5f7fa;
+  font-synthesis: none;
 }
 
 body {
@@ -23,6 +24,10 @@ textarea {
   font: inherit;
 }
 
+button {
+  color: inherit;
+}
+
 main {
   padding: 16px;
 }
@@ -30,4 +35,275 @@ main {
 h1,
 p {
   margin-top: 0;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+.app-shell-desktop-sidebar {
+  min-width: 0;
+}
+
+.app-shell-main {
+  min-width: 0;
+}
+
+.sidebar {
+  width: 224px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  padding: 12px 10px;
+  border-right: 1px solid #e4e8ef;
+  background: #ffffff;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 4px 6px 12px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.sidebar-brand-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  background: #18263f;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.sidebar-brand strong,
+.sidebar-brand small {
+  display: block;
+}
+
+.sidebar-brand small {
+  margin-top: 2px;
+  color: #697386;
+  font-size: 11px;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+}
+
+.sidebar-link {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-link:hover,
+.sidebar-link.is-active {
+  background: #eef3f8;
+}
+
+.sidebar-link.is-active {
+  font-weight: 600;
+}
+
+.topbar {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  border-bottom: 1px solid #e4e8ef;
+  background: #ffffff;
+}
+
+.topbar-menu-button {
+  display: none;
+  min-width: 34px;
+  min-height: 34px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.topbar-title {
+  min-width: 0;
+}
+
+.topbar-title strong,
+.topbar-title span {
+  display: block;
+}
+
+.topbar-title span {
+  margin-top: 1px;
+  color: #697386;
+  font-size: 11px;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.topbar-actions button {
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.app-shell-content {
+  min-width: 0;
+}
+
+.dashboard-page {
+  padding: 14px;
+}
+
+.page-heading h1 {
+  margin-bottom: 4px;
+  font-size: 20px;
+}
+
+.page-heading p {
+  color: #697386;
+  font-size: 13px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dashboard-grid article {
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid #e1e6ed;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.dashboard-grid span,
+.dashboard-grid strong {
+  display: block;
+}
+
+.dashboard-grid span {
+  margin-bottom: 8px;
+  color: #697386;
+  font-size: 12px;
+}
+
+.mobile-drawer {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 176px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    width: 176px;
+  }
+
+  .topbar-actions button:first-child {
+    display: none;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    display: block;
+  }
+
+  .app-shell-desktop-sidebar {
+    display: none;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .topbar-menu-button {
+    display: inline-grid;
+    place-items: center;
+  }
+
+  .topbar-actions button:first-child {
+    display: none;
+  }
+
+  .dashboard-page {
+    padding: 10px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-drawer {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+  }
+
+  .mobile-drawer-backdrop {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    background: rgb(17 24 39 / 38%);
+  }
+
+  .mobile-drawer-panel {
+    position: relative;
+    width: min(82vw, 260px);
+    height: 100%;
+    background: #ffffff;
+    box-shadow: 12px 0 30px rgb(15 23 42 / 18%);
+  }
+
+  .mobile-drawer-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 6px;
+    background: #eef2f6;
+    cursor: pointer;
+  }
+
+  .sidebar-mobile {
+    width: 100%;
+    border-right: 0;
+  }
 }
