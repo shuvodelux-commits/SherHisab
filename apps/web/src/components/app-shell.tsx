@@ -23,7 +23,7 @@ export function AppShell({ children }: AppShellProps) {
       {mobileMenuOpen ? (
         <div className="mobile-drawer" role="dialog" aria-label="Navigation menu">
           <button
-            aria-label="Close navigation"
+            aria-label="Dismiss navigation"
             className="mobile-drawer-backdrop"
             onClick={() => setMobileMenuOpen(false)}
             type="button"
