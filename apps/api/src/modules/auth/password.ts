@@ -15,7 +15,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-function base64ToBytes(value: string): Uint8Array {
+function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
   const binary = atob(value)
   const bytes = new Uint8Array(binary.length)
 
@@ -28,9 +28,9 @@ function base64ToBytes(value: string): Uint8Array {
 
 async function derivePasswordKey(
   password: string,
-  salt: Uint8Array,
+  salt: Uint8Array<ArrayBuffer>,
   iterations: number,
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const passwordKey = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(password),
