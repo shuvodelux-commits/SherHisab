@@ -8,6 +8,8 @@
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "dev:cloudflare": "pnpm --filter @sherhisab/web dev",
+    "deploy:cloudflare": "pnpm --filter @sherhisab/web run deploy"
   }
 }

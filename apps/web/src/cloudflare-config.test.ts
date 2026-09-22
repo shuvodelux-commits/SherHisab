@@ -29,4 +29,64 @@ describe('Cloudflare deployment configuration', () => {
     )
     expect(config.assets?.run_worker_first).toContain('/api/*')
   })
+
+  it('binds the preview Worker to the SherHisab Hyperdrive database', async () => {
+    const config = JSON.parse(
+      await readFile(wranglerConfigPath(), 'utf8'),
+    ) as {
+      hyperdrive?: Array<{
+        binding?: string
+        id?: string
+      }>
+    }
+
+    expect(config.hyperdrive).toHaveLength(1)
+    expect(config.hyperdrive?.[0]).toMatchObject({
+      binding: 'HYPERDRIVE',
+      id: 'ddc324c21cc641c990ef64df307c9476',
+    })
+  })
+})
+
+describe('Cloudflare developer workflow', () => {
+  it('provides simple local development and deployment commands', async () => {
+    const rootPackage = JSON.parse(
+      await readFile(resolve(cwd(), '../../package.json'), 'utf8'),
+    ) as {
+      scripts?: Record<string, string>
+    }
+
+    const webPackage = JSON.parse(
+      await readFile(resolve(cwd(), 'package.json'), 'utf8'),
+    ) as {
+      scripts?: Record<string, string>
+    }
+
+    expect(rootPackage.scripts?.['dev:cloudflare']).toBe(
+      'pnpm --filter @sherhisab/web dev',
+    )
+    expect(rootPackage.scripts?.['deploy:cloudflare']).toBe(
+      'pnpm --filter @sherhisab/web run deploy',
+    )
+    expect(webPackage.scripts?.deploy).toBe(
+      'pnpm run build && wrangler deploy --config dist/sherhisab/wrangler.json',
+    )
+  })
+
+  it('uses the local SherHisab database during Cloudflare development', async () => {
+    const config = JSON.parse(
+      await readFile(wranglerConfigPath(), 'utf8'),
+    ) as {
+      hyperdrive?: Array<{
+        binding?: string
+        localConnectionString?: string
+      }>
+    }
+
+    expect(config.hyperdrive?.[0]).toMatchObject({
+      binding: 'HYPERDRIVE',
+      localConnectionString:
+        'postgresql://sherhisab:sherhisab@localhost:5432/sherhisab',
+    })
+  })
 })
