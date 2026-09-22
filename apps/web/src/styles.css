@@ -307,3 +307,112 @@ p {
     border-right: 0;
   }
 }
+
+/* SHERHISAB SHARED UI UTILITIES */
+
+.search-combobox {
+  position: relative;
+  width: 100%;
+}
+
+.search-combobox-trigger,
+.search-combobox-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  text-align: left;
+}
+
+.search-combobox-trigger {
+  cursor: pointer;
+}
+
+.search-combobox-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  width: 100%;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid #d9dee7;
+  border-radius: 7px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 12%);
+}
+
+.search-combobox-input {
+  margin-bottom: 5px;
+  outline: none;
+}
+
+.search-combobox-options {
+  display: grid;
+  max-height: 220px;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.search-combobox-option {
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-combobox-option:hover,
+.search-combobox-option[aria-selected="true"] {
+  background: #eef3f8;
+}
+
+.search-combobox-empty {
+  margin: 6px;
+  color: #697386;
+  font-size: 12px;
+}
+
+.data-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e1e6ed;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.data-table th,
+.data-table td {
+  min-height: 34px;
+  padding: 7px 9px;
+  border-bottom: 1px solid #edf0f4;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.data-table th {
+  background: #f8fafc;
+  color: #4b5565;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-table-empty {
+  height: 70px;
+  color: #697386;
+  text-align: center !important;
+}
