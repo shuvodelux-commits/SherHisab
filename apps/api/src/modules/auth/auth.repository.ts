@@ -1,7 +1,5 @@
-import type { Pool, PoolClient } from 'pg'
 import { getPool } from '../../db/pool'
-
-type DatabaseClient = Pool | PoolClient
+import type { DatabaseClient } from '../../db/request-database'
 
 export interface AuthUser {
   id: string

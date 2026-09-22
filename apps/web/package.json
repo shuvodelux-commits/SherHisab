@@ -9,7 +9,8 @@
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint .",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "pnpm run build && wrangler deploy --config dist/sherhisab/wrangler.json"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.103.2",
