@@ -48,8 +48,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
 
     const applyTheme = () => {
-      document.documentElement.dataset.theme =
-        mode === 'system' ? getSystemTheme() : mode
+      const resolvedTheme = mode === 'system' ? getSystemTheme() : mode
+      const root = document.documentElement
+
+      root.classList.remove('light', 'dark')
+      root.classList.add(resolvedTheme)
+      root.style.colorScheme = resolvedTheme
     }
 
     applyTheme()

@@ -1,6 +1,15 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '../../components/ui/button'
+import { Checkbox } from '../../components/ui/checkbox'
 import { Input } from '../../components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select'
 import { formatPaisaToTaka, parseTakaToPaisa } from '../../lib/money'
 import type {
   AdvancedProductConfigurationInput,
@@ -11,6 +20,8 @@ import type {
   VariantInput,
   VariantOptionInput,
 } from './product-types'
+
+const SELECT_NONE = '__select_none__'
 
 export interface AlternativeUnitFormRow {
   key: string
@@ -218,20 +229,23 @@ export function ProductAdvancedFields({
       <div className="product-advanced-section">
         <label className="product-field">
           <span>Tracking</span>
-          <select
-            aria-label="Tracking"
-            className="product-select"
-            onChange={(event) =>
-              patch({
-                trackingMode: event.target.value as TrackingMode,
-              })
+          <Select
+            onValueChange={(value) =>
+              patch({ trackingMode: value as TrackingMode })
             }
             value={state.trackingMode}
           >
-            <option value="SIMPLE">Simple</option>
-            <option value="LOT">Lot</option>
-            <option value="BATCH">Batch</option>
-          </select>
+            <SelectTrigger aria-label="Tracking" className="product-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="SIMPLE">Simple</SelectItem>
+                <SelectItem value="LOT">Lot</SelectItem>
+                <SelectItem value="BATCH">Batch</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </label>
         <p className="product-field-help">
           Tracking selects inventory policy only. Lot and batch entry happens
@@ -262,7 +276,7 @@ export function ProductAdvancedFields({
                 ],
               })
             }
-            size="small"
+            size="sm"
             variant="secondary"
           >
             <Plus aria-hidden="true" size={14} /> Add Unit
@@ -271,36 +285,45 @@ export function ProductAdvancedFields({
 
         {state.alternativeUnits.map((row, index) => (
           <div className="product-inline-grid" key={row.key}>
-            <select
-              aria-label={`Alternative unit ${index + 1}`}
-              className="product-select"
-              onChange={(event) => {
+            <Select
+              onValueChange={(value) => {
                 const rows = [...state.alternativeUnits]
-                rows[index] = { ...row, unitId: event.target.value }
+                rows[index] = {
+                  ...row,
+                  unitId: value === SELECT_NONE ? '' : value,
+                }
                 patch({ alternativeUnits: rows })
               }}
-              value={row.unitId}
+              value={row.unitId || SELECT_NONE}
             >
-              <option value="">Select unit</option>
-              {units
-                .filter(
-                  (unit) =>
-                    unit.isActive &&
-                    unit.id !== baseUnitId,
-                )
-                .map((unit) => (
-                  <option key={unit.id} value={unit.id}>
-                    {unit.name}
-                    {unit.symbol ? ` (${unit.symbol})` : ''}
-                  </option>
-                ))}
-            </select>
+              <SelectTrigger
+                aria-label={`Alternative unit ${index + 1}`}
+                className="product-select"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value={SELECT_NONE}>Select unit</SelectItem>
+                  {units
+                    .filter(
+                      (unit) =>
+                        unit.isActive &&
+                        unit.id !== baseUnitId,
+                    )
+                    .map((unit) => (
+                      <SelectItem key={unit.id} value={unit.id}>
+                        {unit.name}
+                        {unit.symbol ? ` (${unit.symbol})` : ''}
+                      </SelectItem>
+                    ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
 
-            <select
-              aria-label={`Conversion mode ${index + 1}`}
-              className="product-select"
-              onChange={(event) => {
-                const mode = event.target.value as ConversionMode
+            <Select
+              onValueChange={(value) => {
+                const mode = value as ConversionMode
                 const rows = [...state.alternativeUnits]
                 rows[index] = {
                   ...row,
@@ -312,9 +335,19 @@ export function ProductAdvancedFields({
               }}
               value={row.conversionMode}
             >
-              <option value="FIXED">Fixed</option>
-              <option value="VARIABLE">Variable</option>
-            </select>
+              <SelectTrigger
+                aria-label={`Conversion mode ${index + 1}`}
+                className="product-select"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="FIXED">Fixed</SelectItem>
+                  <SelectItem value="VARIABLE">Variable</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
 
             {row.conversionMode === 'FIXED' ? (
               <Input
@@ -346,7 +379,7 @@ export function ProductAdvancedFields({
                   ),
                 })
               }
-              size="small"
+              size="sm"
               variant="ghost"
             >
               <Trash2 aria-hidden="true" size={14} />
@@ -374,7 +407,7 @@ export function ProductAdvancedFields({
                 ],
               })
             }
-            size="small"
+            size="sm"
             variant="secondary"
           >
             <Plus aria-hidden="true" size={14} /> Add Specification
@@ -412,7 +445,7 @@ export function ProductAdvancedFields({
                   ),
                 })
               }
-              size="small"
+              size="sm"
               variant="ghost"
             >
               <Trash2 aria-hidden="true" size={14} />
@@ -423,13 +456,12 @@ export function ProductAdvancedFields({
 
       <section className="product-advanced-section">
         <label className="product-check-row">
-          <input
+          <Checkbox
             aria-label="Enable Variants"
             checked={state.variantsEnabled}
-            onChange={(event) =>
-              patch({ variantsEnabled: event.target.checked })
+            onCheckedChange={(checked) =>
+              patch({ variantsEnabled: checked === true })
             }
-            type="checkbox"
           />
           <span>
             <strong>Enable Variants</strong>
@@ -459,7 +491,7 @@ export function ProductAdvancedFields({
                     ],
                   })
                 }
-                size="small"
+                size="sm"
                 variant="secondary"
               >
                 <Plus aria-hidden="true" size={14} /> Add Option
@@ -500,7 +532,7 @@ export function ProductAdvancedFields({
                       ),
                     })
                   }
-                  size="small"
+                  size="sm"
                   variant="ghost"
                 >
                   <Trash2 aria-hidden="true" size={14} />
@@ -528,7 +560,7 @@ export function ProductAdvancedFields({
                     ],
                   })
                 }
-                size="small"
+                size="sm"
                 variant="secondary"
               >
                 <Plus aria-hidden="true" size={14} /> Add Variant
@@ -553,7 +585,7 @@ export function ProductAdvancedFields({
                           ),
                         })
                       }
-                      size="small"
+                      size="sm"
                       variant="ghost"
                     >
                       <Trash2 aria-hidden="true" size={14} />
@@ -637,30 +669,41 @@ export function ProductAdvancedFields({
                         key={option.name || 'unnamed'}
                       >
                         <span>{option.name || 'Option'}</span>
-                        <select
-                          aria-label={`Variant ${index + 1} ${option.name || 'option'}`}
-                          className="product-select"
+                        <Select
                           disabled={variant.hasInventoryHistory}
-                          onChange={(event) => {
+                          onValueChange={(value) => {
                             const rows = [...state.variants]
                             rows[index] = {
                               ...variant,
                               selections: {
                                 ...variant.selections,
-                                [option.name]: event.target.value,
+                                [option.name]:
+                                  value === SELECT_NONE ? '' : value,
                               },
                             }
                             patch({ variants: rows })
                           }}
-                          value={variant.selections[option.name] ?? ''}
+                          value={
+                            variant.selections[option.name] || SELECT_NONE
+                          }
                         >
-                          <option value="">Select</option>
-                          {option.values.map((value) => (
-                            <option key={value} value={value}>
-                              {value}
-                            </option>
-                          ))}
-                        </select>
+                          <SelectTrigger
+                            aria-label={`Variant ${index + 1} ${option.name || 'option'}`}
+                            className="product-select"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value={SELECT_NONE}>Select</SelectItem>
+                              {option.values.map((value) => (
+                                <SelectItem key={value} value={value}>
+                                  {value}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
                       </label>
                     ))}
                   </div>

@@ -3,8 +3,23 @@ import {
   type ButtonHTMLAttributes,
 } from 'react'
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive'
-type ButtonSize = 'small' | 'normal' | 'large'
+type ButtonVariant =
+  | 'default'
+  | 'outline'
+  | 'secondary'
+  | 'ghost'
+  | 'destructive'
+  | 'link'
+
+type ButtonSize =
+  | 'default'
+  | 'xs'
+  | 'sm'
+  | 'lg'
+  | 'icon'
+  | 'icon-xs'
+  | 'icon-sm'
+  | 'icon-lg'
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
@@ -15,8 +30,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(
     {
       className = '',
-      variant = 'secondary',
-      size = 'normal',
+      variant = 'default',
+      size = 'default',
       type = 'button',
       ...props
     },
@@ -25,6 +40,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         className={`ui-button ui-button-${variant} ui-button-${size} ${className}`.trim()}
+        data-slot="button"
         ref={ref}
         type={type}
         {...props}

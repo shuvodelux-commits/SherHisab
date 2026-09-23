@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '../../components/ui/dialog'
 import { Input } from '../../components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs'
 import {
   createCategory,
   createUnit,
@@ -154,38 +155,29 @@ export function ProductMasterManageDialog({
         </DialogHeader>
 
         <div className="product-settings-body">
-          <div
-            aria-label="Product settings sections"
-            className="product-settings-tabs"
-            role="tablist"
+          <Tabs
+            onValueChange={(value) => switchTab(value as MasterTab)}
+            value={tab}
           >
-            <button
-              aria-selected={tab === 'categories'}
-              className={
-                tab === 'categories'
-                  ? 'product-settings-tab is-active'
-                  : 'product-settings-tab'
-              }
-              onClick={() => switchTab('categories')}
-              role="tab"
-              type="button"
+            <TabsList
+              aria-label="Product settings sections"
+              className="product-settings-tabs"
+              variant="line"
             >
-              Categories
-            </button>
-            <button
-              aria-selected={tab === 'units'}
-              className={
-                tab === 'units'
-                  ? 'product-settings-tab is-active'
-                  : 'product-settings-tab'
-              }
-              onClick={() => switchTab('units')}
-              role="tab"
-              type="button"
-            >
-              Units
-            </button>
-          </div>
+              <TabsTrigger
+                onClick={() => switchTab('categories')}
+                value="categories"
+              >
+                Categories
+              </TabsTrigger>
+              <TabsTrigger
+                onClick={() => switchTab('units')}
+                value="units"
+              >
+                Units
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           {error ? (
             <div className="product-form-error" role="alert">
@@ -216,7 +208,7 @@ export function ProductMasterManageDialog({
                     setError('')
                     createCategoryMutation.mutate()
                   }}
-                  variant="primary"
+                  variant="default"
                 >
                   Add Category
                 </Button>
@@ -242,7 +234,7 @@ export function ProductMasterManageDialog({
                       <div>
                         <strong>{category.name}</strong>
                         {!category.isActive ? (
-                          <Badge tone="neutral">Inactive</Badge>
+                          <Badge className="sher-badge-neutral" variant="outline">Inactive</Badge>
                         ) : null}
                       </div>
                       <Button
@@ -259,7 +251,7 @@ export function ProductMasterManageDialog({
                             isActive: !category.isActive,
                           })
                         }}
-                        size="small"
+                        size="sm"
                         variant="ghost"
                       >
                         {category.isActive ? 'Archive' : 'Activate'}
@@ -296,7 +288,7 @@ export function ProductMasterManageDialog({
                     setError('')
                     createUnitMutation.mutate()
                   }}
-                  variant="primary"
+                  variant="default"
                 >
                   Add Unit
                 </Button>
@@ -327,7 +319,7 @@ export function ProductMasterManageDialog({
                           </span>
                         ) : null}
                         {!unit.isActive ? (
-                          <Badge tone="neutral">Inactive</Badge>
+                          <Badge className="sher-badge-neutral" variant="outline">Inactive</Badge>
                         ) : null}
                       </div>
                       <Button
@@ -344,7 +336,7 @@ export function ProductMasterManageDialog({
                             isActive: !unit.isActive,
                           })
                         }}
-                        size="small"
+                        size="sm"
                         variant="ghost"
                       >
                         {unit.isActive ? 'Archive' : 'Activate'}

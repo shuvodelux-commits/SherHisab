@@ -83,9 +83,37 @@ describe('responsive application shell', () => {
     expect(
       screen.getByRole('heading', { name: 'Dashboard' }),
     ).toBeInTheDocument()
+
+    const language = screen.getByLabelText('Language')
+    const theme = screen.getByLabelText('Theme')
+    expect(language.tagName).not.toBe('SELECT')
+    expect(theme.tagName).not.toBe('SELECT')
+    expect(language).toHaveAttribute('data-slot', 'select-trigger')
+    expect(theme).toHaveAttribute('data-slot', 'select-trigger')
+
+    const sidebar = document.querySelector('[data-slot="sidebar"]')
+    expect(sidebar).not.toBeNull()
+    expect(sidebar).toHaveAttribute('data-state', 'expanded')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Sidebar' }))
+    expect(sidebar).toHaveAttribute('data-state', 'collapsed')
   })
 
   it('opens and closes the mobile navigation drawer', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(max-width: 640px)',
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+
     renderApplication()
     await router.navigate({ to: '/app' })
 

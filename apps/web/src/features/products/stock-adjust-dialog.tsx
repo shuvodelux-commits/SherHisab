@@ -15,6 +15,14 @@ import {
   DialogTitle,
 } from '../../components/ui/dialog'
 import { Input } from '../../components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select'
 import { formatNumber } from '../../lib/format-number'
 import {
   formatPaisaToTaka,
@@ -28,6 +36,8 @@ import type {
   ProductDetailDto,
   ProductStockTargetDto,
 } from './product-types'
+
+const SELECT_NONE = '__select_none__'
 
 interface StockDialogProps {
   open: boolean
@@ -198,22 +208,30 @@ export function StockAdjustDialog({
             {product.variantsEnabled ? (
               <label className="product-field">
                 <span className="product-field-label">Variant</span>
-                <select
-                  aria-label="Variant"
-                  className="product-select"
-                  onChange={(event) => {
-                    setVariantId(event.target.value)
+                <Select
+                  onValueChange={(value) => {
+                    setVariantId(value === SELECT_NONE ? '' : value)
                     setError('')
                   }}
-                  value={variantId}
+                  value={variantId || SELECT_NONE}
                 >
-                  <option value="">Select Variant</option>
-                  {variants.map((variant) => (
-                    <option key={variant.id} value={variant.id}>
-                      {stockTargetLabel(variant)}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger
+                    aria-label="Variant"
+                    className="product-select"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={SELECT_NONE}>Select Variant</SelectItem>
+                      {variants.map((variant) => (
+                        <SelectItem key={variant.id} value={variant.id}>
+                          {stockTargetLabel(variant)}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               </label>
             ) : null}
 
@@ -282,7 +300,7 @@ export function StockAdjustDialog({
             <Button
               disabled={mutation.isPending}
               type="submit"
-              variant="primary"
+              variant="default"
             >
               {mutation.isPending ? 'Saving...' : actionLabel}
             </Button>
@@ -329,19 +347,29 @@ export function ProductLotsDialog({
           {product.variantsEnabled ? (
             <label className="product-field product-lots-variant">
               <span className="product-field-label">Variant</span>
-              <select
-                aria-label="Variant"
-                className="product-select"
-                onChange={(event) => setVariantId(event.target.value)}
-                value={variantId}
+              <Select
+                onValueChange={(value) =>
+                  setVariantId(value === SELECT_NONE ? '' : value)
+                }
+                value={variantId || SELECT_NONE}
               >
-                <option value="">Select Variant</option>
-                {variants.map((variant) => (
-                  <option key={variant.id} value={variant.id}>
-                    {stockTargetLabel(variant)}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger
+                  aria-label="Variant"
+                  className="product-select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value={SELECT_NONE}>Select Variant</SelectItem>
+                    {variants.map((variant) => (
+                      <SelectItem key={variant.id} value={variant.id}>
+                        {stockTargetLabel(variant)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </label>
           ) : null}
 
@@ -390,11 +418,12 @@ export function ProductLotsDialog({
                       </td>
                       <td>
                         <Badge
-                          tone={
+                          className={
                             lot.status === 'ACTIVE'
-                              ? 'success'
-                              : 'neutral'
+                              ? 'sher-badge-success'
+                              : 'sher-badge-neutral'
                           }
+                          variant="outline"
                         >
                           {lot.status === 'ACTIVE'
                             ? 'Active'
