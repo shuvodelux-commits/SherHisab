@@ -719,6 +719,43 @@ Rules:
 - Preserve keyboard navigation, focus states, labels, and mobile usability from the official shadcn pattern.
 
 
+# 18C. Combobox Selection Rules
+
+Use the official shadcn Combobox as the default searchable/selectable entity control.
+
+Reference: https://ui.shadcn.com/docs/components/base/combobox
+
+Do not use the browser-default `<select>` for workflows that need search, clear, multi-select, grouped results, custom item rendering, or entity metadata. When a workflow needs a combobox, use the official shadcn Combobox or an approved shared SherHisab component built on it.
+
+Choose the combobox variant by business task:
+
+| Business situation | Official shadcn pattern | SherHisab examples |
+| --- | --- | --- |
+| Normal single selection | Basic Combobox | Category, Brand, Unit, Warehouse, Payment Account |
+| Optional entity that users frequently replace/remove | Combobox with Clear Button | POS customer, Sales customer, Purchase supplier when optional, delivery partner |
+| Multiple values | Multiple Combobox with chips | Product tags, multiple categories where supported, report dimensions, multi-warehouse/report filters |
+| Grouped domain values | Combobox Groups | Products grouped by category/brand, accounts grouped by type, locations grouped by region |
+| Rich entity search | Custom Items | Customer showing phone + due, Product showing SKU + stock + unit, Supplier showing phone + balance |
+| Keyboard-heavy quick selection | Auto Highlight Combobox | POS product/customer search, rapid purchase-entry lookups |
+| Compact trigger with search in popup | Popup Combobox | Dense toolbar filters, compact table filters, constrained forms |
+| Control needs a leading/trailing affordance | Combobox Input Group | Currency/unit/location-assisted selectors when the addon improves recognition |
+
+Rules:
+
+- Basic Combobox is the default for most searchable single-selection fields.
+- POS / Sales customer selection must support a clear action when customer selection is optional.
+- Use `multiple` with `ComboboxChips` when the user must select more than one value.
+- For Customer/Product/Supplier lookups, prefer custom items that show the minimum secondary information needed to disambiguate results.
+- Do not overload basic entity lists with unnecessary metadata; add secondary information only where it prevents wrong selection.
+- Search should match meaningful entity fields where useful (for example product name/SKU/barcode or customer name/phone), while keeping the visible result concise.
+- Use grouped comboboxes only when grouping materially improves scanning.
+- Preserve keyboard navigation, active/highlight states, empty results, disabled state, invalid state, and accessible labelling from the official component.
+- Use `showClear` for fields that are intentionally nullable and frequently cleared; do not add clear buttons to mandatory fields unless the workflow benefits from resetting before a new choice.
+- Do not use multi-select where the domain only permits one value.
+- Keep normal desktop combobox height aligned with adjacent Input/Button controls.
+- For very large remote datasets, use server-backed search/debouncing rather than downloading the entire dataset into the combobox.
+- Native Select is allowed only for very small, static, non-searchable option sets where a native select is intentionally simpler. It must not be used merely because it is faster to code.
+
 # 19. Forms
 
 Use predictable grids.
