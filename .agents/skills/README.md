@@ -18,6 +18,7 @@ The rule is simple: keep only skills that directly help the approved stack and p
 | codebase-design | mattpocock/skills | c55ee46073ed923f86ce59a5eb3b6d895095d1b7 | Supporting architecture vocabulary used by the architecture skill. |
 | domain-modeling | mattpocock/skills | c55ee46073ed923f86ce59a5eb3b6d895095d1b7 | Keep ERP business terminology precise. |
 | postgres-best-practices | neondatabase/postgres-skills | 27fe45e0f71ea89a6eaf9ea4d2e4068957c81c26 | PostgreSQL schema, indexing, transactions, security and operations. |
+| shadcn | shadcn-ui/ui | 98a1fe67b439324ddc857f47fbdce056600a4329 | Official shadcn/ui component discovery, CLI, composition, theming, registry, forms, icons and styling rules. |
 
 ## Deliberately Not Vendored
 

@@ -644,6 +644,81 @@ Avoid huge select controls.
 
 ---
 
+
+# 18A. Official shadcn Component Standard
+
+For application controls and common UI patterns, the official shadcn/ui component or block is the implementation starting point.
+
+Priority:
+
+```text
+official shadcn component/block
+        ↓
+official shadcn semantic theme tokens
+        ↓
+SherHisab business formatting and bilingual behavior
+        ↓
+Tailark compact density/typography refinement
+```
+
+Do not recreate a shadcn control from a screenshot or hand-style native browser controls to imitate one.
+
+Use the official shadcn pattern for:
+
+- Button
+- Input / Input Group / Search
+- Select
+- Combobox
+- Dropdown Menu
+- Table / Data Table
+- Dialog / Alert Dialog / Sheet / Popover
+- Calendar / Date Picker
+- Checkbox / Radio Group / Switch
+- Tabs / Pagination
+- Tooltip
+- Chart and chart tooltip
+- Sidebar
+
+Project block choices:
+
+- application shell/sidebar: start from official `sidebar-07`;
+- login screen: start from official `login-04` and preserve SherHisab session validation/authentication behavior;
+- operational tables: shadcn Table + TanStack Table;
+- charts: official shadcn Chart components and `ChartTooltip` / `ChartTooltipContent` patterns.
+
+Theming must use shadcn semantic CSS variables such as `background`, `foreground`, `primary`, `secondary`, `muted`, `accent`, `border`, `input`, `ring`, `popover`, `destructive`, chart tokens, and sidebar tokens.
+
+Do not hard-code a separate color/radius system inside individual controls.
+
+For normal desktop page-toolbar controls, target one consistent compact height (normally 34–36px) and use shared Button/Input/Combobox/Select sizing rather than per-page heights.
+
+# 18B. Date Picker Selection Rules
+
+Use the official shadcn Date Picker pattern that matches the business task. A shadcn Date Picker is composed from `Popover` + `Calendar`; do not build a separate custom calendar control.
+
+Choose by situation:
+
+| Business situation | Official pattern | SherHisab examples |
+| --- | --- | --- |
+| One business date | Basic single-date picker | Purchase date, invoice date, expense date, stock adjustment date |
+| Start/end period | Range Picker | Sales report, purchase report, ledger filter, dashboard period |
+| Birth date / long historical date | Date of Birth pattern with month/year navigation | Customer/person date of birth when required |
+| Fast keyboard entry plus calendar assistance | Input Date Picker | Back-office historical entry, due date, document date where direct typing improves speed |
+| Date plus exact user-selected time | Time Picker | Scheduled delivery, appointment, reminder, future task |
+| Month/year reporting period only | Month/year-specific selection | Monthly closing, VAT/reporting period; do not force the user to choose an arbitrary day |
+| Natural-language date | Natural Language Picker only for low-risk convenience workflows | Reminder or scheduling text such as “next Monday”; never use for financial posting dates |
+
+Rules:
+
+- Do not use the same date picker variant everywhere.
+- Do not use natural-language parsing for accounting, stock, payment, invoice, purchase, return, or other posting dates.
+- Server-generated audit timestamps are not editable date-picker fields.
+- Constrain dates when business rules require it.
+- Use the same SherHisab date display format after selection across forms, filters, tables, and tooltips.
+- Range filters must clearly expose both start and end dates and provide an obvious clear/reset action.
+- Preserve keyboard navigation, focus states, labels, and mobile usability from the official shadcn pattern.
+
+
 # 19. Forms
 
 Use predictable grids.
