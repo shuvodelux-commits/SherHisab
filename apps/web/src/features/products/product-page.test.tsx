@@ -61,7 +61,10 @@ function installFetch(
     items?: ProductListItemDto[]
   } = {},
 ) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => {
     const url =
       typeof input === 'string'
         ? input
@@ -77,6 +80,13 @@ function installFetch(
           isActive: true,
         },
       ])
+    }
+
+    if (
+      url === '/api/private/products/product-1/status' &&
+      init?.method === 'POST'
+    ) {
+      return jsonResponse(product({ isActive: false }))
     }
 
     if (url.startsWith('/api/private/products')) {
@@ -119,6 +129,20 @@ function installFetch(
 
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
+}
+
+async function chooseSelectOption(label: string, option: string) {
+  const trigger = screen.getByLabelText(label)
+  fireEvent.pointerDown(trigger, {
+    button: 0,
+    ctrlKey: false,
+    pointerType: 'mouse',
+  })
+  const optionElement = await screen.findByRole('option', { name: option })
+  fireEvent.click(optionElement)
+  await waitFor(() => {
+    expect(screen.getByLabelText(label)).toHaveTextContent(option)
+  })
 }
 
 function renderPage() {
@@ -186,6 +210,14 @@ describe('ProductPage', () => {
       ).toHaveAttribute('data-align', 'right')
     }
 
+    const categoryFilter = screen.getByLabelText('Category filter')
+    const statusFilter = screen.getByLabelText('Status filter')
+    expect(categoryFilter.tagName).not.toBe('SELECT')
+    expect(statusFilter.tagName).not.toBe('SELECT')
+
+    const addProductButton = screen.getByRole('button', { name: 'Add Product' })
+    expect(addProductButton).toHaveAttribute('data-slot', 'button')
+
     expect(screen.getByText('Cotton Roll')).toBeInTheDocument()
     expect(screen.getByText('3 variants')).toBeInTheDocument()
     expect(screen.getByText('৳12.50')).toBeInTheDocument()
@@ -200,21 +232,20 @@ describe('ProductPage', () => {
       )
     }
 
-    expect(screen.getByRole('cell', { name: 'Active' })).toBeInTheDocument()
+    const activeStatusCell = screen.getByRole('cell', { name: 'Active' })
+    const activeStatus = activeStatusCell.querySelector('[data-slot="badge"]')
+    expect(activeStatus).not.toBeNull()
+    expect(activeStatus).toHaveClass('sher-badge-success')
     expect(screen.getByText('Showing 1–50 of 51')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Search products'), {
       target: { value: 'bulb' },
     })
-    fireEvent.change(screen.getByLabelText('Category filter'), {
-      target: { value: 'category-1' },
-    })
+    await chooseSelectOption('Category filter', 'Fabric')
     fireEvent.change(screen.getByLabelText('Brand filter'), {
       target: { value: 'Classic' },
     })
-    fireEvent.change(screen.getByLabelText('Status filter'), {
-      target: { value: 'inactive' },
-    })
+    await chooseSelectOption('Status filter', 'Inactive')
 
     await waitFor(() => {
       const productUrls = fetchMock.mock.calls

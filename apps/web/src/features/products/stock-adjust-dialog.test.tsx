@@ -221,6 +221,21 @@ function installFetch(options: { adjustmentError?: string } = {}) {
   return fetchMock
 }
 
+async function chooseSelectOption(label: string, option: string) {
+  const trigger = screen.getByLabelText(label)
+  expect(trigger.tagName).not.toBe('SELECT')
+  fireEvent.pointerDown(trigger, {
+    button: 0,
+    ctrlKey: false,
+    pointerType: 'mouse',
+  })
+  const optionElement = await screen.findByRole('option', { name: option })
+  fireEvent.click(optionElement)
+  await waitFor(() => {
+    expect(screen.getByLabelText(label)).toHaveTextContent(option)
+  })
+}
+
 function renderWithQueryClient(node: React.ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -396,13 +411,7 @@ describe('StockAdjustDialog', () => {
     )
 
     expect(await screen.findByLabelText('Variant')).toBeInTheDocument()
-    expect(
-      screen.getByRole('option', { name: 'Existing stock' }),
-    ).toBeInTheDocument()
-
-    fireEvent.change(screen.getByLabelText('Variant'), {
-      target: { value: 'variant-default' },
-    })
+    await chooseSelectOption('Variant', 'Existing stock')
     expect(screen.getByText('2.5')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Quantity adjustment'), {
@@ -439,9 +448,6 @@ describe('StockAdjustDialog', () => {
     )
 
     expect(await screen.findByLabelText('Variant')).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Red / L' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Blue / L' })).toBeInTheDocument()
-
     fireEvent.change(screen.getByLabelText('Quantity adjustment'), {
       target: { value: '1' },
     })
@@ -454,9 +460,7 @@ describe('StockAdjustDialog', () => {
       await screen.findByText('Select a Variant before adjusting stock.'),
     ).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Variant'), {
-      target: { value: 'variant-red' },
-    })
+    await chooseSelectOption('Variant', 'Red / L')
     fireEvent.click(screen.getByRole('button', { name: 'Add stock' }))
 
     await waitFor(() => {
@@ -511,13 +515,7 @@ describe('ProductLotsDialog', () => {
       />,
     )
 
-    expect(
-      await screen.findByRole('option', { name: 'Existing stock' }),
-    ).toBeInTheDocument()
-
-    fireEvent.change(screen.getByLabelText('Variant'), {
-      target: { value: 'variant-default' },
-    })
+    await chooseSelectOption('Variant', 'Existing stock')
 
     await screen.findByText('lot-red')
     await waitFor(() => {
@@ -543,9 +541,7 @@ describe('ProductLotsDialog', () => {
     expect(await screen.findByLabelText('Variant')).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
 
-    fireEvent.change(screen.getByLabelText('Variant'), {
-      target: { value: 'variant-red' },
-    })
+    await chooseSelectOption('Variant', 'Red / L')
 
     expect(await screen.findByText('lot-red')).toBeInTheDocument()
 
