@@ -1104,8 +1104,18 @@ export class ProductMasterService {
         variantId = created.id
       }
 
+      if (!variantId) {
+        throw new ProductValidationError('Variant id is required.')
+      }
+
       for (const option of normalized.options) {
         const selectedKey = variant.selectionKeys[option.key]
+        if (!selectedKey) {
+          throw new ProductValidationError(
+            'Variant option mapping is invalid.',
+          )
+        }
+
         const optionValueId = optionValueIds
           .get(option.key)
           ?.get(selectedKey)
