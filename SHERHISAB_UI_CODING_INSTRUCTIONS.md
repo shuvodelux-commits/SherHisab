@@ -924,6 +924,45 @@ Rules:
 
 ---
 
+# 19A. Collapsible for Optional Complexity
+
+Use the official shadcn `Collapsible` component when SherHisab needs to keep a screen clean by hiding secondary, advanced, or rarely used controls until the user asks for them.
+
+Reference: https://ui.shadcn.com/docs/components/base/collapsible
+
+Good SherHisab uses:
+
+- Product form: `Advanced options` for variants, alternative units, tracking, specifications, or other uncommon configuration.
+- Purchase/Sales forms: optional notes, delivery details, extra reference fields, or uncommon adjustments.
+- POS: secondary customer/delivery metadata that is not required for the common cash-sale path.
+- Reports: advanced filters beyond the common date/status/entity filters.
+- Settings: rarely changed technical/business options.
+- Table toolbars: less-used filters or column controls behind `More filters` / `Advanced filters`.
+- Detail pages: secondary metadata/history summaries when the main operational information should stay prominent.
+
+Use the official composition:
+
+- `Collapsible`
+- `CollapsibleTrigger`
+- `CollapsibleContent`
+
+Rules:
+
+- Collapsible is for **optional complexity**, not for hiding critical business information.
+- Never hide required form fields, validation errors, payment totals, customer due, supplier payable, stock warnings, destructive consequences, or primary actions inside a collapsed section.
+- The most common workflow must remain usable without opening any collapsible section.
+- Give the trigger a clear label such as `Advanced options`, `More filters`, `Delivery details`, or `Additional information`; avoid vague labels like `More` when context is unclear.
+- Use a chevron/icon state that clearly communicates expanded vs collapsed.
+- Preserve keyboard operation and accessible state from the official shadcn component.
+- Do not nest multiple collapsibles deeply. If the screen needs several levels of progressive disclosure, reconsider the information architecture.
+- Remember expanded state only when it meaningfully helps the workflow; do not persist every temporary expansion globally.
+- On edit screens, automatically expose a collapsible section when it contains existing values that the user needs to see or edit.
+- On validation failure, open the relevant collapsed section if it contains the invalid field.
+- For advanced filters, show active-filter count or visible filter chips outside the collapsed area so users do not forget that hidden filters are active.
+- Use `Accordion` instead when there are several peer sections and the user is choosing among multiple titled panels.
+- Use `Disclosure/Collapsible` for one optional section; use `Dialog` or `Sheet` when the task needs a focused overlay rather than inline expansion.
+- Keep spacing, border, typography, and trigger treatment consistent with the rest of the shadcn/SherHisab system.
+
 # 20. Dialogs and Drawers
 
 Use shadcn Dialog / Sheet.
