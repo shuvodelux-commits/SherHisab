@@ -579,39 +579,124 @@ Do not use large filled tabs unless the interaction is truly a segmented control
 
 # 17. Buttons
 
-shadcn Button is the default primitive.
+Use the official shadcn Button component as the default action primitive.
 
-Recommended desktop heights:
+Reference: https://ui.shadcn.com/docs/components/base/button
+
+Do not hand-style native buttons when a shadcn Button fits the action.
+
+## Button Variant by Intent
+
+| Situation | shadcn Button | SherHisab examples |
+| --- | --- | --- |
+| Main positive action on a surface | `default` | Add Product, Complete Sale, Save, Record Payment, Create Customer |
+| Secondary but visible action | `outline` | Cancel, Export, Print, View Details, Add Another |
+| Lower-emphasis supporting action | `secondary` | Apply Filter, Duplicate, optional secondary workflow action |
+| Toolbar / row utility | `ghost` | More actions, Refresh, column controls, compact icon utilities |
+| Destructive action | `destructive` | Delete, Remove, Reverse when genuinely destructive |
+| Navigation that should visually read as a text link | `link` / semantic link styled with `buttonVariants` | Help, open related record, secondary navigation |
+
+Rules:
+
+- One clear primary/default button per dialog, form footer, or focused action area whenever possible.
+- Destructive color is reserved for destructive consequences, not ordinary negative-looking actions.
+- Use `outline` or `ghost` for secondary utilities rather than making every action primary blue.
+- Prefer the built-in shadcn variants and sizes before custom styling.
+- Keep normal ERP action heights aligned with adjacent controls.
+- Do not use `rounded-full` for normal SherHisab ERP buttons. Preserve the shared compact radius system.
+
+## Buttons With Icons
+
+Prefer an icon with text when the icon improves recognition or scanning.
+
+Good SherHisab examples:
+
+- Plus + Add Product
+- Save + Save Changes
+- Check / receipt + Complete Sale
+- Printer + Print
+- Download + Export
+- Refresh + Refresh
+- Trash + Delete
+- Sliders/filter + Filters
+
+Use the project's configured icon library. For an icon inside shadcn Button, use the official `data-icon="inline-start"` or `data-icon="inline-end"` pattern so spacing is handled by the component.
+
+Icon-only buttons are appropriate only when the action is universally clear and space is constrained, such as close, more actions, refresh, previous/next, or compact table utilities. Icon-only buttons must have an accessible name and, where useful, a Tooltip.
+
+Do not add decorative icons that do not improve recognition.
+
+## Pending / Loading Action Buttons
+
+For an asynchronous action, show the official shadcn `Spinner` inside the Button and change the label to the action-in-progress wording.
+
+Examples:
 
 ```text
-Small       28–30px
-Normal      32–34px
-Large       36–38px
+Save            → Saving…
+Complete Sale   → Completing…
+Create Product  → Creating…
+Delete          → Deleting…
+Remove          → Removing…
+Post Payment    → Posting…
+Return Items    → Returning…
+Generate        → Generating…
+Download        → Downloading…
+Upload          → Uploading…
+Refresh         → Refreshing…
 ```
 
-Primary button:
+Rules:
 
-- SherHisab blue
-- white text
-- one dominant primary action per surface
+- Put `Spinner` inside the Button with `data-icon="inline-start"` unless a trailing spinner is more natural.
+- Disable the action while its mutation is pending unless repeated execution is explicitly supported.
+- Keep the button width stable enough that changing to the “-ing” label does not cause disruptive layout jumping.
+- Do not show a Spinner on an action that has already completed. After success, return to the normal label or close/advance the workflow.
+- Do not replace the meaningful action text with only a spinner for primary financial/stock actions.
+- Pending text must describe what the system is doing: `Deleting…`, not generic `Loading…` when the action is delete.
+- Mutation/error handling must preserve the user's input and allow retry when appropriate.
 
-Secondary:
+## Button Size
 
-- white/neutral surface
-- hairline border
+Use shadcn sizes intentionally:
 
-Ghost:
+```text
+xs / sm       compact table, toolbar, inline utility
+default       normal form/dialog/page action
+lg            rare; only when a larger primary action is justified
+icon variants icon-only controls
+```
 
-- icon/text utilities
-- toolbar controls
+Avoid arbitrary per-page button heights.
 
-Destructive:
+# 17A. Button Group
 
-- red only for destructive actions
+Use the official shadcn Button Group only when adjacent controls represent one tightly related action family.
 
-Avoid making every action blue.
+Reference: https://ui.shadcn.com/docs/components/base/button-group
 
----
+Use Button Group for:
+
+| Situation | Pattern | SherHisab example |
+| --- | --- | --- |
+| Same-object action family | Basic Button Group | Print + Download invoice; compact Export actions |
+| Primary action plus alternatives | Split Button + Dropdown Menu | Complete Sale + menu for Save Draft / alternate completion action where the workflow supports it |
+| Increment/decrement around a value | Button Group + Input/Text | POS quantity decrement / quantity / increment |
+| Action plus tightly coupled selector | Button Group + Select | Amount/action control where the selector directly changes that same action |
+| Search/input with a directly coupled action | Button Group + Input/Input Group | Compact barcode/search action only when the button operates on that exact input |
+| Compact related icon actions | Small Button Group | Previous / Next record when treated as one navigation control |
+
+Rules:
+
+- Button Group is for buttons that **perform related actions**. If controls toggle a state, use shadcn `ToggleGroup` instead.
+- Do not group unrelated page actions simply because they are beside each other.
+- Use the same size across buttons inside one group unless an official split-button pattern requires otherwise.
+- For non-outline grouped buttons, use `ButtonGroupSeparator` where the official pattern benefits visual separation.
+- Outline buttons already have borders and normally do not need a separator.
+- Use a split Button Group when one dominant action has closely related alternatives in a Dropdown Menu.
+- Give Button Group an accessible label via `aria-label` or `aria-labelledby`.
+- Horizontal is the normal SherHisab orientation; use vertical only when the workflow/layout genuinely requires it.
+- Do not replace Tabs, ToggleGroup, Pagination, InputGroup, or Combobox with Button Group when those components better express the interaction.
 
 # 18. Inputs, Selects, Comboboxes
 
