@@ -63,7 +63,9 @@ function commaValues(value: string): string[] {
     .filter(Boolean)
 }
 
-// These form-state helpers stay colocated with the advanced editor contract.\n// eslint-disable-next-line react-refresh/only-export-components\nexport function emptyAdvancedFormState(
+// These form-state helpers stay colocated with the advanced editor contract.
+// eslint-disable-next-line react-refresh/only-export-components
+export function emptyAdvancedFormState(
   trackingMode: TrackingMode = 'SIMPLE',
 ): ProductAdvancedFormState {
   return {
@@ -76,7 +78,9 @@ function commaValues(value: string): string[] {
   }
 }
 
-// These form-state helpers stay colocated with the advanced editor contract.\n// eslint-disable-next-line react-refresh/only-export-components\nexport function advancedFormStateFromProduct(
+// These form-state helpers stay colocated with the advanced editor contract.
+// eslint-disable-next-line react-refresh/only-export-components
+export function advancedFormStateFromProduct(
   trackingMode: TrackingMode,
   variantsEnabled: boolean,
   advanced?: ProductAdvancedConfigurationDto,
@@ -136,7 +140,9 @@ function commaValues(value: string): string[] {
   }
 }
 
-// These form-state helpers stay colocated with the advanced editor contract.\n// eslint-disable-next-line react-refresh/only-export-components\nexport function buildAdvancedPayload(
+// These form-state helpers stay colocated with the advanced editor contract.
+// eslint-disable-next-line react-refresh/only-export-components
+export function buildAdvancedPayload(
   state: ProductAdvancedFormState,
 ): AdvancedProductConfigurationInput {
   const options: VariantOptionInput[] = state.variantOptions
