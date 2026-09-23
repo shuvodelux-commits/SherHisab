@@ -464,6 +464,57 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
     expect(current.stockBaseQty).toBe('0')
   })
 
+  it('rejects the hidden default Variant when Product Variants are enabled', async () => {
+    const fixture = await createAuthenticatedFixture('Hidden Variant Route Tenant')
+    const unitId = await pieceUnitId(fixture.service)
+    const product = await fixture.service.createProduct(
+      createPayload(unitId, 'Hidden Variant Product'),
+      null,
+    )
+
+    await fixture.service.replaceVariantConfiguration(product.id, {
+      enabled: true,
+      options: [{ name: 'Color', values: ['Red'] }],
+      variants: [
+        {
+          displayName: 'Red',
+          sku: 'HIDDEN-RED',
+          defaultPurchasePricePaisa: '1000',
+          defaultSellingPricePaisa: '1500',
+          minimumStockBaseQty: '0',
+          selections: { Color: 'Red' },
+        },
+      ],
+    })
+
+    const adjustment = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/stock-adjustments`,
+      {
+        method: 'POST',
+        body: {
+          variantId: product.defaultVariantId,
+          deltaBaseQty: '1',
+          note: 'Hidden Variant',
+          unitCostPaisa: '1000',
+        },
+      },
+    )
+    expect(adjustment.status).toBe(400)
+    expect(await adjustment.json()).toEqual({
+      error: 'Select an enabled Product Variant.',
+    })
+
+    const lots = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots?variantId=${product.defaultVariantId}`,
+    )
+    expect(lots.status).toBe(400)
+    expect(await lots.json()).toEqual({
+      error: 'Select an enabled Product Variant.',
+    })
+  })
+
   it('rejects a Variant that belongs to a different Product in stock and lot routes', async () => {
     const fixture = await createAuthenticatedFixture('Variant Route Tenant')
     const unitId = await pieceUnitId(fixture.service)
