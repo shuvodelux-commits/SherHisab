@@ -4,17 +4,20 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { Plus, SlidersHorizontal } from 'lucide-react'
+import { Plus, Settings2 } from 'lucide-react'
 import { useLanguageMode } from '../../app/language'
 import { Button } from '../../components/ui/button'
 import { DataTable } from '../../components/ui/data-table'
 import { Input } from '../../components/ui/input'
 import {
+  getProduct,
   listCategories,
   listProducts,
   setProductStatus,
 } from './product-api'
 import { createProductColumns } from './product-columns'
+import { ProductFormDialog } from './product-form-dialog'
+import { ProductMasterManageDialog } from './product-master-manage-dialog'
 import type { ProductStatusFilter } from './product-types'
 
 const PAGE_SIZE = 50
@@ -27,6 +30,10 @@ export function ProductPage() {
   const [brand, setBrand] = useState('')
   const [status, setStatus] = useState<ProductStatusFilter>('active')
   const [offset, setOffset] = useState(0)
+  const [formOpen, setFormOpen] = useState(false)
+  const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
+  const [editProductId, setEditProductId] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const filters = {
     search,
@@ -47,6 +54,12 @@ export function ProductPage() {
     queryFn: () => listProducts(filters),
   })
 
+  const editProductQuery = useQuery({
+    queryKey: ['product', editProductId],
+    queryFn: () => getProduct(editProductId!),
+    enabled: formOpen && formMode === 'edit' && Boolean(editProductId),
+  })
+
   const statusMutation = useMutation({
     mutationFn: ({
       id,
@@ -65,6 +78,11 @@ export function ProductPage() {
       createProductColumns({
         onSetStatus: (product, isActive) => {
           statusMutation.mutate({ id: product.id, isActive })
+        },
+        onEdit: (product) => {
+          setEditProductId(product.id)
+          setFormMode('edit')
+          setFormOpen(true)
         },
       }),
     [statusMutation],
@@ -151,14 +169,24 @@ export function ProductPage() {
         </select>
 
         <span className="products-toolbar-secondary">
-          <Button variant="secondary">
-            <SlidersHorizontal aria-hidden="true" size={14} />
-            {' '}More filters
+          <Button
+            onClick={() => setSettingsOpen(true)}
+            variant="secondary"
+          >
+            <Settings2 aria-hidden="true" size={14} />
+            {' '}Product Settings
           </Button>
         </span>
 
         <span className="products-toolbar-primary">
-          <Button variant="primary">
+          <Button
+            onClick={() => {
+              setEditProductId(null)
+              setFormMode('create')
+              setFormOpen(true)
+            }}
+            variant="primary"
+          >
             <Plus aria-hidden="true" size={14} />
             {' '}Add Product
           </Button>
@@ -229,6 +257,40 @@ export function ProductPage() {
           </div>
         </>
       )}
+
+      {formMode === 'create' || editProductQuery.data ? (
+        <ProductFormDialog
+          mode={formMode}
+          onOpenChange={(nextOpen) => {
+            setFormOpen(nextOpen)
+            if (!nextOpen) {
+              setEditProductId(null)
+            }
+          }}
+          open={formOpen}
+          product={editProductQuery.data}
+        />
+      ) : null}
+
+      {formOpen && formMode === 'edit' && editProductQuery.isError ? (
+        <div className="products-inline-error" role="alert">
+          {editProductQuery.error instanceof Error
+            ? editProductQuery.error.message
+            : 'Could not load Product details.'}
+          <Button
+            onClick={() => editProductQuery.refetch()}
+            size="small"
+            variant="secondary"
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      <ProductMasterManageDialog
+        onOpenChange={setSettingsOpen}
+        open={settingsOpen}
+      />
     </main>
   )
 }
