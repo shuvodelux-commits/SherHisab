@@ -464,6 +464,62 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
     expect(current.stockBaseQty).toBe('0')
   })
 
+  it('keeps preserved default-Variant stock operable after enabling Variants', async () => {
+    const fixture = await createAuthenticatedFixture(
+      'Preserved Default Stock Route Tenant',
+    )
+    const unitId = await pieceUnitId(fixture.service)
+    const payload = createPayload(unitId, 'Migrated Variant Product')
+    payload.openingStockBaseQty = '2.5'
+    const product = await fixture.service.createProduct(payload, null)
+
+    await fixture.service.replaceVariantConfiguration(product.id, {
+      enabled: true,
+      options: [{ name: 'Color', values: ['Red'] }],
+      variants: [
+        {
+          displayName: 'Red',
+          sku: 'MIGRATED-RED',
+          defaultPurchasePricePaisa: '1000',
+          defaultSellingPricePaisa: '1500',
+          minimumStockBaseQty: '0',
+          selections: { Color: 'Red' },
+        },
+      ],
+    })
+
+    const adjustment = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/stock-adjustments`,
+      {
+        method: 'POST',
+        body: {
+          variantId: product.defaultVariantId,
+          deltaBaseQty: '-0.5',
+          note: 'Correct preserved pre-Variant stock',
+        },
+      },
+    )
+    expect(adjustment.status).toBe(200)
+
+    const lots = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots?variantId=${product.defaultVariantId}`,
+    )
+    expect(lots.status).toBe(200)
+    expect(await lots.json()).toEqual([
+      expect.objectContaining({
+        sourceType: 'OPENING',
+        originalBaseQty: '2.5',
+        remainingBaseQty: '2',
+      }),
+    ])
+
+    const current = await fixture.service.getProduct(product.id)
+    expect(current.variantsEnabled).toBe(true)
+    expect(current.stockBaseQty).toBe('2')
+  })
+
   it('rejects the hidden default Variant when Product Variants are enabled', async () => {
     const fixture = await createAuthenticatedFixture('Hidden Variant Route Tenant')
     const unitId = await pieceUnitId(fixture.service)

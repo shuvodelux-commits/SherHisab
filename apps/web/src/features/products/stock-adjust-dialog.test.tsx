@@ -99,6 +99,38 @@ function variantProduct(): ProductDetailDto {
   }
 }
 
+function variantProductWithPreservedDefaultStock() {
+  return Object.assign(variantProduct(), {
+    stockBaseQty: '9.5',
+    stockTargets: [
+      {
+        id: 'variant-default',
+        displayName: '',
+        stockBaseQty: '2.5',
+        hasInventoryHistory: true,
+        isDefault: true,
+        isActive: true,
+      },
+      {
+        id: 'variant-red',
+        displayName: 'Red / L',
+        stockBaseQty: '4',
+        hasInventoryHistory: true,
+        isDefault: false,
+        isActive: true,
+      },
+      {
+        id: 'variant-blue',
+        displayName: 'Blue / L',
+        stockBaseQty: '3',
+        hasInventoryHistory: true,
+        isDefault: false,
+        isActive: true,
+      },
+    ],
+  })
+}
+
 function installFetch(options: { adjustmentError?: string } = {}) {
   const fetchMock = vi.fn(async (
     input: RequestInfo | URL,
@@ -351,6 +383,50 @@ describe('StockAdjustDialog', () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
   })
 
+  it('offers preserved pre-Variant stock as an explicit stock target', async () => {
+    const fetchMock = installFetch()
+    const product = variantProductWithPreservedDefaultStock()
+
+    renderWithQueryClient(
+      <StockAdjustDialog
+        onOpenChange={vi.fn()}
+        open
+        product={product}
+      />,
+    )
+
+    expect(await screen.findByLabelText('Variant')).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: 'Existing stock' }),
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Variant'), {
+      target: { value: 'variant-default' },
+    })
+    expect(screen.getByText('2.5')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Quantity adjustment'), {
+      target: { value: '-0.5' },
+    })
+    fireEvent.change(screen.getByLabelText('Reason'), {
+      target: { value: 'Correct preserved stock' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Remove stock' }))
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          input ===
+            '/api/private/products/product-variant/stock-adjustments' &&
+          init?.method === 'POST',
+      )
+      expect(call).toBeDefined()
+      expect(JSON.parse(String(call?.[1]?.body)).variantId).toBe(
+        'variant-default',
+      )
+    })
+  })
+
   it('requires a specific active Variant for variant-enabled products', async () => {
     const fetchMock = installFetch()
 
@@ -422,6 +498,35 @@ describe('ProductLotsDialog', () => {
     expect(within(rows[2]!).getByText('2026-09-10')).toBeInTheDocument()
     expect(within(rows[2]!).getByText('2')).toBeInTheDocument()
     expect(within(rows[2]!).getByText('৳12.50')).toBeInTheDocument()
+  })
+
+  it('loads lots for preserved pre-Variant stock when explicitly selected', async () => {
+    const fetchMock = installFetch()
+
+    renderWithQueryClient(
+      <ProductLotsDialog
+        onOpenChange={vi.fn()}
+        open
+        product={variantProductWithPreservedDefaultStock()}
+      />,
+    )
+
+    expect(
+      await screen.findByRole('option', { name: 'Existing stock' }),
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Variant'), {
+      target: { value: 'variant-default' },
+    })
+
+    await screen.findByText('lot-red')
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes('variantId=variant-default'),
+        ),
+      ).toBe(true)
+    })
   })
 
   it('requires a Variant before loading lots for variant-enabled products', async () => {
