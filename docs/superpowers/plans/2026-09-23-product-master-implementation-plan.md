@@ -1309,8 +1309,8 @@ git commit -m "feat: add advanced product configuration"
   - `PUT /products/:id/units`
   - `PUT /products/:id/specifications`
   - `PUT /products/:id/variants`
-  - `GET /product-categories`, `POST /product-categories`, `PATCH /product-categories/:id`
-  - `GET /units`, `POST /units`, `PATCH /units/:id`.
+  - `GET /product-categories?includeInactive=true|false`, `POST /product-categories`, `PATCH /product-categories/:id`
+  - `GET /units?includeInactive=true|false`, `POST /units`, `PATCH /units/:id`.
 
 - [ ] **Step 1: Write route RED tests**
 
@@ -1328,7 +1328,8 @@ Required route assertions:
 - missing Product returns 404;
 - successful Product create returns 201;
 - successful update/status/adjustment returns 200;
-- `GET /products` honors `search`, `categoryId`, `brand`, `status`, `limit`, and `offset`.
+- `GET /products` honors `search`, `categoryId`, `brand`, `status`, `limit`, and `offset`;
+- Category/Unit list endpoints default to active-only and return archived rows only when `includeInactive=true`.
 
 - [ ] **Step 2: Run route tests and verify RED**
 
@@ -1396,7 +1397,7 @@ git commit -m "feat: expose product master api"
 
 ---
 
-### Task 8: Add SherHisab UI Primitives, Exact Money Helpers, and Language Mode
+### Task 8: Add SherHisab UI Primitives, Exact Money Helpers, Language, and Theme
 
 **Files:**
 - Modify: `apps/web/package.json`
@@ -1410,6 +1411,7 @@ git commit -m "feat: expose product master api"
 - Create: `apps/web/src/components/ui/bilingual-label.test.tsx`
 - Create: `apps/web/src/app/language.tsx`
 - Create: `apps/web/src/app/theme.tsx`
+- Create: `apps/web/src/app/theme.test.tsx`
 - Create: `apps/web/src/lib/money.ts`
 - Create: `apps/web/src/lib/money.test.ts`
 - Create: `apps/web/src/lib/api-client.ts`
@@ -1432,7 +1434,7 @@ git commit -m "feat: expose product master api"
 - [ ] **Step 1: Add Radix/shadcn runtime primitives**
 
 ```bash
-pnpm --filter @sherhisab/web add @radix-ui/react-dialog @radix-ui/react-dropdown-menu lucide-react
+pnpm --filter @sherhisab/web add @radix-ui/react-dialog @radix-ui/react-dropdown-menu lucide-react @fontsource/inter @fontsource/noto-sans-bengali
 ```
 
 This adds accessible Dialog/Dropdown primitives, icons, and locally bundled Inter/Noto Sans Bengali font packages without adding a second CSS framework.
@@ -1479,7 +1481,7 @@ Assert:
 - [ ] **Step 4: Run focused tests and verify RED**
 
 ```bash
-pnpm --filter @sherhisab/web test -- src/lib/money.test.ts src/components/ui/bilingual-label.test.tsx
+pnpm --filter @sherhisab/web test -- src/lib/money.test.ts src/components/ui/bilingual-label.test.tsx src/app/theme.test.tsx
 ```
 
 Expected: FAIL.
@@ -1560,7 +1562,7 @@ Preserve current shell behavior.
 - [ ] **Step 10: Run focused tests and verify GREEN**
 
 ```bash
-pnpm --filter @sherhisab/web test -- src/lib/money.test.ts src/components/ui/bilingual-label.test.tsx
+pnpm --filter @sherhisab/web test -- src/lib/money.test.ts src/components/ui/bilingual-label.test.tsx src/app/theme.test.tsx
 ```
 
 Expected: PASS.
@@ -1652,8 +1654,12 @@ Expected: FAIL.
 ```ts
 listProducts(filters)
 getProduct(id)
-listCategories()
-listUnits()
+listCategories(includeInactive = false)
+createCategory(name)
+setCategoryStatus(id, isActive)
+listUnits(includeInactive = false)
+createUnit(input)
+setUnitStatus(id, isActive)
 createProduct(input)
 updateProduct(id, input)
 setProductStatus(id, isActive)
@@ -1845,7 +1851,7 @@ When API returns an existing Variant as locked by history, disable changing its 
 - [ ] **Step 9: Run form/master-management tests and verify GREEN**
 
 ```bash
-pnpm --filter @sherhisab/web test -- src/features/products/product-form-dialog.test.tsx
+pnpm --filter @sherhisab/web test -- src/features/products/product-form-dialog.test.tsx src/features/products/product-master-manage-dialog.test.tsx
 ```
 
 Expected: PASS.
@@ -1858,7 +1864,7 @@ pnpm --filter @sherhisab/web test -- src/features/products
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add apps/web/src/features/products apps/web/src/styles.css
