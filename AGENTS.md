@@ -2,6 +2,20 @@
 
 These rules apply to every coding agent working in this repository.
 
+## Mandatory Project Skill Gate
+
+Before writing or modifying any implementation code, every agent/subagent must follow `instruction.md`.
+
+That means, at minimum, reading:
+
+- `.agents/skills/README.md`
+- `.agents/skills/DESIGN.md`
+- every `.agents/skills/**/SKILL.md`
+- the approved Superpowers spec/plan and execution skill
+- `SHERHISAB_UI_CODING_INSTRUCTIONS.md` for UI work
+
+If any required instruction/skill file cannot be read, stop before implementation and report the blocker.
+
 ## Core Rule
 
 **Do not push generated or modified code to GitHub until it has been verified.**
