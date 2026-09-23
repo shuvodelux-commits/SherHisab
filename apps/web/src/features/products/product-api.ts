@@ -1,11 +1,13 @@
 import { apiRequest } from '../../lib/api-client'
 import type {
+  CreateProductPayload,
   ProductCategoryDto,
   ProductDetailDto,
   ProductListFilters,
   ProductListResponse,
   ProductLotDto,
   ProductUnitDto,
+  UpdateProductPayload,
 } from './product-types'
 
 const API_ROOT = '/api/private'
@@ -102,7 +104,7 @@ export function setUnitStatus(
 }
 
 export function createProduct(
-  input: Record<string, unknown>,
+  input: CreateProductPayload,
 ): Promise<ProductDetailDto> {
   return apiRequest<ProductDetailDto>(`${API_ROOT}/products`, {
     method: 'POST',
@@ -112,7 +114,7 @@ export function createProduct(
 
 export function updateProduct(
   id: string,
-  input: Record<string, unknown>,
+  input: UpdateProductPayload,
 ): Promise<ProductDetailDto> {
   return apiRequest<ProductDetailDto>(`${API_ROOT}/products/${id}`, {
     method: 'PATCH',
