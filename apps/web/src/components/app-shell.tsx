@@ -4,9 +4,13 @@ import { Topbar } from './topbar'
 
 interface AppShellProps {
   children: ReactNode
+  pathname?: string
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({
+  children,
+  pathname = '/app',
+}: AppShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
@@ -16,7 +20,10 @@ export function AppShell({ children }: AppShellProps) {
       </div>
 
       <div className="app-shell-main">
-        <Topbar onOpenMenu={() => setMobileMenuOpen(true)} />
+        <Topbar
+          onOpenMenu={() => setMobileMenuOpen(true)}
+          pathname={pathname}
+        />
         <div className="app-shell-content">{children}</div>
       </div>
 

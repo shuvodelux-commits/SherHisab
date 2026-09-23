@@ -1,12 +1,14 @@
+import { Link } from '@tanstack/react-router'
+
 const navigationItems = [
-  'Dashboard',
-  'Sales',
-  'Purchases',
-  'Inventory',
-  'Parties',
-  'Expenses',
-  'Finance',
-  'Reports',
+  { label: 'Dashboard', to: '/app' as const, exact: true },
+  { label: 'Sales' },
+  { label: 'Purchases' },
+  { label: 'Products', to: '/app/products' as const },
+  { label: 'Parties' },
+  { label: 'Expenses' },
+  { label: 'Finance' },
+  { label: 'Reports' },
 ]
 
 interface SidebarProps {
@@ -26,16 +28,29 @@ export function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
       </div>
 
       <nav className="sidebar-nav" aria-label="Primary navigation">
-        {navigationItems.map((item, index) => (
-          <button
-            className={index === 0 ? 'sidebar-link is-active' : 'sidebar-link'}
-            key={item}
-            onClick={onNavigate}
-            type="button"
-          >
-            {item}
-          </button>
-        ))}
+        {navigationItems.map((item) =>
+          item.to ? (
+            <Link
+              activeOptions={{ exact: item.exact ?? false }}
+              activeProps={{ className: 'sidebar-link is-active' }}
+              className="sidebar-link"
+              key={item.label}
+              onClick={onNavigate}
+              to={item.to}
+            >
+              {item.label}
+            </Link>
+          ) : (
+            <button
+              className="sidebar-link"
+              key={item.label}
+              onClick={onNavigate}
+              type="button"
+            >
+              {item.label}
+            </button>
+          ),
+        )}
       </nav>
     </aside>
   )

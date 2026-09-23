@@ -7,22 +7,31 @@ export interface SearchComboboxOption {
   keywords?: readonly string[]
 }
 
+interface SearchComboboxFooterAction {
+  label: string
+  onSelect: () => void
+}
+
 interface SearchComboboxProps {
+  ariaLabel?: string
   options: readonly SearchComboboxOption[]
   value: string | null
   onValueChange: (value: string) => void
   placeholder?: string
   searchPlaceholder?: string
   emptyMessage?: string
+  footerAction?: SearchComboboxFooterAction
 }
 
 export function SearchCombobox({
+  ariaLabel,
   options,
   value,
   onValueChange,
   placeholder = 'Select',
   searchPlaceholder = 'Search...',
   emptyMessage = 'No results',
+  footerAction,
 }: SearchComboboxProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -44,9 +53,16 @@ export function SearchCombobox({
     setQuery('')
   }
 
+  function runFooterAction() {
+    setOpen(false)
+    setQuery('')
+    footerAction?.onSelect()
+  }
+
   return (
     <div className="search-combobox">
       <button
+        aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="listbox"
         className="search-combobox-trigger"
@@ -90,6 +106,16 @@ export function SearchCombobox({
               <p className="search-combobox-empty">{emptyMessage}</p>
             )}
           </div>
+
+          {footerAction ? (
+            <button
+              className="search-combobox-footer-action"
+              onClick={runFooterAction}
+              type="button"
+            >
+              {footerAction.label}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -20,5 +20,9 @@ export async function withRequestDatabase<T>(
 
   await client.connect()
 
-  return work(client)
+  try {
+    return await work(client)
+  } finally {
+    await client.end()
+  }
 }

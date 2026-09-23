@@ -1,8 +1,7 @@
-import type { Pool, PoolClient } from 'pg'
 import { getPool } from '../../db/pool'
+import type { DatabaseClient } from '../../db/request-database'
+import { withDatabaseTransaction } from '../../db/transaction'
 import type { CreateTenantInput, Tenant } from './tenant.types'
-
-type DatabaseClient = Pool | PoolClient
 
 interface TenantRow {
   id: string
@@ -26,20 +25,28 @@ export class TenantRepository {
   constructor(private readonly db: DatabaseClient = getPool()) {}
 
   async create(input: CreateTenantInput): Promise<Tenant> {
-    const result = await this.db.query<TenantRow>(
-      `INSERT INTO tenants (name, slug)
-       VALUES ($1, $2)
-       RETURNING id, name, slug, created_at, updated_at`,
-      [input.name, input.slug],
-    )
+    return withDatabaseTransaction(this.db, async (client) => {
+      const result = await client.query<TenantRow>(
+        `INSERT INTO tenants (name, slug)
+         VALUES ($1, $2)
+         RETURNING id, name, slug, created_at, updated_at`,
+        [input.name, input.slug],
+      )
 
-    const tenant = result.rows[0]
+      const tenant = result.rows[0]
 
-    if (!tenant) {
-      throw new Error('Failed to create tenant')
-    }
+      if (!tenant) {
+        throw new Error('Failed to create tenant')
+      }
 
-    return mapTenant(tenant)
+      await client.query(
+        `INSERT INTO units (tenant_id, name, symbol)
+         VALUES ($1, 'Piece', 'pcs')`,
+        [tenant.id],
+      )
+
+      return mapTenant(tenant)
+    })
   }
 
   async findById(tenantId: string): Promise<Tenant | null> {

@@ -1,3 +1,4 @@
+import { useRouterState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { AppShell } from '../components/app-shell'
 
@@ -8,5 +9,9 @@ interface AuthenticatedLayoutProps {
 export function AuthenticatedLayout({
   children,
 }: AuthenticatedLayoutProps) {
-  return <AppShell>{children}</AppShell>
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+
+  return <AppShell pathname={pathname}>{children}</AppShell>
 }
