@@ -223,23 +223,27 @@ async function resolveVariantForProduct(
     return product.defaultVariantId
   }
 
-  if (requestedVariantId === product.defaultVariantId) {
-    if (product.variantsEnabled) {
-      throw new ProductValidationError('Select an enabled Product Variant.')
-    }
+  const stockTargets = await service.listStockTargets(productId)
+  const target = stockTargets.find(
+    (candidate) =>
+      candidate.id === requestedVariantId && candidate.isActive,
+  )
 
-    return requestedVariantId
-  }
-
-  const advanced = await service.getAdvancedConfiguration(productId)
-
-  if (!advanced.variants.some((variant) => variant.id === requestedVariantId)) {
+  if (!target) {
     throw new ProductValidationError(
       'Variant does not belong to this Product and tenant.',
     )
   }
 
-  return requestedVariantId
+  if (
+    target.isDefault &&
+    product.variantsEnabled &&
+    !target.hasInventoryHistory
+  ) {
+    throw new ProductValidationError('Select an enabled Product Variant.')
+  }
+
+  return target.id
 }
 
 export const productRoutes = new Hono<AppEnv>()
@@ -285,10 +289,12 @@ export const productRoutes = new Hono<AppEnv>()
     withProductServices(c, async ({ productService }) => {
       const productId = c.req.param('productId')
       const product = await productService.getProduct(productId)
-      const advanced =
-        await productService.getAdvancedConfiguration(productId)
+      const [advanced, stockTargets] = await Promise.all([
+        productService.getAdvancedConfiguration(productId),
+        productService.listStockTargets(productId),
+      ])
 
-      return c.json({ ...product, advanced })
+      return c.json({ ...product, advanced, stockTargets })
     }),
   )
   .patch('/products/:productId', async (c) => {

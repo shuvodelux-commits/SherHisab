@@ -26,7 +26,7 @@ import {
 } from './product-api'
 import type {
   ProductDetailDto,
-  ProductVariantDto,
+  ProductStockTargetDto,
 } from './product-types'
 
 interface StockDialogProps {
@@ -35,10 +35,39 @@ interface StockDialogProps {
   product: ProductDetailDto
 }
 
-function activeVariants(product: ProductDetailDto): ProductVariantDto[] {
-  return (product.advanced?.variants ?? []).filter(
-    (variant) => variant.isActive !== false && Boolean(variant.id),
-  )
+function activeStockTargets(
+  product: ProductDetailDto,
+): ProductStockTargetDto[] {
+  if (product.stockTargets) {
+    return product.stockTargets.filter(
+      (target) =>
+        target.isActive &&
+        (!target.isDefault ||
+          !product.variantsEnabled ||
+          target.hasInventoryHistory),
+    )
+  }
+
+  return (product.advanced?.variants ?? []).flatMap((variant) => {
+    if (variant.isActive === false || !variant.id) {
+      return []
+    }
+
+    return [
+      {
+        id: variant.id,
+        displayName: variant.displayName,
+        stockBaseQty: variant.stockBaseQty ?? '0',
+        hasInventoryHistory: Boolean(variant.hasInventoryHistory),
+        isDefault: false,
+        isActive: true,
+      },
+    ]
+  })
+}
+
+function stockTargetLabel(target: ProductStockTargetDto): string {
+  return target.isDefault ? 'Existing stock' : target.displayName
 }
 
 function unitLabel(product: ProductDetailDto): string {
@@ -51,7 +80,7 @@ export function StockAdjustDialog({
   product,
 }: StockDialogProps) {
   const queryClient = useQueryClient()
-  const variants = activeVariants(product)
+  const variants = activeStockTargets(product)
   const [variantId, setVariantId] = useState('')
   const [quantity, setQuantity] = useState('')
   const [cost, setCost] = useState('')
@@ -181,7 +210,7 @@ export function StockAdjustDialog({
                   <option value="">Select Variant</option>
                   {variants.map((variant) => (
                     <option key={variant.id} value={variant.id}>
-                      {variant.displayName}
+                      {stockTargetLabel(variant)}
                     </option>
                   ))}
                 </select>
@@ -269,7 +298,7 @@ export function ProductLotsDialog({
   onOpenChange,
   product,
 }: StockDialogProps) {
-  const variants = activeVariants(product)
+  const variants = activeStockTargets(product)
   const [variantId, setVariantId] = useState('')
 
   const effectiveVariantId = product.variantsEnabled
@@ -309,7 +338,7 @@ export function ProductLotsDialog({
                 <option value="">Select Variant</option>
                 {variants.map((variant) => (
                   <option key={variant.id} value={variant.id}>
-                    {variant.displayName}
+                    {stockTargetLabel(variant)}
                   </option>
                 ))}
               </select>

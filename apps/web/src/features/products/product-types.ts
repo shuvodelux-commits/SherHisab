@@ -146,9 +146,19 @@ export interface UpdateProductPayload {
   advanced?: AdvancedProductConfigurationInput
 }
 
+export interface ProductStockTargetDto {
+  id: string
+  displayName: string
+  stockBaseQty: string
+  hasInventoryHistory: boolean
+  isDefault: boolean
+  isActive: boolean
+}
+
 export interface ProductDetailDto extends ProductListItemDto {
   primaryBarcode: string | null
   advanced?: ProductAdvancedConfigurationDto
+  stockTargets?: ProductStockTargetDto[]
 }
 
 export interface ProductLotDto {

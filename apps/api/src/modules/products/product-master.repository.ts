@@ -9,6 +9,7 @@ import type {
   ProductListFilters,
   ProductListItem,
   ProductSpecificationRecord,
+  ProductStockTarget,
   ProductVariantDetail,
   TrackingMode,
   UnitRecord,
@@ -831,6 +832,56 @@ export class ProductMasterRepository {
        FOR UPDATE`,
       [tenantId, productId],
     )
+  }
+
+  async listStockTargets(
+    tenantId: string,
+    productId: string,
+  ): Promise<ProductStockTarget[]> {
+    const result = await this.db.query<{
+      id: string
+      display_name: string | null
+      stock_base_qty: string
+      has_inventory_history: boolean
+      is_default: boolean
+      is_active: boolean
+    }>(
+      `SELECT pv.id,
+              pv.display_name,
+              (
+                SELECT trim_scale(COALESCE(SUM(im.base_qty_delta), 0))::text
+                FROM inventory_movements im
+                WHERE im.tenant_id = pv.tenant_id
+                  AND im.variant_id = pv.id
+              ) AS stock_base_qty,
+              EXISTS (
+                SELECT 1
+                FROM inventory_movements im_history
+                WHERE im_history.tenant_id = pv.tenant_id
+                  AND im_history.variant_id = pv.id
+                UNION ALL
+                SELECT 1
+                FROM inventory_lots il_history
+                WHERE il_history.tenant_id = pv.tenant_id
+                  AND il_history.variant_id = pv.id
+              ) AS has_inventory_history,
+              pv.is_default,
+              pv.is_active
+       FROM product_variants pv
+       WHERE pv.tenant_id = $1
+         AND pv.product_id = $2
+       ORDER BY pv.is_default DESC, pv.created_at, pv.id`,
+      [tenantId, productId],
+    )
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      displayName: row.display_name ?? '',
+      stockBaseQty: row.stock_base_qty,
+      hasInventoryHistory: row.has_inventory_history,
+      isDefault: row.is_default,
+      isActive: row.is_active,
+    }))
   }
 
   async listNonDefaultVariants(

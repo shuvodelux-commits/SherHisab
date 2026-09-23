@@ -19,6 +19,7 @@ import type {
   ProductDetail,
   ProductListFilters,
   ProductListResult,
+  ProductStockTarget,
   ReplaceVariantConfigurationInput,
   SpecificationInput,
   TrackingMode,
@@ -734,6 +735,13 @@ export class ProductMasterService {
       productId,
       product.baseUnit.id,
     )
+  }
+
+  async listStockTargets(
+    productId: string,
+  ): Promise<ProductStockTarget[]> {
+    await this.getProduct(productId)
+    return this.repository.listStockTargets(this.tenantId, productId)
   }
 
   async replaceAlternativeUnits(

@@ -150,6 +150,15 @@ export interface ProductVariantDetail {
   isActive: boolean
 }
 
+export interface ProductStockTarget {
+  id: string
+  displayName: string
+  stockBaseQty: string
+  hasInventoryHistory: boolean
+  isDefault: boolean
+  isActive: boolean
+}
+
 export interface ProductAdvancedConfiguration {
   alternativeUnits: ProductAlternativeUnitRecord[]
   specifications: ProductSpecificationRecord[]
