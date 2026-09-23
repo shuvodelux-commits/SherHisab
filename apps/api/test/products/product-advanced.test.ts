@@ -282,6 +282,39 @@ describe.skipIf(!hasDatabase)('advanced product configuration', () => {
     expect(mappings.rows[0]?.count).toBe('4')
   })
 
+  it('excludes the hidden default Variant from the user-facing Variant count', async () => {
+    const { service, product } = await createSimpleProduct(
+      'Visible Variant Count Tenant',
+      'Counted T-Shirt',
+    )
+
+    await service.replaceVariantConfiguration(
+      product.id,
+      colorSizeConfiguration([
+        {
+          displayName: 'Red / M',
+          sku: 'COUNT-RED-M',
+          defaultPurchasePricePaisa: '1000',
+          defaultSellingPricePaisa: '1500',
+          minimumStockBaseQty: '0',
+          selections: { Color: 'Red', Size: 'M' },
+        },
+        {
+          displayName: 'Blue / L',
+          sku: 'COUNT-BLUE-L',
+          defaultPurchasePricePaisa: '1100',
+          defaultSellingPricePaisa: '1600',
+          minimumStockBaseQty: '0',
+          selections: { Color: 'Blue', Size: 'L' },
+        },
+      ]),
+    )
+
+    const current = await service.getProduct(product.id)
+    expect(current.variantsEnabled).toBe(true)
+    expect(current.variantCount).toBe(2)
+  })
+
   it('rejects generic opening stock when a new Product enables variants', async () => {
     const tenant = await createProductTestTenant('Variant Opening Tenant')
     const service = new ProductMasterService(tenant.id, getPool())
