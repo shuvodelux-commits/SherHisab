@@ -817,6 +817,22 @@ export class ProductMasterRepository {
     }))
   }
 
+  async lockNonDefaultVariants(
+    tenantId: string,
+    productId: string,
+  ): Promise<void> {
+    await this.db.query(
+      `SELECT id
+       FROM product_variants
+       WHERE tenant_id = $1
+         AND product_id = $2
+         AND NOT is_default
+       ORDER BY id
+       FOR UPDATE`,
+      [tenantId, productId],
+    )
+  }
+
   async listNonDefaultVariants(
     tenantId: string,
     productId: string,

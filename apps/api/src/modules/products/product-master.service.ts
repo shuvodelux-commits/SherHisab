@@ -972,6 +972,7 @@ export class ProductMasterService {
     const repository = new ProductMasterRepository(database)
     await this.requireLockedProductForAdvanced(repository, productId)
     const normalized = normalizeVariantConfiguration(input)
+    await repository.lockNonDefaultVariants(this.tenantId, productId)
     const existingVariants = await repository.listNonDefaultVariants(
       this.tenantId,
       productId,
