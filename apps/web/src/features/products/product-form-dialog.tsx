@@ -193,19 +193,21 @@ export function ProductFormDialog({
   const categoryOptions = useMemo(
     () =>
       masterOptions(
-        categoriesQuery.data ?? [],
+        categoriesQuery.data ??
+          (product?.category ? [product.category] : []),
         form.categoryId,
       ),
-    [categoriesQuery.data, form.categoryId],
+    [categoriesQuery.data, form.categoryId, product?.category],
   )
 
   const unitOptions = useMemo(
     () =>
       masterOptions(
-        unitsQuery.data ?? [],
+        unitsQuery.data ??
+          (product?.baseUnit ? [product.baseUnit] : []),
         form.baseUnitId,
       ),
-    [unitsQuery.data, form.baseUnitId],
+    [unitsQuery.data, form.baseUnitId, product?.baseUnit],
   )
 
   const saveMutation = useMutation({
