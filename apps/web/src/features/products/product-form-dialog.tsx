@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useMemo,
   useState,
   type FormEvent,
@@ -178,23 +177,6 @@ export function ProductFormDialog({
   const [newUnitName, setNewUnitName] = useState('')
   const [newUnitSymbol, setNewUnitSymbol] = useState('')
   const [masterError, setMasterError] = useState('')
-
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    setForm(initialFormState(mode, product))
-    setAdvanced(initialAdvancedState(mode, product))
-    setAdvancedOpen(false)
-    setFormError('')
-    setMasterError('')
-    setCategoryDialogOpen(false)
-    setUnitDialogOpen(false)
-    setNewCategoryName('')
-    setNewUnitName('')
-    setNewUnitSymbol('')
-  }, [mode, open, product])
 
   const categoriesQuery = useQuery({
     queryKey: ['product-categories', 'all'],
