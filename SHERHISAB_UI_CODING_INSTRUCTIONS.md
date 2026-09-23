@@ -548,6 +548,50 @@ Keep summary blocks flat and neutral.
 
 ---
 
+# 15A. Breadcrumbs
+
+Use the official shadcn `Breadcrumb` component for hierarchical location/context.
+
+Reference: https://ui.shadcn.com/docs/components/base/breadcrumb
+
+Use Breadcrumb when the user is inside a meaningful hierarchy, for example:
+
+```text
+Products / Product Details
+Products / Edit Product
+Customers / Customer Profile
+Customers / Ledger
+Purchases / Purchase #PUR-00124
+Sales / Invoice #INV-00452
+Settings / Product Settings
+Reports / Sales Report
+```
+
+Use the official composition:
+
+- `Breadcrumb`
+- `BreadcrumbList`
+- `BreadcrumbItem`
+- `BreadcrumbLink`
+- `BreadcrumbPage`
+- `BreadcrumbSeparator`
+- `BreadcrumbEllipsis` when collapsing long paths
+
+Rules:
+
+- The current page uses `BreadcrumbPage`; it is not a link to itself.
+- Parent levels use `BreadcrumbLink`.
+- Use TanStack Router `Link` through the supported shadcn composition pattern for client-side navigation.
+- Keep breadcrumbs compact and subordinate to the page title.
+- Do not repeat the full sidebar hierarchy mechanically.
+- Do not show a breadcrumb on a simple top-level page such as Dashboard or a standalone Products list when it adds no location value.
+- Use `BreadcrumbEllipsis` for long/deep paths rather than wrapping a long breadcrumb across the toolbar.
+- Do not use breadcrumbs as a substitute for Tabs, Back buttons, or workflow step indicators.
+- Breadcrumb text must use real entity names/numbers when useful, but avoid exposing unnecessary internal IDs.
+- On narrow screens, collapse intermediate levels while keeping the immediate parent and current page understandable.
+- Preserve accessible semantics and separators from the official shadcn component.
+- Match SherHisab typography, semantic tokens, and compact control density; do not hand-build breadcrumb separators or custom pill breadcrumbs.
+
 # 16. Tabs
 
 Tabs must be consistent across:
@@ -1055,36 +1099,50 @@ Do not load thousands of rows into the browser only to paginate client-side.
 
 ---
 
-# 24. Status Badges
+# 24. Badges and Status Badges
 
-Status badges must be compact.
+Use the official shadcn `Badge` component for compact status, category, state, count, and short metadata labels.
 
-Examples:
+Reference: https://ui.shadcn.com/docs/components/base/badge
 
-```text
-Active
-Inactive
-Paid
-Due
-Partial
-Low
-Oversold
-Depleted
-Draft
-Returned
-```
+Do not build badge-looking UI from custom styled `span` / `div` elements when shadcn Badge fits the purpose.
 
-Use:
+## Variant by Meaning
 
-- small text
-- subtle tinted background
-- pill radius
-- no heavy borders
-- optional tiny dot only when it improves scanning
+| Situation | shadcn Badge variant | SherHisab examples |
+| --- | --- | --- |
+| Primary / emphasized state | `default` | Selected/highlighted state only when emphasis is genuinely useful |
+| Neutral state / metadata | `secondary` | Draft, category label, ordinary non-critical metadata |
+| Destructive / error state | `destructive` | Failed, Rejected, severe overdue/error state |
+| Border-only / low-emphasis state | `outline` | Informational labels, low-emphasis status |
+| Very low-emphasis metadata | `ghost` | Compact helper/table metadata |
+| Badge that is navigation | `link` / Badge rendered as link | Related tag/category/entity when intentionally clickable |
 
-Avoid large chips.
+Rules:
 
----
+- Badge color communicates meaning, not decoration.
+- Prefer built-in shadcn variants before custom colors.
+- If SherHisab needs success/warning/info states beyond built-ins, define shared semantic Badge variants/tokens centrally.
+- Do not hard-code raw page-specific Tailwind badge colors.
+- Success/green: Paid, Delivered, Active, In Stock.
+- Warning/amber: Partial, Low Stock, Pending.
+- Destructive/red: Failed, Rejected, critical error/danger state.
+- Ordinary/zero/default states should remain neutral when possible.
+- Do not turn every table value into a badge.
+- Keep badges compact and readable.
+- Do not communicate status by color alone.
+
+## Badge With Icon
+
+Use an icon only when it improves recognition. Use the official `data-icon="inline-start"` / `data-icon="inline-end"` pattern.
+
+Examples: check + Paid, alert + Low Stock, clock + Pending, return + Returned.
+
+## Badge With Spinner
+
+Use Badge + official shadcn `Spinner` only for a live non-action state such as `Generating…`, `Syncing…`, `Importing…`, or `Processing…`.
+
+For user-triggered actions such as Save/Delete/Complete Sale, use Button + Spinner instead.
 
 # 25. Action Menus
 
