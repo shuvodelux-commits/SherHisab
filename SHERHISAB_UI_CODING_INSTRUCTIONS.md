@@ -2536,6 +2536,91 @@ Do not hide important business data just to avoid horizontal scrolling.
 
 ---
 
+# 33A. Scroll Area for Constrained Content
+
+Use the official shadcn `ScrollArea` when content must scroll **inside a deliberately constrained region** while the surrounding ERP layout stays fixed.
+
+Reference: https://ui.shadcn.com/docs/components/base/scroll-area
+
+Use the official composition:
+
+- `ScrollArea`
+- `ScrollBar`
+- `ScrollBar orientation="horizontal"` when horizontal scrolling is required
+
+Good SherHisab uses:
+
+- POS product-result pane with a fixed-height cart beside it;
+- compact cart/item list that must stay within the POS viewport;
+- long Dropdown/Popover/Sheet content that needs a bounded scroll region;
+- notification/activity/history panels;
+- long category/tag/filter lists inside a constrained panel;
+- sidebars with more navigation items than the viewport height;
+- modal/detail panels containing long transaction history;
+- wide, bounded content that needs an explicit horizontal scrollbar.
+
+## Do Not Use ScrollArea Everywhere
+
+Normal pages should keep native page scrolling.
+
+Do not wrap:
+
+- every page;
+- ordinary forms;
+- normal full-page tables;
+- short menus;
+- content that already fits naturally
+
+inside a ScrollArea merely to get custom scrollbars.
+
+Use ScrollArea only when the layout intentionally defines a fixed/max height or width and internal scrolling is part of the interaction.
+
+## Tables
+
+For wide operational tables:
+
+- preserve horizontal table usability;
+- use the existing shared table-scroll strategy;
+- use ScrollArea with a horizontal `ScrollBar` only when it is compatible with sticky headers/columns and does not introduce nested-scroll glitches;
+- do not create a second hidden horizontal-scroll system;
+- do not force users to scroll to the bottom of a long page just to reach the horizontal scrollbar.
+
+If native overflow produces more reliable sticky-column/table behavior, keep native overflow for that specific DataTable container rather than using ScrollArea blindly.
+
+## POS / Cart
+
+ScrollArea is especially appropriate when the POS layout has independent regions:
+
+```text
+Product Results  |  Customer
+[ScrollArea]     |  Cart
+                 |  [ScrollArea]
+                 |  Totals
+                 |  Complete Sale
+```
+
+Keep totals/payment/complete-sale controls outside the cart ScrollArea so they remain visible while many items are in the cart.
+
+## Popover / Sheet / Dialog
+
+Use ScrollArea when content exceeds the useful viewport height, but keep:
+
+- dialog/sheet header visible when possible;
+- primary footer actions visible when useful;
+- only the long middle content scrollable.
+
+Avoid nested ScrollAreas unless absolutely necessary.
+
+## Scroll UX Rules
+
+- Keep scrollbars visible enough to discover when content clearly overflows.
+- Use horizontal ScrollBar only for genuinely horizontal content.
+- Preserve wheel, trackpad, keyboard, and touch scrolling.
+- Do not suppress native accessibility/keyboard behavior.
+- Avoid fixed pixel heights when a responsive max-height such as viewport-relative sizing is more appropriate.
+- Avoid scroll traps where the user cannot easily move from an inner scroll region back to the page.
+- Do not put essential actions off-screen inside a scroll region when they can remain sticky/visible.
+
 # 34. Accessibility
 
 All interactive controls must support:
@@ -2565,6 +2650,86 @@ Every data screen must distinguish between:
 - retry
 
 Do not render all of these as the same generic message.
+
+## Skeleton for Initial / Lazy Loading
+
+Use the official shadcn `Skeleton` component for initial or lazy-loaded content when preserving the expected layout shape makes loading feel faster and reduces layout shift.
+
+Reference: https://ui.shadcn.com/docs/components/base/skeleton
+
+Good SherHisab uses:
+
+- initial Data Table loading;
+- dashboard metrics;
+- customer/product/supplier detail summaries;
+- lazy-loaded tab content;
+- report summary blocks;
+- invoice/detail side panels;
+- card/list content that appears after a query;
+- delayed secondary module sections.
+
+Match the Skeleton to the **shape of the content being loaded**, not to a generic full-screen loader.
+
+Examples:
+
+```text
+Table loading
+[header skeleton row]
+[row skeleton]
+[row skeleton]
+[row skeleton]
+
+Metric loading
+[short label]
+[large value block]
+
+Detail loading
+[name line]
+[secondary line]
+[small metadata row]
+```
+
+### Table Skeleton Rules
+
+For table/data-grid loading:
+
+- preserve the actual table width/column structure where practical;
+- show a small realistic number of skeleton rows rather than dozens;
+- do not render fake status colors or fake business values;
+- keep the table header visible if it is already known;
+- avoid large layout jumps when real data replaces the Skeleton.
+
+When changing page/sort/filter on an already-rendered table, prefer preserving the previous table structure/data with a subtle pending state when appropriate rather than replacing the entire table with first-load Skeletons every time.
+
+### Lazy Loading
+
+Skeleton is appropriate when a module/tab/section is intentionally loaded on demand.
+
+Use lazy loading when it materially reduces initial work; do not split tiny components just to show Skeletons.
+
+### Skeleton vs Spinner vs Empty
+
+```text
+Initial structured content loading → Skeleton
+Small active operation            → Spinner
+Button mutation                   → Button + Spinner
+No records after successful load  → Empty
+Request failed                    → Alert / ErrorState
+```
+
+Never show Empty while data is still loading.
+
+Never use Skeleton to hide a known error.
+
+### Skeleton UX Rules
+
+- use official shadcn Skeleton, not custom `animate-pulse` divs;
+- approximate the real content dimensions;
+- keep motion restrained;
+- avoid skeletonizing large portions of UI that are already static;
+- do not skeletonize buttons/navigation that are already usable;
+- preserve accessible loading state where appropriate;
+- if loading is nearly instantaneous, avoid flashing a Skeleton briefly—use query-state timing/retained content where appropriate.
 
 ## Official shadcn Empty Component
 
@@ -2664,9 +2829,7 @@ Use the normal SherHisab Button rules inside Empty states, including icons and S
 
 ## Loading
 
-Use the official shadcn `Skeleton` for structural loading placeholders and `Spinner` for compact active operations.
-
-Do not show the Empty component while the first request is still loading.
+Follow the Skeleton/Spinner decision rules above. Keep loading states structurally stable and do not show Empty until a successful request confirms there are no records.
 
 ## Error
 
