@@ -31,6 +31,7 @@ export interface CreateProductInput {
   openingStockBaseQty: string
   minimumStockBaseQty: string
   trackingMode?: TrackingMode
+  advanced?: AdvancedProductConfigurationInput
 }
 
 export interface UpdateProductInput {
@@ -43,6 +44,7 @@ export interface UpdateProductInput {
   defaultSellingPricePaisa: string
   minimumStockBaseQty: string
   trackingMode: TrackingMode
+  advanced?: AdvancedProductConfigurationInput
 }
 
 export interface ProductListFilters {
@@ -80,4 +82,76 @@ export interface ProductListResult {
 
 export interface ProductDetail extends ProductListItem {
   primaryBarcode: string | null
+}
+
+
+export interface AlternativeUnitInput {
+  unitId: string
+  conversionMode: ConversionMode
+  conversionToBase?: string | null
+}
+
+export interface SpecificationInput {
+  name: string
+  value: string
+}
+
+export interface VariantOptionInput {
+  name: string
+  values: string[]
+}
+
+export interface VariantInput {
+  id?: string
+  displayName: string
+  sku?: string | null
+  defaultPurchasePricePaisa: string
+  defaultSellingPricePaisa: string
+  minimumStockBaseQty: string
+  selections: Record<string, string>
+}
+
+export interface ReplaceVariantConfigurationInput {
+  enabled: boolean
+  options: VariantOptionInput[]
+  variants: VariantInput[]
+}
+
+export interface AdvancedProductConfigurationInput {
+  alternativeUnits?: AlternativeUnitInput[]
+  specifications?: SpecificationInput[]
+  variantConfiguration?: ReplaceVariantConfigurationInput
+}
+
+export interface ProductAlternativeUnitRecord {
+  id: string
+  unit: UnitRecord
+  conversionMode: ConversionMode
+  conversionToBase: string | null
+}
+
+export interface ProductSpecificationRecord {
+  id: string
+  name: string
+  value: string
+  sortOrder: number
+}
+
+export interface ProductVariantDetail {
+  id: string
+  displayName: string
+  sku: string | null
+  defaultPurchasePricePaisa: string
+  defaultSellingPricePaisa: string
+  minimumStockBaseQty: string
+  stockBaseQty: string
+  hasInventoryHistory: boolean
+  selections: Record<string, string>
+  isActive: boolean
+}
+
+export interface ProductAdvancedConfiguration {
+  alternativeUnits: ProductAlternativeUnitRecord[]
+  specifications: ProductSpecificationRecord[]
+  variants: ProductVariantDetail[]
 }
