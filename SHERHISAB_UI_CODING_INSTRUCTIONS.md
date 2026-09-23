@@ -1588,6 +1588,107 @@ Use the appropriate shared error/Alert pattern with:
 - preserve user-entered data where applicable;
 - no false "No data" message for network/server failures.
 
+# 35A. Toast Notifications
+
+Use the official shadcn `Toast` component for succinct, temporary feedback that does not need to remain on screen.
+
+Reference: https://ui.shadcn.com/docs/components/base/toast
+
+Install/use the official project toast implementation and mount a single global `Toaster` at the application root. Do not create separate page-level toast systems.
+
+The Base UI implementation supports `default`, `success`, `info`, `warning`, `error`, and `loading` types, actions, and `toast.promise` for asynchronous task progression.
+
+## Use Toast For
+
+| Situation | Toast type | SherHisab example |
+| --- | --- | --- |
+| Successful mutation | `success` | Product created, changes saved, payment recorded, stock adjusted |
+| Non-blocking failure | `error` | Export failed, refresh failed, background save failed |
+| Important but non-blocking caution | `warning` | Some rows were skipped during import |
+| Informational feedback | `info` | Report is being prepared, copied to clipboard |
+| Background async operation | `loading` / `toast.promise` | Importing file, generating report, syncing data |
+| Reversible transient action | Toast with action | Item archived + `Undo` when the domain safely supports undo |
+
+## Do Not Use Toast For
+
+- required form-field validation;
+- errors that need field-level correction;
+- destructive-action confirmation;
+- payment/stock/posting confirmation before execution;
+- customer due, supplier payable, stock warnings, or other business state that must remain visible;
+- legal/compliance information;
+- primary page errors that block the entire screen;
+- long instructions or multi-paragraph content.
+
+Use inline Field validation for field errors, Alert/ErrorState for persistent blocking problems, and AlertDialog/Dialog for confirmations.
+
+## Success Toast Rules
+
+Use concise, specific success copy:
+
+```text
+Product created
+Changes saved
+Payment recorded
+Stock adjusted
+Invoice downloaded
+Customer updated
+```
+
+Do not use vague copy such as `Success!` when the completed action can be named.
+
+Do not show a success toast for every harmless interaction such as opening a menu, changing a tab, selecting a filter, or typing.
+
+## Error Toast Rules
+
+Use a toast only when the error is non-blocking or the surrounding UI already provides the recovery path.
+
+Good:
+
+```text
+Export failed
+Please try again.
+```
+
+Bad:
+
+```text
+Something went wrong
+```
+
+When the error affects a form submission, preserve the user's input and show field/general form errors in the form as appropriate. A toast may supplement the error but must not be the only explanation when correction is required.
+
+## Loading / Promise Toast
+
+Use `toast.promise` for background tasks where one notification should transition through loading → success/error.
+
+Examples:
+
+- CSV import;
+- report generation;
+- bulk export;
+- long-running synchronization.
+
+For a direct primary action such as `Save`, `Delete`, or `Complete Sale`, keep the existing Button + Spinner pending state. Do not replace the button's local pending feedback with only a loading toast.
+
+## Toast With Action
+
+Use an action only when it is immediately useful and safe, such as `Undo` after an archive operation that is truly reversible.
+
+Do not put destructive confirmation actions inside a toast.
+
+## Toast UX Rules
+
+- Keep title and description short.
+- Prefer one useful toast over several duplicate notifications for the same event.
+- Do not fire both success and info toasts for one successful operation.
+- Avoid toast spam during batch operations; summarize the result.
+- Use semantic toast types rather than custom page-specific colors.
+- Do not rely on toast alone for information that the user may need to reference later.
+- Preserve accessible announcement behavior from the official component.
+- Toast content follows SherHisab language mode and should use plain business language.
+- Use the global shared toast helper/API so all modules have consistent wording and behavior.
+
 # 36. Confirmation Rules
 
 Use confirmation only when the action has meaningful consequence.
