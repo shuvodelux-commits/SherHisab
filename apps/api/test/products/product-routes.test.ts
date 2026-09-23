@@ -5,6 +5,7 @@ import { closePool, getPool } from '../../src/db/pool'
 import { AuthService } from '../../src/modules/auth/auth.service'
 import { SESSION_COOKIE_NAME } from '../../src/modules/auth/session'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
+import type { CreateProductInput } from '../../src/modules/products/product.types'
 import {
   cleanupProductTestTenants,
   createProductTestTenant,
@@ -66,7 +67,10 @@ async function pieceUnitId(service: ProductMasterService): Promise<string> {
   return unit.id
 }
 
-function createPayload(baseUnitId: string, name = 'Hammer') {
+function createPayload(
+  baseUnitId: string,
+  name = 'Hammer',
+): CreateProductInput {
   return {
     name,
     brand: 'RFL',
