@@ -2,6 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import { fireEvent, render, screen } from '@testing-library/react'
 import {
+  afterEach,
   beforeEach,
   describe,
   expect,
@@ -28,6 +29,31 @@ function renderApplication() {
 describe('responsive application shell', () => {
   beforeEach(() => {
     queryClient.clear()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url
+
+        if (url === '/api/auth/session') {
+          return new Response(
+            JSON.stringify({
+              authenticated: true,
+              userId: 'user-1',
+              tenantId: 'tenant-1',
+              expiresAt: '2026-09-30T00:00:00.000Z',
+            }),
+            { status: 200 },
+          )
+        }
+
+        return new Response('{}', { status: 404 })
+      }),
+    )
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: vi.fn().mockImplementation(() => ({
@@ -41,6 +67,10 @@ describe('responsive application shell', () => {
         dispatchEvent: vi.fn(),
       })),
     })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('renders the compact desktop navigation and content', async () => {
