@@ -214,10 +214,20 @@ async function resolveVariantForProduct(
   const product = await service.getProduct(productId)
 
   if (!requestedVariantId) {
+    if (product.variantsEnabled) {
+      throw new ProductValidationError(
+        'Variant is required when Product Variants are enabled.',
+      )
+    }
+
     return product.defaultVariantId
   }
 
   if (requestedVariantId === product.defaultVariantId) {
+    if (product.variantsEnabled) {
+      throw new ProductValidationError('Select an enabled Product Variant.')
+    }
+
     return requestedVariantId
   }
 
