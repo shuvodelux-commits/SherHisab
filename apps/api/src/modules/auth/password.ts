@@ -1,6 +1,6 @@
 const ALGORITHM = 'PBKDF2'
 const HASH = 'SHA-256'
-const ITERATIONS = 310_000
+const ITERATIONS = 100_000
 const KEY_LENGTH = 256
 const SALT_BYTES = 16
 const FORMAT = 'pbkdf2-sha256'
