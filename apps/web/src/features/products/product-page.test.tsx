@@ -155,8 +155,11 @@ describe('ProductPage', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('পণ্য ও স্টক')).toBeInTheDocument()
 
+    expect(
+      await screen.findByRole('columnheader', { name: 'Product' }),
+    ).toBeInTheDocument()
+
     for (const heading of [
-      'Product',
       'Category',
       'Brand',
       'Unit',
@@ -172,7 +175,7 @@ describe('ProductPage', () => {
       ).toBeInTheDocument()
     }
 
-    expect(await screen.findByText('Cotton Roll')).toBeInTheDocument()
+    expect(screen.getByText('Cotton Roll')).toBeInTheDocument()
     expect(screen.getByText('3 variants')).toBeInTheDocument()
     expect(screen.getByText('৳12.50')).toBeInTheDocument()
     expect(screen.getByText('৳18.75')).toBeInTheDocument()

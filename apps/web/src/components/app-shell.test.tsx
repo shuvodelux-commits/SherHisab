@@ -1,16 +1,25 @@
+import { QueryClientProvider } from '@tanstack/react-query'
+import { RouterProvider } from '@tanstack/react-router'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import { LanguageProvider } from '../app/language'
+import { queryClient } from '../app/query-client'
+import { router } from '../app/router'
 import { ThemeProvider } from '../app/theme'
-import { AppShell } from './app-shell'
 
-function renderShell() {
+function renderApplication() {
   return render(
     <ThemeProvider>
       <LanguageProvider>
-        <AppShell>
-          <div>Dashboard content</div>
-        </AppShell>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
       </LanguageProvider>
     </ThemeProvider>,
   )
@@ -18,6 +27,7 @@ function renderShell() {
 
 describe('responsive application shell', () => {
   beforeEach(() => {
+    queryClient.clear()
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: vi.fn().mockImplementation(() => ({
@@ -33,19 +43,25 @@ describe('responsive application shell', () => {
     })
   })
 
-  it('renders the compact desktop navigation and content', () => {
-    renderShell()
+  it('renders the compact desktop navigation and content', async () => {
+    renderApplication()
+    await router.navigate({ to: '/app' })
 
     expect(
-      screen.getByRole('navigation', { name: 'Primary navigation' }),
+      await screen.findByRole('navigation', { name: 'Primary navigation' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Dashboard content')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Dashboard' }),
+    ).toBeInTheDocument()
   })
 
-  it('opens and closes the mobile navigation drawer', () => {
-    renderShell()
+  it('opens and closes the mobile navigation drawer', async () => {
+    renderApplication()
+    await router.navigate({ to: '/app' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Open navigation' }),
+    )
 
     expect(
       screen.getByRole('dialog', { name: 'Navigation menu' }),

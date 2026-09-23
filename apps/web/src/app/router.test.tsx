@@ -50,9 +50,8 @@ describe('frontend foundation', () => {
   })
 
   it('renders the SherHisab home route', async () => {
-    await router.navigate({ to: '/' })
-
     renderRouter()
+    await router.navigate({ to: '/' })
 
     expect(
       await screen.findByRole('heading', { name: 'SherHisab' }),
@@ -92,9 +91,8 @@ describe('frontend foundation', () => {
       }),
     )
 
-    await router.navigate({ to: '/app/products' })
-
     renderRouter()
+    await router.navigate({ to: '/app/products' })
 
     expect(
       await screen.findByRole('heading', { name: 'Products' }),
