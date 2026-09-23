@@ -1464,14 +1464,39 @@ Do not use color alone to communicate status.
 
 # 35. Loading, Empty, Error States
 
-Every data screen must handle:
+Every data screen must distinguish between:
 
 - loading
-- empty
-- filtered-empty
+- true empty
+- filtered/search empty
+- permission/authorization empty
 - error
 - retry
-- permission denied
+
+Do not render all of these as the same generic message.
+
+## Official shadcn Empty Component
+
+Use the official shadcn `Empty` component for true empty states and no-result states.
+
+Reference: https://ui.shadcn.com/docs/components/base/empty
+
+Use the official composition:
+
+- `Empty`
+- `EmptyHeader`
+- `EmptyMedia`
+- `EmptyTitle`
+- `EmptyDescription`
+- `EmptyContent`
+
+Use `EmptyMedia variant="icon"` for a restrained icon when an icon helps recognition. Use an avatar/image only when the empty state is about a specific person/entity and the media is meaningful.
+
+## Empty-State Types
+
+### First-use / no records yet
+
+Explain what is missing and give the primary next action.
 
 Examples:
 
@@ -1479,13 +1504,89 @@ Examples:
 No products yet.
 Add your first product to start tracking stock.
 
-No results found.
-Try changing the search or filters.
+[+ Add Product]
 ```
 
-Avoid decorative empty-state illustrations unless they clearly improve comprehension.
+```text
+No customers yet.
+Create a customer when you need due tracking or customer history.
 
----
+[+ Add Customer]
+```
+
+### Filtered/search empty
+
+Do not imply the dataset itself is empty.
+
+Example:
+
+```text
+No products match these filters.
+Try changing the search or clearing one or more filters.
+
+[Clear filters]
+```
+
+### Contextual empty
+
+Use specific copy for the current sub-view.
+
+Examples:
+
+```text
+No stock lots available.
+This product has no remaining FIFO lots.
+
+No payment history yet.
+Payments recorded for this customer will appear here.
+```
+
+### Permission/availability empty
+
+Use when the user cannot access or use a feature because of permissions/configuration, and provide the correct next action if one exists.
+
+Do not disguise permission errors as "No data".
+
+## Empty Actions
+
+Use `EmptyContent` for the next useful action:
+
+- primary Button to create/add the first record;
+- outline/secondary Button for import or alternate setup;
+- Clear filters for filtered-empty;
+- Input/InputGroup when search is the recovery path;
+- semantic link for documentation/help when appropriate.
+
+Use the normal SherHisab Button rules inside Empty states, including icons and Spinner behavior when actions become asynchronous.
+
+## Empty-State Visual Rules
+
+- Keep empty states compact and operational; do not create a large decorative hero inside ERP screens.
+- Use at most one simple icon/media element unless the official pattern genuinely benefits from more.
+- Do not add decorative gradients, illustrations, or oversized icons.
+- Do not use a bordered/boxed Empty by default inside an already bordered table/card; avoid nested boxes.
+- Use an outline Empty only when the empty state itself is the primary standalone surface.
+- Keep the title short and specific.
+- Description should explain what happened and, when useful, what to do next.
+- Do not show an action when the user cannot actually perform it.
+- Preserve bilingual rendering through SherHisab language components.
+
+## Loading
+
+Use the official shadcn `Skeleton` for structural loading placeholders and `Spinner` for compact active operations.
+
+Do not show the Empty component while the first request is still loading.
+
+## Error
+
+Errors are not Empty states.
+
+Use the appropriate shared error/Alert pattern with:
+
+- clear failure message;
+- retry when retry is possible;
+- preserve user-entered data where applicable;
+- no false "No data" message for network/server failures.
 
 # 36. Confirmation Rules
 
