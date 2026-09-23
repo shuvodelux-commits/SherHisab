@@ -8,7 +8,7 @@ export function parseTakaToPaisa(input: string): string {
     throw new Error('Money must be a non-negative taka amount with at most two decimal places')
   }
 
-  const [whole, fraction = ''] = value.split('.')
+  const [whole = '0', fraction = ''] = value.split('.')
   const fractionPaisa = fraction.padEnd(2, '0')
   const paisa = BigInt(whole) * 100n + BigInt(fractionPaisa || '0')
 
