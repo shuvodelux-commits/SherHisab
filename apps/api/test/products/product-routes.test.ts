@@ -411,6 +411,59 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
     ).toBe(true)
   })
 
+  it('requires an explicit Variant for stock and lot routes when Variants are enabled', async () => {
+    const fixture = await createAuthenticatedFixture('Required Variant Route Tenant')
+    const unitId = await pieceUnitId(fixture.service)
+    const product = await fixture.service.createProduct(
+      createPayload(unitId, 'Variant Product'),
+      null,
+    )
+
+    await fixture.service.replaceVariantConfiguration(product.id, {
+      enabled: true,
+      options: [{ name: 'Color', values: ['Red'] }],
+      variants: [
+        {
+          displayName: 'Red',
+          sku: 'VARIANT-RED',
+          defaultPurchasePricePaisa: '1000',
+          defaultSellingPricePaisa: '1500',
+          minimumStockBaseQty: '0',
+          selections: { Color: 'Red' },
+        },
+      ],
+    })
+
+    const adjustment = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/stock-adjustments`,
+      {
+        method: 'POST',
+        body: {
+          deltaBaseQty: '1',
+          note: 'Missing Variant',
+          unitCostPaisa: '1000',
+        },
+      },
+    )
+    expect(adjustment.status).toBe(400)
+    expect(await adjustment.json()).toEqual({
+      error: 'Variant is required when Product Variants are enabled.',
+    })
+
+    const lots = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots`,
+    )
+    expect(lots.status).toBe(400)
+    expect(await lots.json()).toEqual({
+      error: 'Variant is required when Product Variants are enabled.',
+    })
+
+    const current = await fixture.service.getProduct(product.id)
+    expect(current.stockBaseQty).toBe('0')
+  })
+
   it('rejects a Variant that belongs to a different Product in stock and lot routes', async () => {
     const fixture = await createAuthenticatedFixture('Variant Route Tenant')
     const unitId = await pieceUnitId(fixture.service)
