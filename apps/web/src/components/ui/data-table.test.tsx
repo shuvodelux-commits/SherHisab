@@ -16,6 +16,9 @@ const columns: ColumnDef<ProductRow>[] = [
   {
     accessorKey: 'stock',
     header: 'Stock',
+    meta: {
+      align: 'right',
+    },
   },
 ]
 
@@ -32,6 +35,13 @@ describe('DataTable', () => {
     expect(screen.getByRole('columnheader', { name: 'Stock' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Sunflower Oil 5L' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: '15' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Stock' }),
+    ).toHaveAttribute('data-align', 'right')
+    expect(screen.getByRole('cell', { name: '15' })).toHaveAttribute(
+      'data-align',
+      'right',
+    )
   })
 
   it('shows an empty-state row when there is no data', () => {

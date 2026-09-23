@@ -175,12 +175,31 @@ describe('ProductPage', () => {
       ).toBeInTheDocument()
     }
 
+    for (const heading of [
+      'Purchase Price',
+      'Selling Price',
+      'Stock',
+      'Min Stock',
+    ]) {
+      expect(
+        screen.getByRole('columnheader', { name: heading }),
+      ).toHaveAttribute('data-align', 'right')
+    }
+
     expect(screen.getByText('Cotton Roll')).toBeInTheDocument()
     expect(screen.getByText('3 variants')).toBeInTheDocument()
     expect(screen.getByText('৳12.50')).toBeInTheDocument()
     expect(screen.getByText('৳18.75')).toBeInTheDocument()
     expect(screen.getByText('2.5')).toBeInTheDocument()
     expect(screen.getByText('0.125')).toBeInTheDocument()
+
+    for (const value of ['৳12.50', '৳18.75', '2.5', '0.125']) {
+      expect(screen.getByRole('cell', { name: value })).toHaveAttribute(
+        'data-align',
+        'right',
+      )
+    }
+
     expect(screen.getByRole('cell', { name: 'Active' })).toBeInTheDocument()
     expect(screen.getByText('Showing 1–50 of 51')).toBeInTheDocument()
 
