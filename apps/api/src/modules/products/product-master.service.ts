@@ -148,7 +148,6 @@ function normalizeVariantConfiguration(
     return { name, key, values }
   })
 
-  const optionsByKey = new Map(options.map((option) => [option.key, option]))
   const variantIds = new Set<string>()
   const combinations = new Set<string>()
 
