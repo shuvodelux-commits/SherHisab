@@ -1691,35 +1691,132 @@ Use Badge + official shadcn `Spinner` only for a live non-action state such as `
 
 For user-triggered actions such as Save/Delete/Complete Sale, use Button + Spinner instead.
 
-# 25. Action Menus
+# 25. Table Row Actions
 
-Rows should not contain many individual action buttons.
+Use the official shadcn Table row-action pattern for SherHisab operational tables.
 
-Use one compact action menu:
+Reference: https://ui.shadcn.com/docs/components/base/table
 
-```text
-Actions ▾
-```
-
-Possible entries:
+The standard row action is:
 
 ```text
-View
-Edit
-Adjust Stock
-View Lots
-Deactivate
-────────────
-Delete
+[⋯] → DropdownMenu
 ```
 
-Danger actions must be visually separated.
+Use one compact icon-only Button with the horizontal-more icon as the trigger, then place row actions inside the official shadcn `DropdownMenu`.
 
-Prefer menus for secondary actions.
+Apply this pattern consistently to:
 
-Keep frequent primary row actions directly visible only when speed justifies it.
+- Products
+- Sales invoices
+- Purchases
+- Customers
+- Suppliers
+- Inventory / stock lots
+- Payments
+- Returns
+- Expenses
+- Accounts / ledger entries
+- Reports with row-level actions
+- Settings lists that have per-row actions
 
----
+## Required Composition
+
+Use:
+
+- `DropdownMenu`
+- `DropdownMenuTrigger`
+- shadcn `Button` as the trigger
+- horizontal-more icon from the configured icon library
+- `DropdownMenuContent`
+- `DropdownMenuGroup`
+- `DropdownMenuItem`
+- `DropdownMenuSeparator` before destructive actions when needed
+
+The trigger is an icon-only Button and therefore must follow the SherHisab Tooltip + accessible-name rule.
+
+Recommended trigger:
+
+```text
+aria-label="Open actions"
+Tooltip: More actions
+```
+
+## Menu Structure
+
+Typical pattern:
+
+```text
+⋯
+├─ View
+├─ Edit
+├─ Duplicate
+├─ Adjust Stock
+├─ View Lots
+├────────────
+├─ Deactivate
+└─ Delete
+```
+
+Only include actions that are valid for that row and current user/context.
+
+## Destructive Actions
+
+- Put destructive actions at the bottom.
+- Separate destructive actions with `DropdownMenuSeparator` when the menu also contains ordinary actions.
+- Use the destructive menu variant/state for Delete/Remove or other genuinely destructive actions.
+- Opening the menu is not confirmation.
+- Actions that require confirmation must still open the appropriate `AlertDialog` / confirmation flow.
+
+## Direct Actions vs Dropdown
+
+For normal SherHisab tables, row-specific actions belong in the `DropdownMenu` even when there are several actions.
+
+Do not place a row full of separate Edit / Delete / Print / View buttons.
+
+A direct action outside the menu is allowed only when it is the table's dominant, extremely frequent workflow and removing the extra click materially improves speed. This must be an intentional exception, not the default.
+
+Examples of possible exceptions:
+
+- selecting a row with Checkbox;
+- expanding a row;
+- opening a primary clickable entity name/invoice number;
+- one high-frequency POS operation where speed is critical.
+
+Even with an exception, keep the `⋯` DropdownMenu for secondary row actions.
+
+## Linkable Identity
+
+When useful, make the primary identity cell clickable:
+
+```text
+INV-00452 → opens invoice details
+Customer name → opens customer profile
+Product name → opens product details
+```
+
+This is separate from the row-action menu.
+
+Do not duplicate the same `View` action as both an obvious clickable identity and another permanently visible button.
+
+## Alignment and Density
+
+- Keep the Actions column narrow.
+- Right-align or center the trigger consistently across tables.
+- Use a compact icon Button size.
+- Do not show the word `Actions` inside every row.
+- Keep the header label `Actions` or use an accessible visually-hidden label when an unlabeled header produces a cleaner table.
+- Preserve sticky action-column behavior when wide tables require horizontal scrolling.
+
+## Data Table Integration
+
+For TanStack/shadcn Data Tables:
+
+- define the Actions column as display-only;
+- do not make it sortable;
+- do not include it in business-data filtering;
+- keep its width stable;
+- use the same shared RowActions component/pattern across modules where possible.
 
 # 26. POS Rules
 
