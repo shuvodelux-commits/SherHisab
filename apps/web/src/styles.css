@@ -1296,3 +1296,122 @@ p {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* STOCK ADJUSTMENT / FIFO LOTS */
+
+.stock-adjust-dialog {
+  width: min(calc(100vw - 24px), 500px);
+}
+
+.product-lots-dialog {
+  width: min(calc(100vw - 24px), 760px);
+}
+
+.stock-dialog-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.stock-current-strip {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.stock-current-strip span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.stock-current-strip strong {
+  justify-self: end;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-current-strip small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.product-lots-variant {
+  max-width: 320px;
+}
+
+.stock-lots-state {
+  min-height: 100px;
+  padding: 28px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.stock-lots-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.stock-lots-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.stock-lots-table th,
+.stock-lots-table td {
+  height: 36px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.stock-lots-table th {
+  height: 34px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.stock-lots-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.stock-number-column {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-lot-id {
+  color: var(--text-secondary);
+  font-family:
+    "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+@media (max-width: 640px) {
+  .stock-current-strip {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .stock-dialog-body {
+    padding: 12px;
+  }
+}
