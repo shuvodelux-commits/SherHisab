@@ -159,7 +159,7 @@ describe('ProductFormDialog', () => {
       ['Selling Price', 'বিক্রির দাম'],
       ['Opening Stock', 'শুরুর স্টক'],
       ['Minimum Stock', 'ন্যূনতম স্টক'],
-    ]
+    ] as const
 
     for (const [english, bangla] of fields) {
       expect(screen.getByText(english)).toBeInTheDocument()
