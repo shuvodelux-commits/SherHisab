@@ -185,7 +185,6 @@ Fields:
 - `base_unit_id UUID NOT NULL`
 - `tracking_mode TEXT NOT NULL DEFAULT 'SIMPLE'`
 - `variants_enabled BOOLEAN NOT NULL DEFAULT FALSE`
-- `minimum_stock_base_qty NUMERIC NOT NULL DEFAULT 0`
 - `is_active BOOLEAN NOT NULL DEFAULT TRUE`
 - timestamps
 
@@ -200,8 +199,8 @@ Serial tracking is intentionally deferred.
 Rules:
 
 - active product names are case-insensitively unique per tenant;
-- `minimum_stock_base_qty >= 0`;
 - category and base unit must belong to the same tenant;
+- base unit cannot be changed after inventory evidence exists unless a future controlled unit-conversion migration explicitly handles the stock history;
 - inactive products cannot be selected for new operational transactions.
 
 ### product_variants
@@ -217,6 +216,7 @@ Fields:
 - `sku TEXT NULL`
 - `default_purchase_price_paisa BIGINT NOT NULL DEFAULT 0`
 - `default_selling_price_paisa BIGINT NOT NULL DEFAULT 0`
+- `minimum_stock_base_qty NUMERIC NOT NULL DEFAULT 0`
 - `is_default BOOLEAN NOT NULL DEFAULT FALSE`
 - `is_active BOOLEAN NOT NULL DEFAULT TRUE`
 - timestamps
@@ -228,7 +228,8 @@ Rules:
 - advanced products may have additional variants;
 - inventory tables reference `variant_id`, never a mixed product/variant scheme;
 - SKU is tenant-unique when present;
-- money values are non-negative integer paisa.
+- money values are non-negative integer paisa;
+- minimum stock is non-negative and belongs to the stock-bearing variant, so advanced variants can have independent reorder thresholds while the simple form transparently edits the default variant.
 
 The default variant carries the default purchase/selling prices so variant-specific pricing can be supported later without schema replacement.
 
@@ -244,7 +245,6 @@ Fields:
 - `unit_id UUID NOT NULL`
 - `conversion_mode TEXT NOT NULL`
 - `conversion_to_base NUMERIC NULL`
-- `is_base BOOLEAN NOT NULL DEFAULT FALSE`
 - `is_active BOOLEAN NOT NULL DEFAULT TRUE`
 - timestamps
 
@@ -255,8 +255,8 @@ Conversion modes:
 
 Rules:
 
-- exactly one active base-unit mapping per product;
-- base mapping uses fixed conversion `1`;
+- `products.base_unit_id` is the single source of truth for which unit is the base unit;
+- the active `product_units` row for that unit uses fixed conversion `1`;
 - fixed alternative units require `conversion_to_base > 0`;
 - variable units leave conversion unset until a transaction/lot captures the actual base quantity;
 - the same unit cannot appear twice as an active mapping on one product.
@@ -283,6 +283,7 @@ Fields:
 - `unit_id UUID NULL`
 - `barcode TEXT NOT NULL`
 - `is_primary BOOLEAN NOT NULL DEFAULT FALSE`
+- `is_active BOOLEAN NOT NULL DEFAULT TRUE`
 - timestamps
 
 Rules:
@@ -440,11 +441,13 @@ This becomes the foundation for exact return/restoration evidence later.
 
 SherHisab will not store authoritative current stock directly on `products`.
 
-For Phase 2, current stock is derived per variant from inventory lot/movement evidence.
+Quantity authority is the immutable inventory movement ledger: current stock per variant is the sum of `inventory_movements.base_qty_delta`.
+
+Inventory lots are the FIFO cost layers and their remaining quantities must reconcile with the movement-derived stock balance. Tests must assert this invariant after opening stock and adjustments.
 
 The API may use an aggregate SQL query/view for Product list performance.
 
-If future scale requires a materialized/projection balance table, it must remain a transactionally maintained projection, not the sole historical truth.
+If future scale requires a materialized/projection balance table, it must remain a transactionally maintained projection that can be rebuilt from inventory evidence, not the sole historical truth.
 
 ## Product Creation Transaction
 
@@ -726,16 +729,11 @@ Variants:
 
 ## Permissions
 
-Initially follow the existing SherERP product permission concept while fitting SherHisab authorization architecture.
+Authenticated tenant isolation is mandatory in this slice.
 
-Product master actions should distinguish at least:
+The existing SherERP permission concepts — view, create, edit/configure, and stock adjustment — are the compatibility target for the future SherHisab RBAC layer.
 
-- view;
-- create;
-- edit/configure;
-- stock adjustment.
-
-Do not allow client UI visibility to substitute for server authorization.
+If granular RBAC is not yet implemented in the current foundation, this slice must not invent a parallel authorization system. Keep route/service boundaries ready for those checks and never rely on hidden client controls as authorization.
 
 ## Validation and Error Handling
 
@@ -755,7 +753,9 @@ Required checks include:
 - duplicate active product/category/unit names rejected;
 - duplicate SKU/barcode rejected within tenant;
 - default variant invariant;
+- variant disabling cannot orphan stock/history;
 - base unit invariant;
+- base unit changes blocked once inventory history exists;
 - cross-tenant references rejected.
 
 Routes return predictable 4xx responses for validation/not-found/conflict conditions rather than raw PostgreSQL errors.
@@ -768,6 +768,8 @@ At minimum:
 
 - Create Product with opening stock;
 - Advanced Product configuration replacement/update;
+- enabling variants preserves the default variant and existing stock;
+- disabling/removing non-default variants is blocked when they have stock/history;
 - Adjust Stock;
 - later Purchase;
 - later Sales;
