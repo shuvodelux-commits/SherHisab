@@ -1835,20 +1835,158 @@ Keep all toolbar controls around the same height.
 
 # 23. Pagination
 
-Use consistent pagination across all lists.
+Use the official shadcn `Pagination` component for paginated SherHisab lists, tables, and reports.
 
-Preferred:
+Reference: https://ui.shadcn.com/docs/components/base/pagination
+
+Use the official composition:
+
+- `Pagination`
+- `PaginationContent`
+- `PaginationItem`
+- `PaginationPrevious`
+- `PaginationLink`
+- `PaginationEllipsis`
+- `PaginationNext`
+
+The active page must use the official active state.
+
+## Default ERP Pattern
+
+For normal operational lists, prefer:
 
 ```text
 Showing 1–50 of 1,248
-Rows per page [50 ▾]   Previous   1 2 3 ... 25   Next
+
+Rows per page [50 ▾]      Previous   1  2  3  …  25   Next
 ```
 
-For large datasets, use server-side pagination.
+Use the official shadcn `Select` for the rows-per-page control. Never use `NativeSelect`.
 
-Do not load thousands of rows into the browser only to paginate client-side.
+Good places:
 
----
+- Products
+- Sales invoices
+- Purchases
+- Customers
+- Suppliers
+- Inventory
+- Payments
+- Returns
+- Expenses
+- Ledgers
+- Reports
+- Settings lists
+
+## Numbered vs Compact Pagination
+
+Use numbered Pagination when:
+
+- users benefit from seeing their position in a multi-page dataset;
+- they may jump to nearby pages;
+- the list is a normal desktop/tablet operational screen.
+
+Use the official previous/next-only or icon-focused pattern when:
+
+- the table is very dense;
+- the page count is not useful;
+- there is already a rows-per-page selector;
+- the layout is narrow/mobile;
+- simpler previous/next navigation is clearer.
+
+Do not remove useful page context merely to save a few pixels.
+
+## Ellipsis
+
+Use `PaginationEllipsis` for long page ranges.
+
+Example:
+
+```text
+Previous  1  2  3  …  25  Next
+```
+
+Do not render every page number for large datasets.
+
+## Data Table Integration
+
+Pagination must integrate with the SherHisab shadcn/TanStack Data Table standard.
+
+For large ERP datasets:
+
+- use server-side pagination;
+- send current page/page size to the API;
+- preserve sorting and filtering when the page changes;
+- reset to a valid page when filters reduce the result count;
+- return total row count / page metadata from the server;
+- do not fetch thousands of rows merely to paginate them in the browser.
+
+For small local datasets, client-side pagination is acceptable when it is genuinely simpler and does not harm performance.
+
+## URL / Navigation State
+
+When a list benefits from deep links or browser back/forward behavior, synchronize pagination with TanStack Router search params, for example:
+
+```text
+?page=3&pageSize=50
+```
+
+Use the project's router/link integration rather than full-page browser navigation.
+
+Do not lose the user's current:
+
+- filters;
+- search query;
+- sorting;
+- page size
+
+when they navigate between pages.
+
+## Rows Per Page
+
+Use shadcn `Select` for page size.
+
+Recommended options should remain intentionally small and practical, for example:
+
+```text
+25
+50
+100
+```
+
+Do not offer huge page sizes that defeat pagination.
+
+Changing page size should return the user to a valid page while preserving the active search/filter/sort state.
+
+## Disabled / Boundary States
+
+- Disable Previous on the first page.
+- Disable Next on the final page.
+- Do not allow navigation to invalid page numbers.
+- If the current page becomes invalid after deletion/filtering, move to the nearest valid page.
+- Preserve accessible labels such as `Go to previous page` / `Go to next page`.
+
+## Responsive Rules
+
+Desktop:
+- show row count, rows-per-page, and numbered pagination when useful.
+
+Tablet:
+- keep numbered pagination when space allows; collapse distant pages with ellipsis.
+
+Mobile/narrow:
+- prefer compact Previous/Next or icon-focused pagination;
+- keep current-page context visible when useful;
+- move rows-per-page separately if combining everything becomes cramped.
+
+## Loading Behavior
+
+When pagination triggers a remote request:
+
+- keep the existing table structure stable where possible;
+- show the appropriate loading/pending state without replacing the whole page with an Empty state;
+- prevent duplicate rapid page requests when needed;
+- do not reset unrelated UI state.
 
 # 24. Badges and Status Badges
 
