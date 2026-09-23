@@ -1,5 +1,4 @@
 import {
-  useMemo,
   useState,
   type FormEvent,
 } from 'react'
@@ -190,24 +189,16 @@ export function ProductFormDialog({
     enabled: open,
   })
 
-  const categoryOptions = useMemo(
-    () =>
-      masterOptions(
-        categoriesQuery.data ??
-          (product?.category ? [product.category] : []),
-        form.categoryId,
-      ),
-    [categoriesQuery.data, form.categoryId, product?.category],
+  const categoryOptions = masterOptions(
+    categoriesQuery.data ??
+      (product?.category ? [product.category] : []),
+    form.categoryId,
   )
 
-  const unitOptions = useMemo(
-    () =>
-      masterOptions(
-        unitsQuery.data ??
-          (product?.baseUnit ? [product.baseUnit] : []),
-        form.baseUnitId,
-      ),
-    [unitsQuery.data, form.baseUnitId, product?.baseUnit],
+  const unitOptions = masterOptions(
+    unitsQuery.data ??
+      (product?.baseUnit ? [product.baseUnit] : []),
+    form.baseUnitId,
   )
 
   const saveMutation = useMutation({
