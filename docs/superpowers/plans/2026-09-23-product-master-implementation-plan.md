@@ -23,6 +23,7 @@
 - FIFO ordering uses business date first and stable UUID/ID as deterministic tiebreak, never row-write time.
 - Product Edit never silently changes stock. Stock changes use a dedicated Adjust Stock flow.
 - Opening stock and positive manual adjustments require positive cost.
+- Product creation/opening stock is inventory setup and must not require a POS cash session.
 - Base unit changes are blocked after inventory evidence exists.
 - Category/Unit/Product/Variant history survives archival/inactivation.
 - Normal users do not see advanced variants, conversions, lots, batch policy, or specifications unless they enable/open advanced controls.
@@ -33,6 +34,7 @@
 - Use Radix/shadcn-style Dialog and Dropdown Menu primitives rather than ad-hoc inaccessible modals/menus.
 - Cloudflare database work must continue through `withRequestDatabase()`; never restore a module-global PostgreSQL Pool in Workers.
 - Do not modify `legacy/`.
+- Do not invent a parallel RBAC system in this slice. Authenticated tenant isolation is enforced now; keep service/route boundaries ready for future view/create/edit/stock-adjust permissions.
 - TDD/RED first for behavior changes.
 - Do not push or merge shared branches until verification passes and the user explicitly approves that action.
 
@@ -89,6 +91,7 @@
 - Create `apps/web/src/components/ui/badge.tsx`.
 - Create `apps/web/src/components/ui/bilingual-label.tsx`.
 - Create `apps/web/src/app/language.tsx`.
+- Create `apps/web/src/app/theme.tsx`.
 - Create `apps/web/src/lib/money.ts`.
 - Create `apps/web/src/lib/api-client.ts`.
 - Modify `apps/web/src/main.tsx`.
@@ -100,11 +103,13 @@
 - Create `apps/web/src/features/products/product-api.ts`.
 - Create `apps/web/src/features/products/product-columns.tsx`.
 - Create `apps/web/src/features/products/product-form-dialog.tsx`.
+- Create `apps/web/src/features/products/product-master-manage-dialog.tsx`.
 - Create `apps/web/src/features/products/product-advanced-fields.tsx`.
 - Create `apps/web/src/features/products/stock-adjust-dialog.tsx`.
 - Create `apps/web/src/features/products/product-page.tsx`.
 - Create `apps/web/src/features/products/product-page.test.tsx`.
 - Create `apps/web/src/features/products/product-form-dialog.test.tsx`.
+- Create `apps/web/src/features/products/product-master-manage-dialog.test.tsx`.
 - Create `apps/web/src/features/products/stock-adjust-dialog.test.tsx`.
 - Create `apps/web/src/components/ui/bilingual-label.test.tsx`.
 - Create `apps/web/src/lib/money.test.ts`.
@@ -840,7 +845,7 @@ pnpm --filter @sherhisab/api test -- test/products/product-masters.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add apps/api/package.json pnpm-lock.yaml apps/api/src/modules/products apps/api/test/products/product-masters.test.ts apps/api/test/products/product-test-helpers.ts
@@ -910,7 +915,7 @@ export interface ProductDetail extends ProductListItem {
 Cover these exact behaviors:
 
 - simple create creates Product + one default Variant + one base `product_units` row;
-- opening stock `2.5` creates one OPENING lot, movement, and allocation;
+- opening stock `2.5` creates one OPENING lot, movement, and allocation without any cash-session dependency;
 - opening stock greater than zero with zero purchase cost rejects before any Product row persists;
 - invalid category/unit from another tenant rejects;
 - duplicate active product name rejects case-insensitively;
@@ -1404,6 +1409,7 @@ git commit -m "feat: expose product master api"
 - Create: `apps/web/src/components/ui/bilingual-label.tsx`
 - Create: `apps/web/src/components/ui/bilingual-label.test.tsx`
 - Create: `apps/web/src/app/language.tsx`
+- Create: `apps/web/src/app/theme.tsx`
 - Create: `apps/web/src/lib/money.ts`
 - Create: `apps/web/src/lib/money.test.ts`
 - Create: `apps/web/src/lib/api-client.ts`
@@ -1414,8 +1420,10 @@ git commit -m "feat: expose product master api"
 **Interfaces:**
 - Produces:
   - shadcn-style shared primitives;
+  - packaged Inter + Noto Sans Bengali fonts;
   - `LanguageMode = 'en-bn' | 'en' | 'bn'`;
   - `useLanguageMode()`;
+  - `ThemeMode = 'light' | 'dark' | 'system'` and `useThemeMode()`;
   - `BilingualLabel`;
   - `parseTakaToPaisa(input): string`;
   - `formatPaisaToTaka(paisa): string`;
@@ -1427,7 +1435,7 @@ git commit -m "feat: expose product master api"
 pnpm --filter @sherhisab/web add @radix-ui/react-dialog @radix-ui/react-dropdown-menu lucide-react
 ```
 
-This adds accessible Dialog/Dropdown primitives and icons without adding a second CSS framework.
+This adds accessible Dialog/Dropdown primitives, icons, and locally bundled Inter/Noto Sans Bengali font packages without adding a second CSS framework.
 
 - [ ] **Step 2: Write RED money tests**
 
@@ -1458,14 +1466,15 @@ describe('money helpers', () => {
 })
 ```
 
-- [ ] **Step 3: Write RED language-label tests**
+- [ ] **Step 3: Write RED language/theme tests**
 
 Assert:
 
 - default `en-bn` renders English and Bangla helper;
 - `en` renders English only;
 - `bn` renders Bangla only;
-- user-entered data is not passed through translation helpers.
+- user-entered data is not passed through translation helpers;
+- theme defaults to `system`, persists a user override, and applies `data-theme="light"` or `data-theme="dark"` on the document root.
 
 - [ ] **Step 4: Run focused tests and verify RED**
 
@@ -1481,20 +1490,28 @@ Parse trimmed strings with `/^\d+(?:\.\d{1,2})?$/`, split whole/fraction, right-
 
 Formatting divides a non-negative BigInt paisa string into whole/fraction strings; never convert to `number`.
 
-- [ ] **Step 6: Implement language provider**
+- [ ] **Step 6: Implement language and theme providers**
 
 `LanguageProvider`:
 
 - default `en-bn`;
 - reads/writes `localStorage['sherhisab-language-mode']`;
-- exposes `mode` and `setMode`;
-- wraps the existing app in `main.tsx`.
+- exposes `mode` and `setMode`.
 
-Add one compact language `select` in `Topbar` with options:
+`ThemeProvider`:
 
-- English + বাংলা
-- English
-- বাংলা
+- default `system`;
+- reads/writes `localStorage['sherhisab-theme-mode']`;
+- resolves system preference with `matchMedia('(prefers-color-scheme: dark)')`;
+- writes the resolved theme to `document.documentElement.dataset.theme`;
+- exposes `mode` and `setMode`.
+
+Wrap the existing app with both providers in `main.tsx`.
+
+Add compact Topbar controls for language and theme with options:
+
+- Language: English + বাংলা / English / বাংলা
+- Theme: System / Light / Dark
 
 - [ ] **Step 7: Implement shared UI primitives**
 
@@ -1534,7 +1551,9 @@ export async function apiRequest<T>(
 
 - [ ] **Step 9: Add compact shared CSS tokens/classes**
 
-Refactor only enough existing CSS to introduce reusable variables for background/surface/border/text/muted/blue/status colors and styles for Dialog/Dropdown/Button/Input/Badge/BilingualLabel.
+Import the packaged Inter and Noto Sans Bengali font CSS in `main.tsx` and set the documented font stacks.
+
+Refactor existing CSS to reusable variables for background/surface/border/text/muted/blue/status colors. Define both `:root` light values and `[data-theme='dark']` values using the same hierarchy/density; no neon/glowing dark theme. Add styles for Dialog/Dropdown/Button/Input/Badge/BilingualLabel.
 
 Preserve current shell behavior.
 
@@ -1614,6 +1633,7 @@ Mock `fetch` and assert:
 - money renders from paisa without floating point;
 - stock quantity preserves useful decimals and removes trailing zeros via existing `formatNumber`;
 - inactive status displays compact badge;
+- row action can deactivate an active Product and reactivate an inactive Product, refreshing the table;
 - empty result shows `No products yet`;
 - failed request shows retry/error state.
 
@@ -1707,13 +1727,15 @@ git commit -m "feat: add compact products page"
 **Files:**
 - Create: `apps/web/src/features/products/product-form-dialog.tsx`
 - Create: `apps/web/src/features/products/product-advanced-fields.tsx`
+- Create: `apps/web/src/features/products/product-master-manage-dialog.tsx`
 - Create: `apps/web/src/features/products/product-form-dialog.test.tsx`
+- Create: `apps/web/src/features/products/product-master-manage-dialog.test.tsx`
 - Modify: `apps/web/src/features/products/product-page.tsx`
 - Modify: `apps/web/src/features/products/product-api.ts`
 - Modify: `apps/web/src/styles.css`
 
 **Interfaces:**
-- Produces compact Add/Edit Product flow and optional advanced controls.
+- Produces compact Add/Edit Product flow, optional advanced controls, and Product Settings management for Categories/Units.
 
 - [ ] **Step 1: Write Product form RED tests**
 
@@ -1744,15 +1766,29 @@ Also assert:
 - Full English hides Bangla helper;
 - Full Bangla hides English label.
 
-- [ ] **Step 2: Run form tests and verify RED**
+- [ ] **Step 2: Write Product master-management RED tests**
+
+Assert the Products toolbar can open a compact `Product Settings` dialog where the user can:
+
+- list active and inactive Categories;
+- add a Category;
+- archive/reactivate a Category;
+- recreate an archived Category name as a new active record;
+- list active and inactive Units;
+- add a Unit with optional symbol;
+- archive/reactivate a Unit;
+- recreate an archived Unit name;
+- see server conflict/errors without losing the dialog state.
+
+- [ ] **Step 3: Run form/master-management tests and verify RED**
 
 ```bash
-pnpm --filter @sherhisab/web test -- src/features/products/product-form-dialog.test.tsx
+pnpm --filter @sherhisab/web test -- src/features/products/product-form-dialog.test.tsx src/features/products/product-master-manage-dialog.test.tsx
 ```
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement default Create/Edit form**
+- [ ] **Step 4: Implement default Create/Edit form**
 
 Use two-column desktop grid and one-column mobile grid.
 
@@ -1775,13 +1811,17 @@ Create payload uses string values:
 
 Edit payload omits opening stock entirely.
 
-- [ ] **Step 4: Implement quick-create masters**
+- [ ] **Step 5: Implement quick-create masters**
 
 Inside Category/Unit selectors, expose a compact `+ Add category` / `+ Add unit` action.
 
 Each opens a focused nested Dialog, calls the master endpoint, refreshes the options, selects the created ID, then returns focus to the parent field.
 
-- [ ] **Step 5: Implement progressive Advanced section**
+- [ ] **Step 6: Implement Product Settings master-management dialog**
+
+Add a compact toolbar action `Product Settings` that opens two tabs/sections: Categories and Units. Use the same master APIs as quick-create. Archive/reactivate actions use compact row menus; do not delete historical masters.
+
+- [ ] **Step 7: Implement progressive Advanced section**
 
 Collapsed `<details>` or equivalent compact control with:
 
@@ -1798,11 +1838,11 @@ Do not show lot/batch transaction-entry fields here; this is policy/configuratio
 
 For Create and the main Edit Save action, include the advanced configuration in the same Product request so core fields and advanced configuration are atomic together. Keep the dedicated advanced endpoints for focused future/in-place editors, but this dialog must not leave a half-created advanced Product when an advanced validation fails.
 
-- [ ] **Step 6: Implement variant-history-safe UI behavior**
+- [ ] **Step 8: Implement variant-history-safe UI behavior**
 
 When API returns an existing Variant as locked by history, disable changing its option combination/removal while still allowing price/min-stock edits. Show a concise helper message rather than hiding the Variant.
 
-- [ ] **Step 7: Run form tests and verify GREEN**
+- [ ] **Step 9: Run form/master-management tests and verify GREEN**
 
 ```bash
 pnpm --filter @sherhisab/web test -- src/features/products/product-form-dialog.test.tsx
@@ -1810,7 +1850,7 @@ pnpm --filter @sherhisab/web test -- src/features/products/product-form-dialog.t
 
 Expected: PASS.
 
-- [ ] **Step 8: Run Product page + form tests**
+- [ ] **Step 10: Run Product page + form tests**
 
 ```bash
 pnpm --filter @sherhisab/web test -- src/features/products
@@ -2015,8 +2055,10 @@ With local PostgreSQL/API/Web running:
 6. create Fabric Product with variable Roll unit;
 7. create a new Color/Size Product and confirm non-zero generic Opening Stock is blocked when Variants are enabled;
 8. add stock to two individual Variants and confirm the Product table shows their total plus Variant count;
-9. switch UI language between English + Bangla, English, and Bangla;
-10. verify narrow viewport keeps Product form/table/pagination usable.
+9. manage/archive/recreate one Category and one Unit from Product Settings;
+10. switch UI language between English + Bangla, English, and Bangla;
+11. switch Light/Dark/System theme and verify the same compact hierarchy;
+12. verify narrow viewport keeps Product form/table/pagination usable.
 
 - [ ] **Step 11: Request final code review**
 
@@ -2071,3 +2113,5 @@ At execution time, read both:
 Do not restore the old Apps Script limitation of plain-text Category/Unit references or mutable Product current-stock truth.
 
 Do not introduce Purchase/Sales/Returns/accounting transaction modules in this plan. Their future implementation consumes the Product/Variant/Unit/Lot/Movement contracts created here.
+
+SherERP's internal zero-cost lot-cost-correction screen is not reproduced in this slice because this new schema refuses positive OPENING/ADJUSTMENT lots with zero cost, so the bad state it repairs cannot be created by Product Master. Future legacy/import migration tooling must explicitly handle any imported zero-cost historical lots and add an audited correction flow if such data is admitted.
