@@ -3,11 +3,30 @@ import { useThemeMode } from '../app/theme'
 
 interface TopbarProps {
   onOpenMenu: () => void
+  pathname?: string
 }
 
-export function Topbar({ onOpenMenu }: TopbarProps) {
+function pageMeta(pathname: string) {
+  if (pathname.startsWith('/app/products')) {
+    return {
+      en: 'Products',
+      bn: 'পণ্য ও স্টক',
+    }
+  }
+
+  return {
+    en: 'Dashboard',
+    bn: 'আজকের অবস্থা',
+  }
+}
+
+export function Topbar({
+  onOpenMenu,
+  pathname = '/app',
+}: TopbarProps) {
   const { mode: languageMode, setMode: setLanguageMode } = useLanguageMode()
   const { mode: themeMode, setMode: setThemeMode } = useThemeMode()
+  const meta = pageMeta(pathname)
 
   return (
     <header className="topbar">
@@ -21,8 +40,12 @@ export function Topbar({ onOpenMenu }: TopbarProps) {
       </button>
 
       <div className="topbar-title">
-        <strong>Dashboard</strong>
-        <span>Foundation workspace</span>
+        <strong lang={languageMode === 'bn' ? 'bn' : undefined}>
+          {languageMode === 'bn' ? meta.bn : meta.en}
+        </strong>
+        {languageMode === 'en-bn' ? (
+          <span lang="bn">{meta.bn}</span>
+        ) : null}
       </div>
 
       <div className="topbar-actions">

@@ -728,3 +728,187 @@ p {
     border-right: 0;
   }
 }
+
+
+/* PRODUCTS */
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.products-page {
+  width: 100%;
+  max-width: none;
+  padding: 16px 18px 20px;
+}
+
+.products-page-header {
+  margin-bottom: 12px;
+}
+
+.products-page-header h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.products-page-header p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-family: "Noto Sans Bengali", sans-serif;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.products-toolbar {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1.5fr)
+    minmax(130px, 0.8fr)
+    minmax(120px, 0.7fr)
+    minmax(110px, 0.6fr)
+    auto
+    auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.product-filter-select {
+  width: 100%;
+  min-height: 34px;
+  padding: 5px 28px 5px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.products-table .data-table {
+  min-width: 1040px;
+}
+
+.product-name-cell {
+  display: flex;
+  min-width: 170px;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.product-name-cell strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.product-variant-meta {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.product-money,
+.product-quantity {
+  display: block;
+  min-width: 72px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.product-actions-trigger {
+  width: 28px;
+  min-width: 28px;
+  padding-inline: 0;
+}
+
+.products-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.products-pagination-spacer {
+  flex: 1;
+}
+
+.products-state {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.products-state-inner {
+  max-width: 420px;
+}
+
+.products-state strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.products-state p {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.products-loading {
+  padding: 28px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 1000px) {
+  .products-toolbar {
+    grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(110px, 0.6fr));
+  }
+
+  .products-toolbar .products-toolbar-secondary,
+  .products-toolbar .products-toolbar-primary {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 700px) {
+  .products-page {
+    padding: 12px;
+  }
+
+  .products-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .products-toolbar-search {
+    grid-column: 1 / -1;
+  }
+
+  .products-toolbar .products-toolbar-primary {
+    justify-self: stretch;
+  }
+
+  .products-toolbar .products-toolbar-primary .ui-button {
+    width: 100%;
+  }
+
+  .products-pagination {
+    flex-wrap: wrap;
+  }
+}

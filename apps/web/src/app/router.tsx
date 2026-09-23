@@ -5,6 +5,7 @@ import {
   Link,
   Outlet,
 } from '@tanstack/react-router'
+import { ProductPage } from '../features/products/product-page'
 import { AuthenticatedLayout } from '../routes/_authenticated'
 import { DashboardPage } from '../routes/_authenticated/index'
 
@@ -48,9 +49,18 @@ const dashboardRoute = createRoute({
   component: DashboardPage,
 })
 
+const productsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/products',
+  component: ProductPage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  authenticatedRoute.addChildren([dashboardRoute]),
+  authenticatedRoute.addChildren([
+    dashboardRoute,
+    productsRoute,
+  ]),
 ])
 
 export const router = createRouter({
