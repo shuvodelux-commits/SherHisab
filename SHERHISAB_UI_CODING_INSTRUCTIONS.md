@@ -1431,7 +1431,11 @@ Do not use Select automatically for every choice.
 
 ## Rules
 
-- Do not use browser-default `<select>` for SherHisab application UI.
+- **Do not use shadcn `NativeSelect` anywhere in SherHisab.**
+- **Do not use browser-default `<select>` anywhere in SherHisab application UI.**
+- If search is unnecessary, use the official shadcn `Select`.
+- If search/filtering is needed, use the official shadcn `Combobox`.
+
 - Do not use a Combobox for a tiny fixed list when search adds no value.
 - Do not use Select for a long entity list that forces users to scroll excessively.
 - Keep Select height, radius, border, focus ring, and typography aligned with adjacent Input/Button/Combobox controls.
@@ -1475,7 +1479,7 @@ Rules:
 - Do not use multi-select where the domain only permits one value.
 - Keep normal desktop combobox height aligned with adjacent Input/Button controls.
 - For very large remote datasets, use server-backed search/debouncing rather than downloading the entire dataset into the combobox.
-- For small static non-searchable option sets, use the official shadcn `Select` instead of a browser-default select.
+- For small static non-searchable option sets, use the official shadcn `Select`.
 
 # 19. Forms
 
