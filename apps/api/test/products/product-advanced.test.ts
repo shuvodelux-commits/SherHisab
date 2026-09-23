@@ -484,6 +484,127 @@ describe.skipIf(!hasDatabase)('advanced product configuration', () => {
     )
   })
 
+  it('rejects disabling a Variant when inventory history is created concurrently', async () => {
+    const { tenant, service, product } = await createSimpleProduct(
+      'Concurrent Variant History Tenant',
+      'Concurrent Garment',
+    )
+
+    await service.replaceVariantConfiguration(product.id, {
+      enabled: true,
+      options: [{ name: 'Color', values: ['Red'] }],
+      variants: [
+        {
+          displayName: 'Red',
+          sku: 'CONCURRENT-RED',
+          defaultPurchasePricePaisa: '1000',
+          defaultSellingPricePaisa: '1500',
+          minimumStockBaseQty: '0',
+          selections: { Color: 'Red' },
+        },
+      ],
+    })
+
+    const advanced = await service.getAdvancedConfiguration(product.id)
+    const variantId = advanced.variants.find((variant) => variant.isActive)?.id
+
+    if (!variantId) {
+      throw new Error('Expected active Variant')
+    }
+
+    const blocker = await getPool().connect()
+    const adjustmentClient = await getPool().connect()
+    const configurationClient = await getPool().connect()
+
+    async function waitForLockWait(pid: number): Promise<void> {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const state = await getPool().query<{ wait_event_type: string | null }>(
+          `SELECT wait_event_type
+           FROM pg_stat_activity
+           WHERE pid = $1`,
+          [pid],
+        )
+
+        if (state.rows[0]?.wait_event_type === 'Lock') {
+          return
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+
+      throw new Error(`Backend ${pid} did not enter a lock wait`)
+    }
+
+    try {
+      await blocker.query('BEGIN')
+      await blocker.query(
+        `SELECT id
+         FROM product_variants
+         WHERE tenant_id = $1 AND id = $2
+         FOR UPDATE`,
+        [tenant.id, variantId],
+      )
+
+      const adjustmentPid = (
+        await adjustmentClient.query<{ pid: number }>(
+          'SELECT pg_backend_pid() AS pid',
+        )
+      ).rows[0]!.pid
+      const configurationPid = (
+        await configurationClient.query<{ pid: number }>(
+          'SELECT pg_backend_pid() AS pid',
+        )
+      ).rows[0]!.pid
+
+      const inventory = new InventoryService(adjustmentClient)
+      const configurationService = new ProductMasterService(
+        tenant.id,
+        configurationClient,
+      )
+
+      const adjustmentPromise = inventory.adjustStock(
+        tenant.id,
+        null,
+        variantId,
+        {
+          deltaBaseQty: '1',
+          note: 'Concurrent Variant stock',
+          unitCostPaisa: '1000',
+        },
+      )
+      await waitForLockWait(adjustmentPid)
+
+      const disablePromise = configurationService.replaceVariantConfiguration(
+        product.id,
+        {
+          enabled: false,
+          options: [],
+          variants: [],
+        },
+      )
+      await waitForLockWait(configurationPid)
+
+      await blocker.query('COMMIT')
+      await adjustmentPromise
+
+      await expect(disablePromise).rejects.toThrow(/history|stock/i)
+
+      const current = await service.getProduct(product.id)
+      const currentAdvanced = await service.getAdvancedConfiguration(product.id)
+      expect(current.variantsEnabled).toBe(true)
+      expect(
+        currentAdvanced.variants.find((variant) => variant.id === variantId)
+          ?.isActive,
+      ).toBe(true)
+      expect(current.stockBaseQty).toBe('1')
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => undefined)
+      blocker.release()
+      adjustmentClient.release()
+      configurationClient.release()
+    }
+  })
+
   it('rejects disabling or changing the option combination of a Variant with inventory history', async () => {
     const { tenant, service, product } = await createSimpleProduct(
       'History Variant Tenant',
