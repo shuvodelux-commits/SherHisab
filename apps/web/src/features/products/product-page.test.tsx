@@ -181,7 +181,7 @@ describe('ProductPage', () => {
     expect(screen.getByText('৳18.75')).toBeInTheDocument()
     expect(screen.getByText('2.5')).toBeInTheDocument()
     expect(screen.getByText('0.125')).toBeInTheDocument()
-    expect(screen.getByText('Active')).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Active' })).toBeInTheDocument()
     expect(screen.getByText('Showing 1–50 of 51')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Search products'), {
