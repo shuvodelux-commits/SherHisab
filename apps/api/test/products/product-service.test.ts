@@ -1,5 +1,6 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { closePool, getPool } from '../../src/db/pool'
+import { InventoryService } from '../../src/modules/products/inventory.service'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
 import type {
   CreateProductInput,
@@ -437,6 +438,95 @@ describe.skipIf(!hasDatabase)('product master lifecycle', () => {
         }),
       ),
     ).rejects.toThrow('Base unit cannot be changed after inventory history exists')
+  })
+
+  it('rejects a base-unit change when inventory history is created concurrently', async () => {
+    const tenant = await createProductTestTenant('Concurrent Base Unit Tenant')
+    const service = new ProductMasterService(tenant.id, getPool())
+    const baseUnitId = await pieceUnitId(service)
+    const meter = await service.createUnit({ name: 'Meter', symbol: 'm' })
+    const product = await service.createProduct(
+      productInput('Concurrent Cable', baseUnitId),
+      null,
+    )
+    const blocker = await getPool().connect()
+    const adjustmentClient = await getPool().connect()
+    const updateClient = await getPool().connect()
+
+    async function waitForLockWait(pid: number): Promise<void> {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const state = await getPool().query<{ wait_event_type: string | null }>(
+          `SELECT wait_event_type
+           FROM pg_stat_activity
+           WHERE pid = $1`,
+          [pid],
+        )
+
+        if (state.rows[0]?.wait_event_type === 'Lock') {
+          return
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+
+      throw new Error(`Backend ${pid} did not enter a lock wait`)
+    }
+
+    try {
+      await blocker.query('BEGIN')
+      await blocker.query(
+        `SELECT id
+         FROM product_variants
+         WHERE tenant_id = $1 AND id = $2
+         FOR UPDATE`,
+        [tenant.id, product.defaultVariantId],
+      )
+
+      const adjustmentPid = Number(
+        (await adjustmentClient.query<{ pid: number }>('SELECT pg_backend_pid() AS pid'))
+          .rows[0]!.pid,
+      )
+      const updatePid = Number(
+        (await updateClient.query<{ pid: number }>('SELECT pg_backend_pid() AS pid'))
+          .rows[0]!.pid,
+      )
+      const inventory = new InventoryService(adjustmentClient)
+      const updatingService = new ProductMasterService(tenant.id, updateClient)
+
+      const adjustmentPromise = inventory.adjustStock(
+        tenant.id,
+        null,
+        product.defaultVariantId,
+        {
+          deltaBaseQty: '1',
+          note: 'Concurrent stock arrives',
+          unitCostPaisa: '1000',
+        },
+      )
+      await waitForLockWait(adjustmentPid)
+
+      const updatePromise = updatingService.updateProduct(
+        product.id,
+        updateInput(product, { baseUnitId: meter.id }),
+      )
+      await waitForLockWait(updatePid)
+
+      await blocker.query('COMMIT')
+      await adjustmentPromise
+
+      await expect(updatePromise).rejects.toThrow(
+        'Base unit cannot be changed after inventory history exists',
+      )
+
+      const current = await service.getProduct(product.id)
+      expect(current.baseUnit.id).toBe(baseUnitId)
+      expect(current.stockBaseQty).toBe('1')
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => undefined)
+      blocker.release()
+      adjustmentClient.release()
+      updateClient.release()
+    }
   })
 
   it('rolls back Product, Variant and Unit mapping when a duplicate barcode fails', async () => {
