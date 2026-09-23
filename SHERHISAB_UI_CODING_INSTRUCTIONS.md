@@ -2432,6 +2432,219 @@ As a practical rule, Popover is best for a **small, tightly related field set**,
 - On very narrow/mobile POS layouts, ensure the Popover remains usable; if the field set becomes cramped, use the established Sheet/Drawer pattern for that breakpoint.
 - Do not allow the floating surface to cover the line total or critical payment controls unnecessarily.
 
+# 25B. Compact Attachments and Product Photo Preview
+
+Use the official shadcn `Attachment` component for SherHisab file and image attachments.
+
+Reference: https://ui.shadcn.com/docs/components/base/attachment
+
+This is the standard attachment UI for premium attachment features such as:
+
+- Purchase receipt / challan image or PDF
+- Customer photo
+- Bank statement PDF
+- Product photo
+- Supplier document
+- Warranty / supporting document
+- Other transaction evidence where the module explicitly supports attachments
+
+Keep attachment UI **compact and operational**. Do not turn ordinary ERP forms into large drag-and-drop cards after a file has been selected or uploaded.
+
+## Official Composition
+
+Use the official primitives:
+
+- `Attachment`
+- `AttachmentMedia`
+- `AttachmentContent`
+- `AttachmentTitle`
+- `AttachmentDescription`
+- `AttachmentActions`
+- `AttachmentAction`
+- `AttachmentTrigger`
+- `AttachmentGroup` for multiple attachments
+
+Use the official upload states:
+
+- `idle`
+- `uploading`
+- `processing`
+- `error`
+- `done`
+
+Do not build a separate custom attachment-status card when the official state API covers the workflow.
+
+## Compact Size Standard
+
+SherHisab attachment surfaces should normally use:
+
+- `size="sm"` for form/detail attachments;
+- `size="xs"` for dense rows, compact lists, and secondary metadata surfaces;
+- `size="default"` only when the attachment is the primary content of the current surface.
+
+The default ERP attachment should read like a compact file row, not a large media card.
+
+Example:
+
+```text
+[PDF] purchase-receipt-2409.pdf    PDF · 842 KB        [view] [download] [⋯]
+```
+
+## Documents
+
+For PDF and document attachments, use a compact horizontal Attachment:
+
+```text
+Attachment size="sm"
+├─ AttachmentMedia       file-type icon
+├─ AttachmentContent
+│  ├─ AttachmentTitle    bank-statement-sep.pdf
+│  └─ AttachmentDescription  PDF · 1.8 MB
+├─ AttachmentActions     optional compact actions
+└─ AttachmentTrigger     opens preview / document viewer
+```
+
+Good examples:
+
+- Purchase receipt
+- Bank statement
+- Supplier invoice
+- Warranty document
+
+Use a meaningful file-type icon in `AttachmentMedia` rather than a decorative image.
+
+## Product and Customer Photos
+
+For image attachments:
+
+- use `AttachmentMedia variant="image"`;
+- render a small real thumbnail;
+- keep the attachment compact;
+- use `AttachmentTrigger` to open the larger preview;
+- keep remove/download/other actions independently clickable through `AttachmentActions`.
+
+For a single product/customer photo, prefer a compact thumbnail attachment rather than a large permanent image block.
+
+Example:
+
+```text
+[thumbnail]  front-view.jpg
+             JPG · 420 KB
+```
+
+Clicking the attachment previews the full photo.
+
+## Product Photo Gallery
+
+When a product has multiple photos, use `AttachmentGroup` as the compact gallery/list primitive.
+
+Recommended pattern:
+
+```text
+Product photos
+[thumb 1] [thumb 2] [thumb 3] [thumb 4] →
+```
+
+Rules:
+
+- use the official horizontally scrollable/snapping `AttachmentGroup` when the row can overflow;
+- keep thumbnails consistent in size;
+- clicking a photo opens the preview viewer/dialog;
+- actions such as Remove remain independently clickable;
+- do not render four or five large product images vertically inside the Product form;
+- show the primary image first when a product has a designated primary photo.
+
+Use `orientation="vertical"` only when the thumbnail-above-label layout is genuinely clearer. The normal compact document pattern stays horizontal.
+
+## Preview Behavior
+
+Use `AttachmentTrigger` to make the card/attachment open its preview.
+
+Recommended behavior:
+
+- image → image preview Dialog / approved image viewer;
+- PDF → document/PDF preview where supported, otherwise open the authorized file URL;
+- unsupported preview format → download/open action.
+
+The trigger must have an accessible label such as:
+
+```text
+Preview front-view.jpg
+Open bank-statement-sep.pdf
+```
+
+Do not make the whole attachment clickable with custom absolute overlays when `AttachmentTrigger` already provides the official behavior.
+
+## Attachment Actions
+
+Keep actions compact and contextual.
+
+Possible actions:
+
+- Preview
+- Download
+- Copy link when the product supports safe sharing
+- Retry upload
+- Set as primary photo
+- Remove
+
+Use `AttachmentAction` for compact actions. Icon-only actions require an `aria-label` and follow the SherHisab Tooltip rule.
+
+Do not show every possible action permanently. Secondary actions may move into the standard `DropdownMenu` when the attachment has several actions.
+
+Delete/remove actions must follow the existing confirmation rules when removal has meaningful consequences.
+
+## Uploading / Processing / Error
+
+Use the Attachment `state` rather than a separate custom loader.
+
+Examples:
+
+```text
+receipt.jpg          Uploading · 64%
+statement.pdf        Processing document
+product-front.jpg    Uploaded · 420 KB
+invoice.pdf          Upload failed. Try again.
+```
+
+- keep the failure reason in `AttachmentDescription`;
+- do not communicate upload failure by red color alone;
+- show Retry only when retry is supported;
+- do not allow form completion to imply an attachment was saved when upload is still failing/pending and the attachment is required.
+
+## Premium Feature Gating
+
+Attachment availability may be a SherHisab premium feature, but premium gating is product logic, not a different visual component.
+
+When the current plan does not allow attachments:
+
+- show the approved premium/upgrade affordance only where useful;
+- do not render a fake active uploader that fails after selection;
+- do not expose attachment actions the user cannot perform.
+
+When the feature is available, use the same standard Attachment component across modules.
+
+## Privacy and Permissions
+
+Attachments may contain sensitive business/customer information.
+
+- preview/download URLs must respect tenant/session authorization;
+- do not expose private object-storage URLs as permanently public links;
+- customer photos and bank statements must follow module permissions;
+- hide/remove actions the current user is not permitted to use;
+- attachment filenames should not replace proper metadata/labels when the filename is unclear.
+
+## When Not to Use Attachment
+
+Do not use Attachment for:
+
+- a normal product image used purely as a tiny decorative thumbnail in a dense table when no attachment interaction is required;
+- avatar/profile UI where the shadcn `Avatar` component is semantically correct;
+- large image-gallery experiences where a dedicated approved gallery/viewer is the primary surface;
+- file-picker input before a file exists if the standard upload control is clearer.
+
+Once a selected/uploaded file becomes a managed ERP attachment, represent it with the standard shadcn Attachment pattern.
+
 # 26. POS Rules
 
 POS may be denser than other pages.
@@ -3143,6 +3356,8 @@ EntityCombobox
 DateRangeFilter
 FilterPopover
 ActionMenu
+AttachmentList
+AttachmentPreviewDialog
 FormField
 BilingualLabel
 ConfirmDialog
@@ -3219,6 +3434,7 @@ Prefer:
 - RadioGroup
 - Switch
 - Badge
+- Attachment
 - ScrollArea
 - Separator
 
