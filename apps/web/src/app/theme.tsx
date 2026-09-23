@@ -71,7 +71,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export function useThemeMode(): ThemeContextValue {
+// This context intentionally colocates its provider and consumer hook.\n// eslint-disable-next-line react-refresh/only-export-components\nexport function useThemeMode(): ThemeContextValue {
   const value = useContext(ThemeContext)
 
   if (!value) {

@@ -45,7 +45,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export function useLanguageMode(): LanguageContextValue {
+// This context intentionally colocates its provider and consumer hook.\n// eslint-disable-next-line react-refresh/only-export-components\nexport function useLanguageMode(): LanguageContextValue {
   const value = useContext(LanguageContext)
 
   if (!value) {
