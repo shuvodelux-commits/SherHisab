@@ -2,9 +2,14 @@ import type { DatabaseClient } from '../../db/request-database'
 import type {
   CategoryRecord,
   CreateUnitInput,
+  ConversionMode,
+  ProductAdvancedConfiguration,
+  ProductAlternativeUnitRecord,
   ProductDetail,
   ProductListFilters,
   ProductListItem,
+  ProductSpecificationRecord,
+  ProductVariantDetail,
   TrackingMode,
   UnitRecord,
 } from './product.types'
@@ -597,4 +602,495 @@ export class ProductMasterRepository {
 
     return result.rows[0]?.has_history ?? false
   }
+
+  async lockProductForAdvanced(
+    tenantId: string,
+    productId: string,
+  ): Promise<{
+    id: string
+    baseUnitId: string
+    variantsEnabled: boolean
+  } | null> {
+    const result = await this.db.query<{
+      id: string
+      base_unit_id: string
+      variants_enabled: boolean
+    }>(
+      `SELECT id, base_unit_id, variants_enabled
+       FROM products
+       WHERE tenant_id = $1 AND id = $2
+       FOR UPDATE`,
+      [tenantId, productId],
+    )
+
+    const row = result.rows[0]
+    return row
+      ? {
+          id: row.id,
+          baseUnitId: row.base_unit_id,
+          variantsEnabled: row.variants_enabled,
+        }
+      : null
+  }
+
+  async deactivateAlternativeUnits(
+    tenantId: string,
+    productId: string,
+    baseUnitId: string,
+  ): Promise<void> {
+    await this.db.query(
+      `UPDATE product_units
+       SET is_active = FALSE, updated_at = NOW()
+       WHERE tenant_id = $1
+         AND product_id = $2
+         AND unit_id <> $3
+         AND is_active`,
+      [tenantId, productId, baseUnitId],
+    )
+  }
+
+  async insertAlternativeUnit(input: {
+    tenantId: string
+    productId: string
+    unitId: string
+    conversionMode: ConversionMode
+    conversionToBase: string | null
+  }): Promise<void> {
+    await this.db.query(
+      `INSERT INTO product_units
+       (
+         tenant_id,
+         product_id,
+         unit_id,
+         conversion_mode,
+         conversion_to_base
+       )
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        input.tenantId,
+        input.productId,
+        input.unitId,
+        input.conversionMode,
+        input.conversionToBase,
+      ],
+    )
+  }
+
+  async ensureBaseProductUnit(
+    tenantId: string,
+    productId: string,
+    baseUnitId: string,
+  ): Promise<void> {
+    const result = await this.db.query<{ id: string }>(
+      `SELECT id
+       FROM product_units
+       WHERE tenant_id = $1
+         AND product_id = $2
+         AND unit_id = $3
+         AND is_active
+       LIMIT 1`,
+      [tenantId, productId, baseUnitId],
+    )
+
+    if (result.rows[0]) {
+      return
+    }
+
+    await this.insertBaseProductUnit(tenantId, productId, baseUnitId)
+  }
+
+  async replaceSpecificationsRows(
+    tenantId: string,
+    productId: string,
+    specifications: Array<{ name: string; value: string }>,
+  ): Promise<void> {
+    await this.db.query(
+      `DELETE FROM product_specifications
+       WHERE tenant_id = $1 AND product_id = $2`,
+      [tenantId, productId],
+    )
+
+    for (const [index, specification] of specifications.entries()) {
+      await this.db.query(
+        `INSERT INTO product_specifications
+         (tenant_id, product_id, name, value, sort_order)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          tenantId,
+          productId,
+          specification.name,
+          specification.value,
+          index,
+        ],
+      )
+    }
+  }
+
+  async listAlternativeUnits(
+    tenantId: string,
+    productId: string,
+    baseUnitId: string,
+  ): Promise<ProductAlternativeUnitRecord[]> {
+    const result = await this.db.query<{
+      id: string
+      unit_id: string
+      unit_name: string
+      unit_symbol: string | null
+      unit_is_active: boolean
+      conversion_mode: ConversionMode
+      conversion_to_base: string | null
+    }>(
+      `SELECT pu.id,
+              u.id AS unit_id,
+              u.name AS unit_name,
+              u.symbol AS unit_symbol,
+              u.is_active AS unit_is_active,
+              pu.conversion_mode,
+              CASE
+                WHEN pu.conversion_to_base IS NULL THEN NULL
+                ELSE trim_scale(pu.conversion_to_base)::text
+              END AS conversion_to_base
+       FROM product_units pu
+       JOIN units u
+         ON u.tenant_id = pu.tenant_id
+        AND u.id = pu.unit_id
+       WHERE pu.tenant_id = $1
+         AND pu.product_id = $2
+         AND pu.unit_id <> $3
+         AND pu.is_active
+       ORDER BY lower(u.name), pu.id`,
+      [tenantId, productId, baseUnitId],
+    )
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      unit: {
+        id: row.unit_id,
+        name: row.unit_name,
+        symbol: row.unit_symbol,
+        isActive: row.unit_is_active,
+      },
+      conversionMode: row.conversion_mode,
+      conversionToBase: row.conversion_to_base,
+    }))
+  }
+
+  async listSpecifications(
+    tenantId: string,
+    productId: string,
+  ): Promise<ProductSpecificationRecord[]> {
+    const result = await this.db.query<{
+      id: string
+      name: string
+      value: string
+      sort_order: number
+    }>(
+      `SELECT id, name, value, sort_order
+       FROM product_specifications
+       WHERE tenant_id = $1 AND product_id = $2
+       ORDER BY sort_order, id`,
+      [tenantId, productId],
+    )
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      value: row.value,
+      sortOrder: row.sort_order,
+    }))
+  }
+
+  async listNonDefaultVariants(
+    tenantId: string,
+    productId: string,
+  ): Promise<ProductVariantDetail[]> {
+    const result = await this.db.query<{
+      id: string
+      display_name: string | null
+      sku: string | null
+      default_purchase_price_paisa: string
+      default_selling_price_paisa: string
+      minimum_stock_base_qty: string
+      stock_base_qty: string
+      has_inventory_history: boolean
+      is_active: boolean
+      option_name: string | null
+      option_value: string | null
+    }>(
+      `SELECT pv.id,
+              pv.display_name,
+              pv.sku,
+              pv.default_purchase_price_paisa::text,
+              pv.default_selling_price_paisa::text,
+              trim_scale(pv.minimum_stock_base_qty)::text AS minimum_stock_base_qty,
+              (
+                SELECT trim_scale(COALESCE(SUM(im.base_qty_delta), 0))::text
+                FROM inventory_movements im
+                WHERE im.tenant_id = pv.tenant_id
+                  AND im.variant_id = pv.id
+              ) AS stock_base_qty,
+              EXISTS (
+                SELECT 1
+                FROM inventory_movements im_history
+                WHERE im_history.tenant_id = pv.tenant_id
+                  AND im_history.variant_id = pv.id
+                UNION ALL
+                SELECT 1
+                FROM inventory_lots il_history
+                WHERE il_history.tenant_id = pv.tenant_id
+                  AND il_history.variant_id = pv.id
+              ) AS has_inventory_history,
+              pv.is_active,
+              pod.name AS option_name,
+              pov.value AS option_value
+       FROM product_variants pv
+       LEFT JOIN product_variant_option_values pvov
+         ON pvov.tenant_id = pv.tenant_id
+        AND pvov.variant_id = pv.id
+       LEFT JOIN product_option_values pov
+         ON pov.tenant_id = pvov.tenant_id
+        AND pov.id = pvov.option_value_id
+       LEFT JOIN product_option_definitions pod
+         ON pod.tenant_id = pov.tenant_id
+        AND pod.id = pov.option_definition_id
+       WHERE pv.tenant_id = $1
+         AND pv.product_id = $2
+         AND NOT pv.is_default
+       ORDER BY pv.created_at, pv.id, pod.sort_order, pod.id, pov.sort_order, pov.id`,
+      [tenantId, productId],
+    )
+
+    const variants = new Map<string, ProductVariantDetail>()
+
+    for (const row of result.rows) {
+      let variant = variants.get(row.id)
+
+      if (!variant) {
+        variant = {
+          id: row.id,
+          displayName: row.display_name ?? '',
+          sku: row.sku,
+          defaultPurchasePricePaisa: row.default_purchase_price_paisa,
+          defaultSellingPricePaisa: row.default_selling_price_paisa,
+          minimumStockBaseQty: row.minimum_stock_base_qty,
+          stockBaseQty: row.stock_base_qty,
+          hasInventoryHistory: row.has_inventory_history,
+          selections: {},
+          isActive: row.is_active,
+        }
+        variants.set(row.id, variant)
+      }
+
+      if (row.option_name && row.option_value) {
+        variant.selections[row.option_name] = row.option_value
+      }
+    }
+
+    return [...variants.values()]
+  }
+
+  async setProductVariantsEnabled(
+    tenantId: string,
+    productId: string,
+    enabled: boolean,
+  ): Promise<void> {
+    await this.db.query(
+      `UPDATE products
+       SET variants_enabled = $3, updated_at = NOW()
+       WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, productId, enabled],
+    )
+  }
+
+  async clearProductOptionDefinitions(
+    tenantId: string,
+    productId: string,
+  ): Promise<void> {
+    await this.db.query(
+      `DELETE FROM product_option_definitions
+       WHERE tenant_id = $1 AND product_id = $2`,
+      [tenantId, productId],
+    )
+  }
+
+  async createOptionDefinition(input: {
+    tenantId: string
+    productId: string
+    name: string
+    sortOrder: number
+  }): Promise<{ id: string }> {
+    const result = await this.db.query<{ id: string }>(
+      `INSERT INTO product_option_definitions
+       (tenant_id, product_id, name, sort_order)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [input.tenantId, input.productId, input.name, input.sortOrder],
+    )
+
+    const row = result.rows[0]
+    if (!row) {
+      throw new Error('Failed to create Product option definition')
+    }
+
+    return row
+  }
+
+  async createOptionValue(input: {
+    tenantId: string
+    optionDefinitionId: string
+    value: string
+    sortOrder: number
+  }): Promise<{ id: string }> {
+    const result = await this.db.query<{ id: string }>(
+      `INSERT INTO product_option_values
+       (tenant_id, option_definition_id, value, sort_order)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [
+        input.tenantId,
+        input.optionDefinitionId,
+        input.value,
+        input.sortOrder,
+      ],
+    )
+
+    const row = result.rows[0]
+    if (!row) {
+      throw new Error('Failed to create Product option value')
+    }
+
+    return row
+  }
+
+  async insertAdvancedVariant(input: {
+    tenantId: string
+    productId: string
+    displayName: string
+    sku: string | null
+    defaultPurchasePricePaisa: string
+    defaultSellingPricePaisa: string
+    minimumStockBaseQty: string
+  }): Promise<{ id: string }> {
+    const result = await this.db.query<{ id: string }>(
+      `INSERT INTO product_variants
+       (
+         tenant_id,
+         product_id,
+         display_name,
+         sku,
+         default_purchase_price_paisa,
+         default_selling_price_paisa,
+         minimum_stock_base_qty,
+         is_default,
+         is_active
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, TRUE)
+       RETURNING id`,
+      [
+        input.tenantId,
+        input.productId,
+        input.displayName,
+        input.sku,
+        input.defaultPurchasePricePaisa,
+        input.defaultSellingPricePaisa,
+        input.minimumStockBaseQty,
+      ],
+    )
+
+    const row = result.rows[0]
+    if (!row) {
+      throw new Error('Failed to create Product variant')
+    }
+
+    return row
+  }
+
+  async updateAdvancedVariant(input: {
+    tenantId: string
+    productId: string
+    variantId: string
+    displayName: string
+    sku: string | null
+    defaultPurchasePricePaisa: string
+    defaultSellingPricePaisa: string
+    minimumStockBaseQty: string
+  }): Promise<boolean> {
+    const result = await this.db.query(
+      `UPDATE product_variants
+       SET display_name = $4,
+           sku = $5,
+           default_purchase_price_paisa = $6,
+           default_selling_price_paisa = $7,
+           minimum_stock_base_qty = $8,
+           is_active = TRUE,
+           updated_at = NOW()
+       WHERE tenant_id = $1
+         AND product_id = $2
+         AND id = $3
+         AND NOT is_default`,
+      [
+        input.tenantId,
+        input.productId,
+        input.variantId,
+        input.displayName,
+        input.sku,
+        input.defaultPurchasePricePaisa,
+        input.defaultSellingPricePaisa,
+        input.minimumStockBaseQty,
+      ],
+    )
+
+    return (result.rowCount ?? 0) > 0
+  }
+
+  async setAdvancedVariantActive(
+    tenantId: string,
+    productId: string,
+    variantId: string,
+    active: boolean,
+  ): Promise<boolean> {
+    const result = await this.db.query(
+      `UPDATE product_variants
+       SET is_active = $4, updated_at = NOW()
+       WHERE tenant_id = $1
+         AND product_id = $2
+         AND id = $3
+         AND NOT is_default`,
+      [tenantId, productId, variantId, active],
+    )
+
+    return (result.rowCount ?? 0) > 0
+  }
+
+  async mapVariantOptionValue(input: {
+    tenantId: string
+    variantId: string
+    optionValueId: string
+  }): Promise<void> {
+    await this.db.query(
+      `INSERT INTO product_variant_option_values
+       (tenant_id, variant_id, option_value_id)
+       VALUES ($1, $2, $3)`,
+      [input.tenantId, input.variantId, input.optionValueId],
+    )
+  }
+
+  async getAdvancedConfiguration(
+    tenantId: string,
+    productId: string,
+    baseUnitId: string,
+  ): Promise<ProductAdvancedConfiguration> {
+    const [alternativeUnits, specifications, variants] = await Promise.all([
+      this.listAlternativeUnits(tenantId, productId, baseUnitId),
+      this.listSpecifications(tenantId, productId),
+      this.listNonDefaultVariants(tenantId, productId),
+    ])
+
+    return {
+      alternativeUnits,
+      specifications,
+      variants,
+    }
+  }
+
 }
