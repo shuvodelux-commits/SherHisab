@@ -1,14 +1,40 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { LanguageProvider } from '../app/language'
+import { ThemeProvider } from '../app/theme'
 import { AppShell } from './app-shell'
 
+function renderShell() {
+  return render(
+    <ThemeProvider>
+      <LanguageProvider>
+        <AppShell>
+          <div>Dashboard content</div>
+        </AppShell>
+      </LanguageProvider>
+    </ThemeProvider>,
+  )
+}
+
 describe('responsive application shell', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: false,
+        media: '(prefers-color-scheme: dark)',
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+  })
+
   it('renders the compact desktop navigation and content', () => {
-    render(
-      <AppShell>
-        <div>Dashboard content</div>
-      </AppShell>,
-    )
+    renderShell()
 
     expect(
       screen.getByRole('navigation', { name: 'Primary navigation' }),
@@ -17,11 +43,7 @@ describe('responsive application shell', () => {
   })
 
   it('opens and closes the mobile navigation drawer', () => {
-    render(
-      <AppShell>
-        <div>Dashboard content</div>
-      </AppShell>,
-    )
+    renderShell()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
 
