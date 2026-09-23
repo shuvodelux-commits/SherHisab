@@ -53,3 +53,31 @@ export interface ProductListFilters {
   limit?: number
   offset?: number
 }
+
+export interface ProductListItem {
+  id: string
+  name: string
+  brand: string
+  category: CategoryRecord | null
+  baseUnit: UnitRecord
+  defaultVariantId: string
+  variantCount: number
+  defaultPurchasePricePaisa: string
+  defaultSellingPricePaisa: string
+  stockBaseQty: string
+  minimumStockBaseQty: string
+  trackingMode: TrackingMode
+  variantsEnabled: boolean
+  isActive: boolean
+}
+
+export interface ProductListResult {
+  items: ProductListItem[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface ProductDetail extends ProductListItem {
+  primaryBarcode: string | null
+}
