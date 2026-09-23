@@ -868,7 +868,8 @@ git commit -m "feat: add product category and unit masters"
   - `getProduct(productId)`
   - `updateProduct(productId, input)`
   - `setProductActive(productId, active)`
-  - `InventoryService.createOpeningInventory(...)`.
+  - `InventoryService.createOpeningInventoryInTransaction(...)` for Product creation on an already-open transaction.
+  - `InventoryService.adjustStock(...)` opens exactly one request-scoped database transaction.
 
 - [ ] **Step 1: Extend Product output contracts**
 
@@ -882,6 +883,7 @@ export interface ProductListItem {
   category: CategoryRecord | null
   baseUnit: UnitRecord
   defaultVariantId: string
+  variantCount: number
   defaultPurchasePricePaisa: string
   defaultSellingPricePaisa: string
   stockBaseQty: string
@@ -916,11 +918,12 @@ Cover these exact behaviors:
 - archived Product name can be recreated;
 - list search/category/brand/status pagination returns only the trusted tenant;
 - Product Edit does not accept or mutate stock;
+- editing a Product may retain its currently assigned archived Category/Unit, but cannot newly assign a different inactive Category/Unit;
 - base-unit change succeeds before inventory history;
 - base-unit change rejects after opening/adjustment history exists;
 - failure injected after Product insert rolls back Product, Variant, Unit mapping, lot, and movement.
 
-For rollback injection, construct `ProductMasterService` with an `InventoryService` test double whose opening method throws `new Error('force opening failure')`, while the Product service transaction still owns all earlier writes.
+For rollback proof, pre-create a conflicting active barcode and then create another Product using the same barcode. The duplicate barcode must fail after Product/default-Variant/base-Unit writes have begun, and the transaction must roll all of those writes back. Do not rely on a mock to prove database rollback.
 
 - [ ] **Step 3: Run Product tests and verify RED**
 
@@ -947,13 +950,13 @@ setProductActive(tenantId, productId, active)
 hasInventoryHistory(client, tenantId, variantId)
 ```
 
-The Product list query calculates `stockBaseQty` from:
+The Product list query calculates `stockBaseQty` as the Product-level total across all active stock-bearing Variants:
 
 ```sql
 COALESCE(SUM(inventory_movements.base_qty_delta), 0)::text
 ```
 
-grouped by default variant.
+Join movements through `product_variants.product_id`; do not limit the stock total to the hidden default Variant. Also return `variantCount`. For simple Products this is `1`; for advanced Products the table can show the total stock plus the number of Variants.
 
 Do not add `current_stock` to `products`.
 
@@ -972,18 +975,21 @@ All quantity values stay strings at repository boundaries.
 
 - [ ] **Step 6: Implement atomic Product creation**
 
+`ProductMasterService` is constructed as `new ProductMasterService(tenantId, database)`. Read-only methods may use a repository bound to that database. Every write method calls `withDatabaseTransaction(database, ...)` and creates transaction-scoped `ProductMasterRepository(tx)` / `InventoryService(tx)` instances inside the callback; never nest a second transaction.
+
 `ProductMasterService.createProduct()`:
 
 1. validates name/prices/quantity/minimum stock/tracking mode;
 2. verifies active same-tenant category and base Unit;
 3. requires positive purchase cost when opening stock > 0;
-4. calls `withDatabaseTransaction(repository.database, ...)`;
+4. calls `withDatabaseTransaction(database, ...)`;
 5. inserts Product;
 6. inserts default Variant;
 7. inserts base `product_units` mapping with `FIXED / 1`;
 8. inserts primary barcode if present;
-9. delegates opening stock to an `InventoryService` built on the same transaction client;
-10. returns fully loaded Product detail after commit.
+9. delegates opening stock to the transaction-scoped `InventoryService(tx)`;
+10. applies optional advanced configuration in the same transaction when supplied;
+11. returns fully loaded Product detail after commit.
 
 Opening inventory uses the current business date and:
 
@@ -999,7 +1005,9 @@ Opening inventory uses the current business date and:
 
 - [ ] **Step 7: Implement Product Edit and base-unit safety**
 
-If `baseUnitId` changes, lock/read the default variant and reject when `hasInventoryHistory()` is true. When allowed, update `products.base_unit_id` and replace the active base `product_units` mapping with `FIXED / 1`.
+If `baseUnitId` changes, lock/read the default Variant and reject when `hasInventoryHistory()` is true. When allowed, verify the new Unit is active and same-tenant, update `products.base_unit_id`, replace the active base `product_units` mapping with `FIXED / 1`, and update the primary barcode's `unit_id` when one exists.
+
+For Category/Base Unit validation on ordinary edits, allow the Product to keep its already-linked archived master. Reject assigning any other inactive master. This preserves historical references without letting inactive masters re-enter new operational configuration.
 
 Barcode update archives the old primary barcode and creates/activates the new one in the same transaction.
 
@@ -1031,6 +1039,7 @@ git commit -m "feat: add product master lifecycle"
 - Produces:
   - `AdjustStockInput { deltaBaseQty, note, unitCostPaisa?, businessDate? }`
   - `InventoryService.adjustStock(tenantId, actorUserId, variantId, input)`
+  - `InventoryService.adjustStockInTransaction(tenantId, actorUserId, variantId, input)` as the transaction-internal implementation;
   - `InventoryService.listLots(tenantId, variantId)`.
 
 - [ ] **Step 1: Add RED FIFO tests**
@@ -1070,6 +1079,8 @@ pnpm --filter @sherhisab/api test -- test/products/inventory-service.test.ts
 Expected: FAIL.
 
 - [ ] **Step 4: Implement lock-first inventory planning**
+
+`adjustStock()` calls `withDatabaseTransaction(this.database, ...)`, creates a transaction-scoped `InventoryService(tx)`, and delegates to `adjustStockInTransaction()`. The transaction-internal method never starts another transaction.
 
 For every adjustment transaction:
 
@@ -1182,9 +1193,17 @@ export interface ReplaceVariantConfigurationInput {
   options: VariantOptionInput[]
   variants: VariantInput[]
 }
+
+export interface AdvancedProductConfigurationInput {
+  alternativeUnits?: AlternativeUnitInput[]
+  specifications?: SpecificationInput[]
+  variantConfiguration?: ReplaceVariantConfigurationInput
+}
 ```
 
 The default Variant is not included in `variants`; it always remains present internally.
+
+Add optional `advanced?: AdvancedProductConfigurationInput` to `CreateProductInput` and `UpdateProductInput`. Core create/update plus supplied advanced configuration must commit or roll back together. The dedicated advanced endpoints remain available for focused edits after creation.
 
 - [ ] **Step 2: Write RED advanced tests**
 
@@ -1197,6 +1216,7 @@ Cover:
 - alternative Unit from another tenant rejects;
 - descriptive specs persist and do not create variants;
 - enabling Color/Size creates additional Variants and option mappings;
+- a newly-created Product that enables Variants must have `openingStockBaseQty = 0`; opening stock cannot be silently placed on the hidden default Variant;
 - duplicate option names/values reject case-insensitively;
 - duplicate variant selection combination rejects;
 - duplicate tenant SKU rejects;
@@ -1229,6 +1249,8 @@ Inside one transaction:
 Trim names/values; reject empty entries; delete and reinsert Product specifications in the transaction because specifications have no transaction-history foreign keys.
 
 - [ ] **Step 6: Implement variant configuration with history protection**
+
+Before applying a create payload with `variantConfiguration.enabled=true`, reject non-zero `openingStockBaseQty` with a clear validation message: stock for a new variant-enabled Product must be added per Variant through Adjust Stock after creation. This avoids invisible opening stock on the hidden default Variant.
 
 When `enabled=true`:
 
@@ -1277,8 +1299,8 @@ git commit -m "feat: add advanced product configuration"
   - `GET /products/:id`
   - `PATCH /products/:id`
   - `POST /products/:id/status`
-  - `POST /products/:id/stock-adjustments`
-  - `GET /products/:id/lots`
+  - `POST /products/:id/stock-adjustments` with optional body `variantId`; omitted means the Product's default Variant;
+  - `GET /products/:id/lots?variantId=<uuid>`; omitted means the Product's default Variant
   - `PUT /products/:id/units`
   - `PUT /products/:id/specifications`
   - `PUT /products/:id/variants`
@@ -1331,15 +1353,9 @@ return withRequestDatabase(c.env, async (database) => {
   const tenantId = c.get('tenantId')
   const userId = c.get('userId')
   const repository = new ProductMasterRepository(database)
-  const inventoryRepository = new InventoryRepository(database)
-  const inventoryService = new InventoryService(database, inventoryRepository)
-  const service = new ProductMasterService(
-    tenantId,
-    database,
-    repository,
-    inventoryService,
-  )
-  // invoke operation
+  const service = new ProductMasterService(tenantId, database)
+  const inventoryService = new InventoryService(database)
+  // invoke the relevant Product or inventory operation
 })
 ```
 
@@ -1573,6 +1589,7 @@ export interface ProductListItemDto {
   category: { id: string; name: string; isActive: boolean } | null
   baseUnit: { id: string; name: string; symbol: string | null; isActive: boolean }
   defaultVariantId: string
+  variantCount: number
   defaultPurchasePricePaisa: string
   defaultSellingPricePaisa: string
   stockBaseQty: string
@@ -1590,6 +1607,8 @@ Mock `fetch` and assert:
 - page heading shows `Products` and Bangla helper in default mode;
 - compact table has Product, Category, Brand, Unit, Purchase Price, Selling Price, Stock, Min Stock, Status, Actions;
 - search/filter controls send expected query parameters;
+- pagination shows the current range/total and Previous/Next changes `offset`;
+- advanced Products display Product-level total stock and a compact Variant count without expanding Variant details in the main table;
 - money renders from paisa without floating point;
 - stock quantity preserves useful decimals and removes trailing zeros via existing `formatNumber`;
 - inactive status displays compact badge;
@@ -1645,6 +1664,8 @@ Product | Category | Brand | Unit | Purchase | Selling | Stock | Min Stock | Sta
 ```
 
 Use full available width, hairline table border, compact rows, no large KPI card wall.
+
+Below the table render compact server-side pagination using the API's `total/limit/offset`: `Showing 1–50 of 248 | Previous | Next`. Keep the default page size at 50.
 
 - [ ] **Step 7: Add route and sidebar navigation**
 
@@ -1708,6 +1729,7 @@ Also assert:
 
 - Opening Stock appears on Create only;
 - Edit shows Current Stock read-only;
+- if Variants are enabled during creation, Opening Stock is forced to zero/disabled with helper copy explaining that stock is added per Variant after creation;
 - Advanced section is collapsed by default;
 - Category and Unit use searchable selectors;
 - quick-create Category/Unit creates the master then selects it;
@@ -1769,7 +1791,7 @@ Collapsed `<details>` or equivalent compact control with:
 
 Do not show lot/batch transaction-entry fields here; this is policy/configuration only.
 
-Save advanced configuration through the dedicated API endpoints after the core Product create/update succeeds. For an existing Product, each advanced endpoint is atomic independently and errors remain visible in the dialog.
+For Create and the main Edit Save action, include the advanced configuration in the same Product request so core fields and advanced configuration are atomic together. Keep the dedicated advanced endpoints for focused future/in-place editors, but this dialog must not leave a half-created advanced Product when an advanced validation fails.
 
 - [ ] **Step 6: Implement variant-history-safe UI behavior**
 
@@ -1819,6 +1841,7 @@ Assert:
 - Edit Product does not offer editable current stock;
 - row action `Adjust Stock` opens dedicated dialog;
 - dialog shows current stock and Unit;
+- Variant-enabled Products show a Variant selector; simple Products silently use the default Variant;
 - quantity requires non-zero signed value;
 - positive adjustment exposes optional Cost field and reason;
 - negative adjustment hides Cost field and requires reason;
@@ -1841,6 +1864,7 @@ Payload:
 
 ```ts
 {
+  variantId: selectedVariantIdOrUndefined,
   deltaBaseQty: signedQuantity,
   note: reason.trim(),
   unitCostPaisa:
@@ -1896,16 +1920,17 @@ git commit -m "feat: add product stock adjustment ui"
 
 - [ ] **Step 1: Apply all migrations to a fresh/local CI database**
 
-For an empty `sherhisab_ci`, run:
+Use the disposable local CI database only. Reset its public schema, then apply every migration in order:
 
 ```bash
 export DATABASE_URL=postgresql://sherhisab:sherhisab@localhost:5432/sherhisab_ci
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
 for migration in db/migrations/*.sql; do
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
 done
 ```
 
-This verifies migration ordering from `001` through `004`.
+This deliberately resets only the local `sherhisab_ci` test database and verifies migration ordering from `001` through `004`. Never run the reset command against development, preview, Neon, or production databases.
 
 - [ ] **Step 2: Run all API tests**
 
@@ -1980,11 +2005,12 @@ With local PostgreSQL/API/Web running:
 2. confirm table shows `2.5`, not `2.50000000`;
 3. add `0.125` stock and confirm `2.625`;
 4. remove `1.5` and inspect exact FIFO lot allocation;
-5. archive/recreate a Category name;
+5. archive/recreate a Category name and edit the old Product without losing its archived Category reference;
 6. create Fabric Product with variable Roll unit;
-7. enable Color/Size variants and confirm simple Product rows remain uncluttered;
-8. switch UI language between English + Bangla, English, and Bangla;
-9. verify narrow viewport keeps Product form/table usable.
+7. create a new Color/Size Product and confirm non-zero generic Opening Stock is blocked when Variants are enabled;
+8. add stock to two individual Variants and confirm the Product table shows their total plus Variant count;
+9. switch UI language between English + Bangla, English, and Bangla;
+10. verify narrow viewport keeps Product form/table/pagination usable.
 
 - [ ] **Step 11: Request final code review**
 
