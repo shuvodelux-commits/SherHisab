@@ -409,66 +409,194 @@ Do not use heavy card shadows.
 
 ---
 
-# 12. Application Shell
+# 12. Application Shell and Sidebar
 
-Preserve the SherERP navigation model.
+Use the **official shadcn Sidebar component demo shown in the Sidebar documentation as the exact visual and interaction baseline** for SherHisab.
 
-## Normal Desktop State
+Reference: https://ui.shadcn.com/docs/components/base/sidebar
 
-Use a compact collapsed icon rail.
+Do not redesign the sidebar into a different Tailark/Dub/custom navigation pattern. Tailark may influence typography/density elsewhere, but the sidebar itself must retain the official shadcn structure, proportions, collapse behavior, menu treatment, tooltip behavior, and footer-user-menu pattern.
 
-Recommended:
+Only replace the demo's content with SherHisab:
 
-```text
-Collapsed width: 60–64px
-```
+- logo/business identity;
+- SherHisab navigation items;
+- route links;
+- active route state;
+- user avatar/name/account data;
+- account/settings/logout actions;
+- permission-aware menu items.
 
-## Expanded Sidebar
+## Exact Desktop Pattern
 
-On user action, expand to:
-
-```text
-250–260px
-```
-
-Expanded sidebar contains:
-
-- business logo/initial
-- business name
-- English navigation name
-- Bangla helper text in default bilingual mode
-- grouped navigation
-- settings near bottom
-- sign-out / user action near bottom
-
-### Navigation Typography
-
-```text
-English nav        13px / 500
-Bangla helper      10px / 400
-Icon               18px
-```
-
-### Active State
+The normal desktop state is the official **icon-collapsed sidebar rail** shown in the shadcn Sidebar demo.
 
 Use:
 
-- pale blue background
-- blue icon
-- stronger primary text
-- no thick left border
-- no gradient
+```tsx
+<SidebarProvider>
+  <AppSidebar />
+  <SidebarInset>
+    ...
+  </SidebarInset>
+</SidebarProvider>
+```
 
-Desktop expansion should not feel like a mobile modal.
+and:
+
+```tsx
+<Sidebar collapsible="icon">
+  <SidebarHeader />
+  <SidebarContent />
+  <SidebarFooter />
+  <SidebarRail />
+</Sidebar>
+```
+
+Required behavior:
+
+- collapsed state shows the icon rail;
+- expanding reveals labels/content using the official shadcn behavior;
+- use `SidebarTrigger` for the normal toggle;
+- use `SidebarRail` as provided by shadcn;
+- preserve the official sidebar transition/collapse mechanics;
+- do not build a second custom collapse system.
+
+## Sidebar Menu
+
+Use the official menu primitives:
+
+- `SidebarGroup`;
+- `SidebarGroupLabel` where a visible group label is useful;
+- `SidebarGroupContent`;
+- `SidebarMenu`;
+- `SidebarMenuItem`;
+- `SidebarMenuButton`;
+- `SidebarMenuSub` only where real hierarchy requires it;
+- `SidebarMenuBadge` only for meaningful counts/status.
+
+Use TanStack Router `Link` through the supported composition pattern.
+
+Set active navigation with the official `isActive` state rather than page-specific active CSS.
+
+## Collapsed Icon Rail
+
+When collapsed:
+
+- show only the official compact icon buttons;
+- preserve the same centered spacing/proportions as the shadcn demo;
+- every navigation icon must have an accessible label;
+- use the official collapsed-sidebar Tooltip behavior for navigation labels;
+- do not show clipped English/Bangla text beside collapsed icons;
+- do not make the collapsed rail wider just to fit helper text.
+
+The collapsed sidebar should visually match the reference screenshot, with a clean narrow rail and no decorative card treatment.
+
+## Expanded State
+
+When expanded:
+
+- reveal SherHisab navigation labels;
+- English is the primary nav label;
+- Bangla helper may appear only if it remains compact and does not distort the official sidebar layout;
+- preserve shadcn spacing, button geometry, hover/active treatment, and semantic sidebar tokens;
+- do not replace menu rows with large cards or custom pills.
+
+If bilingual helper text makes a normal menu item too tall or visually diverges from the official Sidebar, keep the sidebar label concise and expose Bangla through the appropriate secondary/help pattern rather than breaking the sidebar layout.
+
+## Header
+
+Use `SidebarHeader` for SherHisab/business identity.
+
+Keep it compact.
+
+Do not add:
+
+- large marketing logo blocks;
+- decorative gradients;
+- oversized tenant cards;
+- unrelated dashboard KPIs.
+
+A workspace/business switcher may use the official DropdownMenu composition when multiple businesses/tenants actually exist.
+
+## Scrollable Content
+
+Use `SidebarContent` for navigation groups.
+
+It is the sidebar's intended scrollable middle region.
+
+Keep:
+
+- header stable;
+- footer stable;
+- only the navigation content scrolling when needed.
+
+Do not wrap the whole Sidebar in another custom ScrollArea unless a verified implementation limitation requires it.
+
+## Exact Footer User Pattern
+
+Use the same footer-user interaction shown by the official shadcn Sidebar example/reference:
+
+```text
+[Avatar]
+   ↓
+User menu
+├─ user identity / email
+├────────────
+├─ Account
+├─ Settings / relevant account actions
+├─ Notifications when implemented
+├────────────
+└─ Log out
+```
 
 Use:
 
-- no backdrop, or
-- very faint backdrop only if necessary
+- `SidebarFooter`;
+- `SidebarMenu`;
+- `SidebarMenuItem`;
+- `SidebarMenuButton`;
+- `DropdownMenu`;
+- `DropdownMenuTrigger`;
+- `DropdownMenuContent`;
+- official menu groups/separators/items as appropriate;
+- `Avatar` for the user.
 
-Mobile/tablet drawer may use a stronger scrim.
+In collapsed mode, the avatar remains a compact footer trigger like the reference.
 
----
+Do not create a separate floating custom profile card implementation.
+
+Only include menu actions SherHisab actually supports. Do not copy demo-only items such as Upgrade/Billing unless those features exist.
+
+## Styling Lock
+
+For the Sidebar itself:
+
+- use shadcn sidebar semantic tokens;
+- use official component radii, spacing, hover states, and active states;
+- use project icons within the official SidebarMenuButton geometry;
+- no gradients;
+- no glassmorphism;
+- no heavy shadow;
+- no thick custom active stripe;
+- no oversized rounded navigation buttons;
+- no custom blue-filled navigation system that materially changes the reference;
+- no page-specific sidebar CSS.
+
+SherHisab branding may change content and semantic theme tokens, but must not change the component into a different sidebar design.
+
+## Responsive Behavior
+
+Desktop:
+- use the exact icon-collapsible shadcn Sidebar pattern.
+
+Tablet/mobile:
+- use the official shadcn Sidebar responsive/mobile behavior;
+- do not invent a second unrelated mobile navigation design unless a later approved product requirement explicitly replaces it.
+
+## Sidebar Keyboard Shortcut
+
+If the official sidebar keyboard shortcut remains enabled in SherHisab, expose it with the established `Kbd` rule only when it is actually implemented and does not conflict with application shortcuts.
 
 # 13. Topbar
 
@@ -1429,7 +1557,7 @@ Use the official shadcn pattern for:
 
 Project block choices:
 
-- application shell/sidebar: start from official `sidebar-07`;
+- application shell/sidebar: use the exact official shadcn Sidebar demo/component pattern locked in Section 12 (`collapsible="icon"`, official menu primitives, tooltips, `SidebarRail`, and footer user DropdownMenu);
 - login screen: start from official `login-04` and preserve SherHisab session validation/authentication behavior;
 - operational tables: shadcn Table + TanStack Table;
 - charts: official shadcn Chart components and `ChartTooltip` / `ChartTooltipContent` patterns.
