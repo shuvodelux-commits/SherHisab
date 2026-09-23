@@ -258,7 +258,7 @@ export function ProductPage() {
         </>
       )}
 
-      {formMode === 'create' || editProductQuery.data ? (
+      {formOpen && (formMode === 'create' || editProductQuery.data) ? (
         <ProductFormDialog
           mode={formMode}
           onOpenChange={(nextOpen) => {
