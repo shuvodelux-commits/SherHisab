@@ -1,0 +1,318 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { LanguageProvider } from '../../app/language'
+import { ProductFormDialog } from './product-form-dialog'
+import type { ProductDetailDto } from './product-types'
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+const activeCategory = { id: 'category-active', name: 'Hardware', isActive: true }
+const archivedCategory = { id: 'category-archived', name: 'Old Category', isActive: false }
+const activeUnit = { id: 'unit-active', name: 'Piece', symbol: 'pcs', isActive: true }
+const archivedUnit = { id: 'unit-archived', name: 'Old Unit', symbol: 'old', isActive: false }
+
+function createdProduct(): ProductDetailDto {
+  return {
+    id: 'product-1',
+    name: 'Hammer',
+    brand: 'Classic',
+    category: activeCategory,
+    baseUnit: activeUnit,
+    defaultVariantId: 'variant-1',
+    variantCount: 1,
+    defaultPurchasePricePaisa: '1250',
+    defaultSellingPricePaisa: '1875',
+    stockBaseQty: '2.5',
+    minimumStockBaseQty: '0.125',
+    trackingMode: 'SIMPLE',
+    variantsEnabled: false,
+    isActive: true,
+    primaryBarcode: '123456',
+    advanced: { alternativeUnits: [], specifications: [], variants: [] },
+  }
+}
+
+function archivedProduct(): ProductDetailDto {
+  return {
+    ...createdProduct(),
+    id: 'product-archived-master',
+    name: 'Legacy Hammer',
+    category: archivedCategory,
+    baseUnit: archivedUnit,
+    stockBaseQty: '7.25',
+  }
+}
+
+function installFetch(options: { productError?: string } = {}) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+
+    if (url.startsWith('/api/private/product-categories')) {
+      if (init?.method === 'POST') {
+        return jsonResponse(
+          { id: 'category-new', name: 'Electrical', isActive: true },
+          201,
+        )
+      }
+      return jsonResponse([activeCategory, archivedCategory])
+    }
+
+    if (url.startsWith('/api/private/units')) {
+      if (init?.method === 'POST') {
+        return jsonResponse(
+          { id: 'unit-new', name: 'Box', symbol: 'box', isActive: true },
+          201,
+        )
+      }
+      return jsonResponse([activeUnit, archivedUnit])
+    }
+
+    if (url === '/api/private/products' && init?.method === 'POST') {
+      if (options.productError) {
+        return jsonResponse({ error: options.productError }, 409)
+      }
+      return jsonResponse(createdProduct(), 201)
+    }
+
+    if (
+      url === '/api/private/products/product-archived-master' &&
+      init?.method === 'PATCH'
+    ) {
+      return jsonResponse(archivedProduct())
+    }
+
+    return jsonResponse({ error: 'Unexpected test request.' }, 404)
+  })
+
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+function renderForm(options: {
+  mode?: 'create' | 'edit'
+  product?: ProductDetailDto
+  languageMode?: 'en-bn' | 'en' | 'bn'
+  onOpenChange?: (open: boolean) => void
+} = {}) {
+  window.localStorage.setItem(
+    'sherhisab-language-mode',
+    options.languageMode ?? 'en-bn',
+  )
+
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
+  const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+  const onOpenChange = options.onOpenChange ?? vi.fn<(open: boolean) => void>()
+
+  render(
+    <LanguageProvider>
+      <QueryClientProvider client={queryClient}>
+        <ProductFormDialog
+          mode={options.mode ?? 'create'}
+          onOpenChange={onOpenChange}
+          open
+          product={options.product}
+        />
+      </QueryClientProvider>
+    </LanguageProvider>,
+  )
+
+  return { invalidateSpy, onOpenChange }
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  window.localStorage.clear()
+})
+
+describe('ProductFormDialog', () => {
+  it('renders the exact compact create fields with bilingual helpers', async () => {
+    installFetch()
+    renderForm()
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Add Product' }),
+    ).toBeInTheDocument()
+
+    const fields = [
+      ['Product Name', 'পণ্যের নাম'],
+      ['Brand', 'ব্র্যান্ড'],
+      ['Category', 'ধরন'],
+      ['Unit', 'একক'],
+      ['Barcode', 'বারকোড'],
+      ['Purchase Price', 'কেনা দাম'],
+      ['Selling Price', 'বিক্রির দাম'],
+      ['Opening Stock', 'শুরুর স্টক'],
+      ['Minimum Stock', 'ন্যূনতম স্টক'],
+    ]
+
+    for (const [english, bangla] of fields) {
+      expect(screen.getByText(english)).toBeInTheDocument()
+      expect(screen.getByText(bangla)).toBeInTheDocument()
+    }
+
+    expect(screen.getByLabelText('Opening Stock')).toBeEnabled()
+    expect(screen.queryByText('Current Stock')).not.toBeInTheDocument()
+
+    const advanced = screen.getByRole('button', { name: 'Advanced' })
+    expect(advanced).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Tracking')).not.toBeInTheDocument()
+
+    expect(screen.getByRole('button', { name: 'Category' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unit' })).toBeInTheDocument()
+  })
+
+  it('forces generic opening stock to zero when variants are enabled', async () => {
+    installFetch()
+    renderForm()
+
+    fireEvent.change(await screen.findByLabelText('Opening Stock'), {
+      target: { value: '5' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Variants' }))
+
+    expect(screen.getByLabelText('Opening Stock')).toBeDisabled()
+    expect(screen.getByLabelText('Opening Stock')).toHaveValue('0')
+    expect(
+      screen.getByText('Add stock per Variant after creating this Product.'),
+    ).toBeInTheDocument()
+  })
+
+  it('quick-creates masters, submits exact paisa, invalidates and closes', async () => {
+    const fetchMock = installFetch()
+    const { invalidateSpy, onOpenChange } = renderForm()
+
+    fireEvent.change(await screen.findByLabelText('Product Name'), {
+      target: { value: 'Hammer' },
+    })
+    fireEvent.change(screen.getByLabelText('Purchase Price'), {
+      target: { value: '12.50' },
+    })
+    fireEvent.change(screen.getByLabelText('Selling Price'), {
+      target: { value: '18.75' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Category' }))
+    fireEvent.click(await screen.findByRole('button', { name: '+ Add category' }))
+    fireEvent.change(screen.getByLabelText('New category name'), {
+      target: { value: 'Electrical' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create category' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Category' })).toHaveTextContent(
+        'Electrical',
+      )
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unit' }))
+    fireEvent.click(await screen.findByRole('button', { name: '+ Add unit' }))
+    fireEvent.change(screen.getByLabelText('New unit name'), {
+      target: { value: 'Box' },
+    })
+    fireEvent.change(screen.getByLabelText('New unit symbol'), {
+      target: { value: 'box' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create unit' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Unit' })).toHaveTextContent('Box')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }))
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          input === '/api/private/products' && init?.method === 'POST',
+      )
+      expect(createCall).toBeDefined()
+      const body = JSON.parse(String(createCall?.[1]?.body))
+      expect(body.defaultPurchasePricePaisa).toBe('1250')
+      expect(body.defaultSellingPricePaisa).toBe('1875')
+      expect(body.baseUnitId).toBe('unit-new')
+      expect(body.categoryId).toBe('category-new')
+    })
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['products'] })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('keeps the create dialog open and shows server validation errors', async () => {
+    installFetch({ productError: 'Barcode already exists.' })
+    renderForm()
+
+    fireEvent.change(await screen.findByLabelText('Product Name'), {
+      target: { value: 'Hammer' },
+    })
+    fireEvent.change(screen.getByLabelText('Purchase Price'), {
+      target: { value: '12.50' },
+    })
+    fireEvent.change(screen.getByLabelText('Selling Price'), {
+      target: { value: '18.75' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Category' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Hardware' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unit' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Piece/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }))
+
+    expect(await screen.findByText('Barcode already exists.')).toBeInTheDocument()
+    expect(
+      screen.getByRole('dialog', { name: 'Add Product' }),
+    ).toBeInTheDocument()
+  })
+
+  it('edits without opening stock and retains archived current masters', async () => {
+    installFetch()
+    renderForm({ mode: 'edit', product: archivedProduct() })
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Edit Product' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('Opening Stock')).not.toBeInTheDocument()
+    expect(screen.getByText('Current Stock')).toBeInTheDocument()
+    expect(screen.getByText('7.25')).toBeInTheDocument()
+
+    expect(screen.getByRole('button', { name: 'Category' })).toHaveTextContent(
+      'Old Category (Inactive)',
+    )
+    expect(screen.getByRole('button', { name: 'Unit' })).toHaveTextContent(
+      'Old Unit (Inactive)',
+    )
+  })
+
+  it('hides Bangla helpers in Full English mode', async () => {
+    installFetch()
+    renderForm({ languageMode: 'en' })
+
+    expect(await screen.findByText('Product Name')).toBeInTheDocument()
+    expect(screen.queryByText('পণ্যের নাম')).not.toBeInTheDocument()
+  })
+
+  it('hides English labels in Full Bangla mode', async () => {
+    installFetch()
+    renderForm({ languageMode: 'bn' })
+
+    expect(await screen.findByText('পণ্যের নাম')).toBeInTheDocument()
+    expect(screen.queryByText('Product Name')).not.toBeInTheDocument()
+  })
+})
