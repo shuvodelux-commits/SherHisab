@@ -15,6 +15,7 @@ import type { ProductListItemDto } from './product-types'
 
 interface ProductColumnsOptions {
   onSetStatus: (product: ProductListItemDto, isActive: boolean) => void
+  onEdit: (product: ProductListItemDto) => void
 }
 
 function money(value: string) {
@@ -23,6 +24,7 @@ function money(value: string) {
 
 export function createProductColumns({
   onSetStatus,
+  onEdit,
 }: ProductColumnsOptions): ColumnDef<ProductListItemDto, unknown>[] {
   return [
     {
@@ -127,7 +129,9 @@ export function createProductColumns({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem>View</DropdownMenuItem>
-              <DropdownMenuItem>Edit</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onEdit(product)}>
+                Edit
+              </DropdownMenuItem>
               <DropdownMenuItem>Adjust Stock</DropdownMenuItem>
               <DropdownMenuItem>View Lots</DropdownMenuItem>
               <DropdownMenuSeparator />
