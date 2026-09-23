@@ -3,13 +3,14 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
-  type RowData,
 } from '@tanstack/react-table'
 
-declare module '@tanstack/react-table' {
-  interface ColumnMeta<TData extends RowData, TValue> {
-    align?: 'left' | 'center' | 'right'
-  }
+type DataTableColumnMeta = {
+  align?: 'left' | 'center' | 'right'
+}
+
+function columnAlignment(meta: unknown): DataTableColumnMeta['align'] {
+  return (meta as DataTableColumnMeta | undefined)?.align
 }
 
 interface DataTableProps<TData> {
@@ -37,7 +38,7 @@ export function DataTable<TData>({
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <th
-                  data-align={header.column.columnDef.meta?.align}
+                  data-align={columnAlignment(header.column.columnDef.meta)}
                   key={header.id}
                   scope="col"
                 >
@@ -59,7 +60,7 @@ export function DataTable<TData>({
               <tr key={row.id}>
                 {row.getVisibleCells().map((cell) => (
                   <td
-                    data-align={cell.column.columnDef.meta?.align}
+                    data-align={columnAlignment(cell.column.columnDef.meta)}
                     key={cell.id}
                   >
                     {flexRender(
