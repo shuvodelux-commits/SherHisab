@@ -869,6 +869,77 @@ Do not display shortcuts that are not actually implemented.
 - Tooltip language follows the active SherHisab language mode.
 - For touch/mobile workflows, essential understanding must remain available without depending only on hover behavior.
 
+# 17C. Toggle Buttons
+
+Use the official shadcn `Toggle` component for a single two-state button that can be on or off.
+
+Reference: https://ui.shadcn.com/docs/components/base/toggle
+
+The official component supports default and outline variants, text and icon forms, sizes, and disabled state.
+
+## Use Toggle For
+
+Use `Toggle` when the control behaves like a compact button whose pressed/unpressed state changes an immediate view or tool mode.
+
+Good SherHisab examples:
+
+- Show low-stock only
+- Show archived/inactive records in a toolbar
+- Pin/favorite a record when that state is represented as a button
+- Compact table view on/off
+- Show extra table detail on/off
+- Lock/unlock an optional editing mode where the state is immediately visible
+- Small toolbar mode such as scan mode, focus mode, or preview mode when the feature genuinely exists
+
+## Do Not Use Toggle For Every Boolean
+
+Choose the control by meaning:
+
+| Need | Component |
+| --- | --- |
+| One button-like on/off mode | `Toggle` |
+| Several related selectable modes/options | `ToggleGroup` |
+| Persistent setting such as “Allow negative stock” | `Switch` |
+| Form acknowledgement / independent option | `Checkbox` |
+| Choose exactly one option from a small set | `RadioGroup` |
+| Perform an action once | `Button` |
+
+Examples:
+
+```text
+Show inactive        → Toggle
+Compact view         → Toggle
+Allow negative stock → Switch
+Include VAT          → Checkbox when part of a form
+View: List / Grid    → ToggleGroup
+Save                 → Button
+```
+
+## Icon and Text Rules
+
+- Prefer icon + short text when the state is not obvious from the icon alone.
+- Icon-only Toggle is appropriate for universally recognizable compact toolbar modes.
+- Icon-only Toggle must have an accessible name and follow the SherHisab Tooltip rule.
+- Do not add decorative icons that do not clarify the state.
+- Use the configured project icon library and the official shadcn icon sizing conventions.
+
+## State Rules
+
+- The pressed state must be visually obvious without relying only on color.
+- Use the official pressed/unpressed state styling rather than custom page-specific CSS.
+- Keep the state controlled when it affects application/filter state that must stay synchronized with URL/query/table state.
+- If a toolbar Toggle changes filtering, preserve that state consistently while paging/sorting where appropriate.
+- If the state is persisted as a user/tenant preference, treat it as a settings decision and prefer `Switch` unless button-like interaction is genuinely better.
+- Disabled Toggle must expose why it is unavailable when that reason is useful; use the established Tooltip pattern.
+- Do not use Toggle as a confirmation control for destructive or financial actions.
+
+## Variant and Size
+
+- Use the standard variant for normal toolbar modes.
+- Use `variant="outline"` when the surrounding toolbar/control group needs stronger separation.
+- Use the smallest size that remains readable and touch-accessible for the context.
+- Keep Toggle height aligned with neighboring SherHisab toolbar controls.
+
 # 18. Inputs, Selects, Comboboxes
 
 Recommended desktop height:
