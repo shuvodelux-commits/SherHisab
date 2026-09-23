@@ -594,32 +594,110 @@ Rules:
 
 # 16. Tabs
 
-Tabs must be consistent across:
+Use the official shadcn `Tabs` component for module-internal navigation.
+
+Reference: https://ui.shadcn.com/docs/components/base/tabs
+
+Inside SherHisab modules, use the line style by default:
+
+```tsx
+<TabsList variant="line">
+  ...
+</TabsList>
+```
+
+This is the standard for module sections such as:
 
 - Sales
 - Purchases
 - Customers
 - Suppliers
-- Bank
-- Expenses
-- Finance
+- Inventory
+- Products
+- Accounts / Finance
 - Reports
 - Settings
 
-Recommended:
+Examples:
 
 ```text
-height                38–40px
-label                  13px / 500
-Bangla helper          9–10px / 400
-active text            blue
-active indicator       1–2px blue underline
-inactive text          muted neutral
+Sales
+Overview | Invoices | Returns | Payments
+
+Products
+Products | Categories | Units | Settings
+
+Customers
+Overview | Ledger | Payments | Purchase History
 ```
 
-Do not use large filled tabs unless the interaction is truly a segmented control.
+## Why Line Tabs Are the Default
 
----
+Line tabs keep ERP screens:
+
+- compact;
+- visually light;
+- easy to scan;
+- less card-like;
+- consistent with the Tailark/SherHisab direction.
+
+They should read as section navigation, not as large action buttons.
+
+## Use the Official Composition
+
+- `Tabs`
+- `TabsList variant="line"`
+- `TabsTrigger`
+- `TabsContent`
+
+Every `TabsTrigger` must be inside `TabsList`.
+
+## Visual Rules
+
+Recommended module-tab treatment:
+
+```text
+height                36–40px
+label                 13px / 500
+Bangla helper         9–10px / 400 when used
+active text           foreground / primary emphasis
+active indicator      thin line
+inactive text         muted foreground
+surface               transparent / low-noise
+```
+
+Do not add heavy filled backgrounds, cards, shadows, or large rounded containers around ordinary module tabs.
+
+## When Not to Use Line Tabs
+
+Use another control when the interaction is not module navigation:
+
+| Interaction | Preferred component |
+| --- | --- |
+| Module/subsection navigation | `TabsList variant="line"` |
+| 2–5 compact mode choices | `ToggleGroup` |
+| One on/off mode | `Toggle` |
+| Persistent boolean setting | `Switch` |
+| Step-by-step workflow | Dedicated step/progress pattern |
+| Page hierarchy | Breadcrumb |
+| Primary navigation | Sidebar / Navigation |
+
+Use filled/default Tabs only when the UI genuinely behaves like a segmented surface and line tabs would reduce clarity.
+
+## State and Routing
+
+- Use route-backed tabs when each section should have a stable URL.
+- Preserve the active tab on refresh/navigation when the module benefits from it.
+- Do not keep important module state only in ephemeral local state if users need deep links/back-button behavior.
+- Lazy-load heavy tab content where useful, but avoid flashes or resetting unsaved work when switching tabs.
+- If a tab contains an error/required action, make that state visible without forcing the user to inspect every tab.
+
+## Responsive Rules
+
+- Keep the line-tab row compact on desktop.
+- Allow horizontal scrolling on narrow screens when hiding tabs would remove important destinations.
+- Do not squeeze many labels into unreadable widths.
+- Use concise labels first; avoid converting normal module tabs into a select unless mobile constraints truly require it.
 
 # 17. Buttons
 
