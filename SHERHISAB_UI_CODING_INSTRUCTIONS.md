@@ -940,37 +940,180 @@ Save                 → Button
 - Use the smallest size that remains readable and touch-accessible for the context.
 - Keep Toggle height aligned with neighboring SherHisab toolbar controls.
 
-# 18. Inputs, Selects, Comboboxes
+# 18. Input and Input Group
 
-Recommended desktop height:
+Use the official shadcn `Input` as the base text-entry control.
+
+References:
+
+- https://ui.shadcn.com/docs/components/base/input
+- https://ui.shadcn.com/docs/components/base/input-group
+
+Prefer `InputGroup` whenever useful information, context, or an action can be communicated inside the input without cluttering the surrounding form.
+
+## Plain Input
+
+Use plain `Input` when the field is simple and needs no inline context.
+
+Good examples:
+
+- Product Name
+- Customer Name
+- Address line
+- Notes title
+- Reference text
+- Simple email field
+- Simple phone field when no prefix/action is needed
+
+Use `Field`, `FieldLabel`, and `FieldDescription` for labels/help text. Use `FieldGroup` to organize forms.
+
+For invalid state:
+
+- `data-invalid` on `Field`;
+- `aria-invalid` on the `Input`.
+
+For disabled state:
+
+- `data-disabled` on `Field`;
+- `disabled` on the `Input`.
+
+Do not remove a meaningful visible/accessibility label simply because the input contains an icon or placeholder.
+
+## Prefer InputGroup for Informative Inputs
+
+Use `InputGroup` when the field benefits from any of:
+
+- leading icon;
+- trailing icon;
+- currency prefix;
+- percentage/unit suffix;
+- inline action;
+- clear/copy/scan/show-password action;
+- keyboard shortcut;
+- result count;
+- validation/status affordance;
+- loading/spinner state;
+- directly related dropdown;
+- character count/help text;
+- block-start/block-end helper content.
+
+Use the official composition:
 
 ```text
-34–36px
+InputGroup
+├── InputGroupInput or InputGroupTextarea
+├── InputGroupAddon
+├── InputGroupButton
+└── InputGroupText
 ```
 
-Use shadcn primitives where possible.
+Inside `InputGroup`, use `InputGroupInput` or `InputGroupTextarea` rather than a raw `Input` or `Textarea`.
 
-Inputs should have:
+For proper focus behavior, keep `InputGroupAddon` after the input/textarea in DOM order and use its `align` prop for visual placement.
 
-- 1px border
-- 6px radius
-- subtle blue focus ring
-- 13px text
+## SherHisab InputGroup Examples
 
-Use searchable comboboxes for:
+| Business field | InputGroup treatment |
+| --- | --- |
+| Product search | Search icon + input + optional result count / clear action |
+| POS product search | Search/barcode icon + input + shortcut hint or scan action |
+| Customer search | Search icon + input + optional clear action |
+| Purchase/Sale amount | `৳` prefix when the currency context helps |
+| Discount percent | Input + `%` suffix |
+| Quantity | Input + current unit suffix such as pcs/kg when unit is fixed for that field |
+| Barcode | Barcode icon + input + scan action where scanning exists |
+| Phone | Phone icon or a fixed prefix only when the stored/entered format makes it useful |
+| Website/reference URL | protocol/prefix text where relevant |
+| Password | input + show/hide password action |
+| Global search | search icon + input + keyboard shortcut such as `/` or `Ctrl+K` when actually implemented |
+| Remote search | search icon + input + inline Spinner while fetching |
+| Generated/reference value | input + Copy button when copying is a common task |
+| Textarea with limit | textarea + character count at block end |
 
-- products
-- customers
-- suppliers
-- vendors
-- categories with many values
-- bank accounts
-- finance persons
+## Inline Text / Units
 
-Avoid huge select controls.
+Use `InputGroupText` for concise contextual text such as:
 
----
+```text
+৳
+%
+pcs
+kg
+cm
+BDT
+https://
+.com
+12 results
+120 characters left
+```
 
+Do not repeat information that is already obvious from the visible label.
+
+For financial entry, the prefix/suffix is presentation only; parsing and storage must still use the canonical numeric value.
+
+## InputGroup Buttons
+
+Use `InputGroupButton` for actions that operate directly on the input value:
+
+- clear;
+- copy;
+- scan barcode;
+- show/hide password;
+- search;
+- refresh lookup;
+- open directly related dropdown.
+
+Icon-only InputGroup buttons must follow the SherHisab Tooltip + accessible-name rule.
+
+Do not place unrelated actions inside an InputGroup.
+
+## InputGroup Loading
+
+Use an inline Spinner when the input itself is actively performing a lookup/process, for example:
+
+- Searching…
+- Checking…
+- Loading suggestions…
+- Refreshing…
+
+For a form submission, keep the Spinner on the submit Button instead of moving all pending feedback into the input.
+
+## InputGroup vs ButtonGroup
+
+Use `InputGroup` when addons/actions are part of one input surface.
+
+Use `ButtonGroup` when a separate Button and Input are adjacent controls but remain distinct actions/surfaces.
+
+Example:
+
+```text
+Search icon inside field + clear button → InputGroup
+Input field + separate Search button    → ButtonGroup
+```
+
+## Input Density
+
+Normal SherHisab desktop Input/InputGroup height should remain aligned with adjacent Button, Combobox, Select, and Date Picker controls, normally around 34–36px.
+
+Keep:
+
+- 13px input text;
+- 1px semantic border;
+- shared 6px control radius;
+- semantic focus ring;
+- consistent disabled/invalid states.
+
+Do not invent per-page input dimensions.
+
+## Do Not Overdecorate
+
+InputGroup is preferred for informative UI, but every field does not need an icon.
+
+Use plain `Input` when an addon would merely repeat the label or add visual noise.
+
+The goal is:
+
+> more context inside the control when useful, fewer detached helper elements, and no decorative clutter.
 
 # 18A. Official shadcn Component Standard
 
