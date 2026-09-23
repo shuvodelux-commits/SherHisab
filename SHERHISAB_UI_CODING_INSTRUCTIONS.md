@@ -1018,6 +1018,90 @@ Save                 → Button
 - Use the smallest size that remains readable and touch-accessible for the context.
 - Keep Toggle height aligned with neighboring SherHisab toolbar controls.
 
+# 17D. Keyboard Shortcut Labels with Kbd
+
+Use the official shadcn `Kbd` component wherever a real keyboard shortcut improves speed, discoverability, or understanding.
+
+Reference: https://ui.shadcn.com/docs/components/base/kbd
+
+Use:
+
+- `Kbd` for a single key;
+- `KbdGroup` for a key combination or sequence.
+
+Examples:
+
+```text
+/               → focus product/global search
+Ctrl + K        → open command/search palette
+Enter           → confirm the currently focused quick action where supported
+Esc             → close dialog/popover or cancel the current lightweight mode
+Ctrl + S        → save form when explicitly implemented
+F2              → edit selected row only if SherHisab actually implements it
+```
+
+## Good Places to Use Kbd
+
+- Tooltip content for icon-only or compact actions;
+- InputGroup addon for search shortcuts;
+- Command/search palette hints;
+- POS keyboard-help areas;
+- button labels when a shortcut is an important part of the workflow;
+- menus/dropdown items that expose implemented shortcuts;
+- dialog/helper text for common keyboard actions;
+- onboarding/help content for power-user workflows.
+
+Examples:
+
+```text
+Search products        [/]
+Save changes           [Ctrl] + [S]
+Open command palette   [Ctrl] + [K]
+Close                  [Esc]
+```
+
+## InputGroup + Kbd
+
+For search fields, a shortcut hint may appear inside `InputGroupAddon` using `Kbd`.
+
+Example:
+
+```text
+[search icon] Search products…                         [/]
+```
+
+Only show the hint while it is useful. On very narrow/mobile layouts, hide shortcut-only decoration when it competes with the actual input.
+
+## Tooltip + Kbd
+
+When an icon-only control has a shortcut, the Tooltip may show both the action label and the shortcut:
+
+```text
+Refresh data        [R]
+Search products     [/]
+Save changes        [Ctrl] + [S]
+```
+
+The tooltip must still explain the action; do not show only the key combination.
+
+## Menu + Kbd
+
+Use `Kbd` in DropdownMenu/Command items when exposing a real implemented shortcut improves discoverability.
+
+Do not create fake shortcut labels just to make menus look more advanced.
+
+## Rules
+
+- Never display a keyboard shortcut that is not implemented.
+- Shortcut behavior must not conflict with normal text entry, browser behavior, accessibility, or operating-system conventions.
+- Do not hijack common browser shortcuts unless there is a strong, tested product reason.
+- Keep shortcut labels secondary and visually quiet; they must not compete with the primary action label.
+- Use `KbdGroup` for combinations such as `Ctrl + K`, not plain text like `Ctrl+K` when rendered as UI.
+- Prefer platform-appropriate modifier labels where the application supports platform-specific shortcuts.
+- Essential workflows must remain fully usable without keyboard shortcuts.
+- Do not use Kbd as decorative metadata.
+- Keep Kbd styling at the official shadcn size/treatment unless a shared SherHisab variant is explicitly needed.
+
 # 18. Input and Input Group
 
 Use the official shadcn `Input` as the base text-entry control.
