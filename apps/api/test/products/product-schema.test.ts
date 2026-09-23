@@ -52,7 +52,7 @@ describe.skipIf(!hasDatabase)('product master schema', () => {
     )
 
     const row = await getPool().query<{ qty: string }>(
-      `SELECT minimum_stock_base_qty::text AS qty
+      `SELECT trim_scale(minimum_stock_base_qty)::text AS qty
        FROM product_variants WHERE id = $1`,
       [variant.rows[0]!.id],
     )
