@@ -1102,6 +1102,122 @@ Do not create fake shortcut labels just to make menus look more advanced.
 - Do not use Kbd as decorative metadata.
 - Keep Kbd styling at the official shadcn size/treatment unless a shared SherHisab variant is explicitly needed.
 
+# 17E. Switches for Persistent Boolean Settings
+
+Use the official shadcn `Switch` component for persistent on/off settings and configuration choices.
+
+Reference: https://ui.shadcn.com/docs/components/base/switch
+
+Use `Switch` when the user is enabling or disabling a setting that remains in effect until changed again.
+
+Good SherHisab examples:
+
+- Allow negative stock
+- Enable low-stock alerts
+- Enable batch tracking for a supported business mode
+- Enable automatic invoice printing
+- Require customer for due sales
+- Enable barcode scanning helpers
+- Show Bangla helper text
+- Enable dark mode when presented as a settings choice
+- Enable delivery notifications
+- Allow sale price override
+- Enable tenant/business feature flags exposed to the user
+- Enable advanced product features when that setting controls availability across the module
+
+## Switch vs Other Controls
+
+Choose by meaning:
+
+| Need | Component |
+| --- | --- |
+| Persistent on/off setting | `Switch` |
+| One button-like toolbar mode | `Toggle` |
+| Several visible modes/options | `ToggleGroup` |
+| Independent form option / acknowledgement | `Checkbox` |
+| Exactly one choice from several visible options | `RadioGroup` |
+| One-time action | `Button` |
+
+Examples:
+
+```text
+Allow negative stock → Switch
+Enable low-stock alerts → Switch
+Show inactive now → Toggle
+Include VAT on this form → Checkbox
+View: List / Grid → ToggleGroup
+Save settings → Button
+```
+
+## Official Composition
+
+Prefer combining Switch with the shared shadcn `Field` primitives:
+
+- `Field`
+- `FieldContent`
+- `FieldLabel`
+- `FieldDescription`
+- `Switch`
+
+Use `Field orientation="horizontal"` for normal settings rows.
+
+The label should explain the setting itself; the description should explain the effect when needed.
+
+Example structure:
+
+```text
+Allow negative stock                         [Switch]
+Permit sales when available stock is below zero.
+```
+
+## Choice Card Pattern
+
+Use the official Switch choice-card pattern only when the setting is important enough to benefit from a larger clickable surface and short description.
+
+Good examples:
+
+- Enable advanced inventory tracking
+- Enable customer due sales
+- Enable delivery integration
+
+Do not turn ordinary settings into large cards by default. Normal compact horizontal settings rows remain preferred for dense ERP screens.
+
+## State Rules
+
+- Use controlled state when the value comes from persisted application/tenant/user settings.
+- Persist the value through the appropriate mutation rather than keeping it only in local UI state.
+- If changing the setting has a meaningful downstream effect, show concise helper text before the change.
+- If the setting is dangerous or has financial/stock implications, do not rely only on the Switch label; explain the consequence clearly.
+- A Switch change should not silently trigger irreversible destructive work.
+- If enabling/disabling requires confirmation, use the appropriate AlertDialog after interaction.
+
+## Disabled and Invalid
+
+Follow the official shadcn Field state pattern:
+
+- disabled: `disabled` on Switch + `data-disabled` on Field;
+- invalid: `aria-invalid` on Switch + `data-invalid` on Field.
+
+If a disabled Switch needs explanation, use the established Tooltip pattern.
+
+## Size
+
+Use the official Switch size options.
+
+- default → normal settings/forms;
+- small → dense settings/table contexts when readability remains good.
+
+Do not invent arbitrary switch sizes per page.
+
+## Accessibility and Labeling
+
+- Every Switch must have a clear accessible label.
+- Do not rely on On/Off color alone to explain meaning.
+- Prefer action-oriented labels that describe the enabled state, such as `Enable low-stock alerts`, rather than ambiguous labels like `Alerts`.
+- Keep Switch and label aligned and clickable according to the official component pattern.
+- Preserve keyboard interaction and focus states.
+- Do not use icon-only unlabeled switches.
+
 # 18. Input and Input Group
 
 Use the official shadcn `Input` as the base text-entry control.
