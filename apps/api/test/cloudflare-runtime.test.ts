@@ -15,6 +15,7 @@ const pgMock = vi.hoisted(() => ({
   clientQuery: vi.fn(async () => ({
     rows: [] as Array<Record<string, unknown>>,
   })),
+  clientEnd: vi.fn(async () => {}),
 }))
 
 vi.mock('pg', () => {
@@ -37,7 +38,7 @@ vi.mock('pg', () => {
 
     connect = vi.fn(async () => {})
     query = pgMock.clientQuery
-    end = vi.fn(async () => {})
+    end = pgMock.clientEnd
   }
 
   return { Client, Pool }
@@ -49,6 +50,7 @@ beforeEach(() => {
   pgMock.clientConfigs.length = 0
   pgMock.poolQuery.mockClear()
   pgMock.clientQuery.mockClear()
+  pgMock.clientEnd.mockClear()
   vi.resetModules()
 })
 
@@ -141,6 +143,7 @@ describe('Cloudflare runtime', () => {
       { connectionString },
       { connectionString },
     ])
+    expect(pgMock.clientEnd).toHaveBeenCalledTimes(2)
   })
 
   it('uses the request-scoped Hyperdrive client for protected routes', async () => {
@@ -192,6 +195,7 @@ describe('Cloudflare runtime', () => {
     expect(pgMock.clientConfigs).toEqual([
       { connectionString },
     ])
+    expect(pgMock.clientEnd).toHaveBeenCalledTimes(1)
   })
 
 
