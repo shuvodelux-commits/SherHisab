@@ -135,6 +135,10 @@ const productSelect = `
       WHERE pv_count.tenant_id = p.tenant_id
         AND pv_count.product_id = p.id
         AND pv_count.is_active
+        AND (
+          NOT p.variants_enabled
+          OR NOT pv_count.is_default
+        )
     ) AS variant_count,
     dv.default_purchase_price_paisa::text AS default_purchase_price_paisa,
     dv.default_selling_price_paisa::text AS default_selling_price_paisa,
