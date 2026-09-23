@@ -1189,6 +1189,95 @@ Rules:
 - Preserve keyboard navigation, focus states, labels, and mobile usability from the official shadcn pattern.
 
 
+# 18B.1 Select vs Combobox Decision Rule
+
+Use the official shadcn `Select` when the user chooses from a known option list and does **not** need to search.
+
+Reference: https://ui.shadcn.com/docs/components/base/select
+
+Use the official shadcn `Combobox` when the user needs to search, filter, clear, group, or select from a larger/dynamic entity list.
+
+Decision rule:
+
+```text
+Need to search/filter the options?
+├─ No  → shadcn Select
+└─ Yes → shadcn Combobox
+```
+
+## Use shadcn Select For
+
+Good SherHisab examples:
+
+- Status: Active / Inactive
+- Payment method when presented as a dropdown
+- Language
+- Theme preference
+- Small fixed Unit list when search is unnecessary
+- Small Category list when search is unnecessary
+- Tracking mode: Simple / Lot / Batch
+- Order status
+- Tax/VAT mode
+- Small static warehouse/location list
+- Rows per page
+- Other short, known option sets
+
+Use the official composition:
+
+- `Select`
+- `SelectTrigger`
+- `SelectValue`
+- `SelectContent`
+- `SelectGroup`
+- `SelectItem`
+- `SelectLabel` when grouping needs a visible label
+- `SelectSeparator` when it clarifies grouped options
+
+Do not render `SelectItem` directly without the appropriate `SelectGroup`.
+
+## Use shadcn Combobox For
+
+Use Combobox when search materially helps selection, especially:
+
+- Product
+- Customer
+- Supplier
+- Category when the list is large
+- Brand when the list is large
+- Unit when there are many/custom units
+- Bank/account/entity lookups
+- Warehouse/location when there are many entries
+- POS customer/product lookup
+- Any large or remotely fetched entity list
+
+If the choice is optional and frequently cleared, use the Combobox clear-button pattern.
+
+If the user may select more than one value, use the multiple Combobox pattern.
+
+## Select vs Other Choice Controls
+
+Do not use Select automatically for every choice.
+
+| Situation | Preferred control |
+| --- | --- |
+| Small dropdown, no search needed | `Select` |
+| Searchable dropdown/entity lookup | `Combobox` |
+| 2–5 options that benefit from being visible at once | `ToggleGroup` or `RadioGroup` depending semantics |
+| One persistent on/off setting | `Switch` |
+| Independent form option / acknowledgement | `Checkbox` |
+| One button-like on/off tool mode | `Toggle` |
+
+## Rules
+
+- Do not use browser-default `<select>` for SherHisab application UI.
+- Do not use a Combobox for a tiny fixed list when search adds no value.
+- Do not use Select for a long entity list that forces users to scroll excessively.
+- Keep Select height, radius, border, focus ring, and typography aligned with adjacent Input/Button/Combobox controls.
+- Use semantic shadcn tokens and official component states rather than page-specific styling.
+- Preserve keyboard navigation and accessibility behavior from the official component.
+- For forms, connect invalid/disabled states through the shared `Field` pattern.
+- For large remote datasets, use Combobox with server-backed/debounced search rather than Select.
+
 # 18C. Combobox Selection Rules
 
 Use the official shadcn Combobox as the default searchable/selectable entity control.
@@ -1224,7 +1313,7 @@ Rules:
 - Do not use multi-select where the domain only permits one value.
 - Keep normal desktop combobox height aligned with adjacent Input/Button controls.
 - For very large remote datasets, use server-backed search/debouncing rather than downloading the entire dataset into the combobox.
-- Native Select is allowed only for very small, static, non-searchable option sets where a native select is intentionally simpler. It must not be used merely because it is faster to code.
+- For small static non-searchable option sets, use the official shadcn `Select` instead of a browser-default select.
 
 # 19. Forms
 
