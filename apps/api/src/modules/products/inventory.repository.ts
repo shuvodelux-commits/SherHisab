@@ -25,8 +25,60 @@ export interface CreateInventoryMovementInput {
   createdByUserId?: string | null
 }
 
+export interface LockedVariantInventoryDefaults {
+  id: string
+  defaultPurchasePricePaisa: string
+  defaultSellingPricePaisa: string
+}
+
+export interface FifoInventoryLot {
+  id: string
+  receivedOn: string
+  remainingBaseQty: string
+  unitCostPaisa: string
+  status: 'ACTIVE' | 'DEPLETED'
+}
+
+export interface InventoryLotRecord extends FifoInventoryLot {
+  sourceType: 'OPENING' | 'ADJUSTMENT'
+  originalBaseQty: string
+  lotCode: string | null
+  batchCode: string | null
+  expiresOn: string | null
+}
+
 export class InventoryRepository {
   constructor(private readonly db: DatabaseClient) {}
+
+  async lockActiveVariant(
+    tenantId: string,
+    variantId: string,
+  ): Promise<LockedVariantInventoryDefaults | null> {
+    const result = await this.db.query<{
+      id: string
+      default_purchase_price_paisa: string
+      default_selling_price_paisa: string
+    }>(
+      `SELECT id,
+              default_purchase_price_paisa::text,
+              default_selling_price_paisa::text
+       FROM product_variants
+       WHERE tenant_id = $1
+         AND id = $2
+         AND is_active
+       FOR UPDATE`,
+      [tenantId, variantId],
+    )
+
+    const row = result.rows[0]
+    return row
+      ? {
+          id: row.id,
+          defaultPurchasePricePaisa: row.default_purchase_price_paisa,
+          defaultSellingPricePaisa: row.default_selling_price_paisa,
+        }
+      : null
+  }
 
   async createLot(input: CreateInventoryLotInput): Promise<{ id: string }> {
     const result = await this.db.query<{ id: string }>(
@@ -142,5 +194,106 @@ export class InventoryRepository {
     )
 
     return result.rows[0]?.balance ?? '0'
+  }
+
+  async listFifoLotsForUpdate(
+    tenantId: string,
+    variantId: string,
+  ): Promise<FifoInventoryLot[]> {
+    const result = await this.db.query<{
+      id: string
+      received_on: string
+      remaining_base_qty: string
+      unit_cost_paisa: string
+      status: 'ACTIVE' | 'DEPLETED'
+    }>(
+      `SELECT id,
+              received_on::text,
+              trim_scale(remaining_base_qty)::text AS remaining_base_qty,
+              unit_cost_paisa::text,
+              status
+       FROM inventory_lots
+       WHERE tenant_id = $1
+         AND variant_id = $2
+         AND remaining_base_qty > 0
+         AND status = 'ACTIVE'
+       ORDER BY received_on ASC, id ASC
+       FOR UPDATE`,
+      [tenantId, variantId],
+    )
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      receivedOn: row.received_on,
+      remainingBaseQty: row.remaining_base_qty,
+      unitCostPaisa: row.unit_cost_paisa,
+      status: row.status,
+    }))
+  }
+
+  async setLotRemainingQuantity(input: {
+    tenantId: string
+    lotId: string
+    remainingBaseQty: string
+  }): Promise<void> {
+    await this.db.query(
+      `UPDATE inventory_lots
+       SET remaining_base_qty = $3,
+           status = CASE
+             WHEN $3::numeric = 0 THEN 'DEPLETED'
+             ELSE 'ACTIVE'
+           END,
+           updated_at = NOW()
+       WHERE tenant_id = $1
+         AND id = $2`,
+      [input.tenantId, input.lotId, input.remainingBaseQty],
+    )
+  }
+
+  async listLots(
+    tenantId: string,
+    variantId: string,
+  ): Promise<InventoryLotRecord[]> {
+    const result = await this.db.query<{
+      id: string
+      received_on: string
+      source_type: 'OPENING' | 'ADJUSTMENT'
+      original_base_qty: string
+      remaining_base_qty: string
+      unit_cost_paisa: string
+      status: 'ACTIVE' | 'DEPLETED'
+      lot_code: string | null
+      batch_code: string | null
+      expires_on: string | null
+    }>(
+      `SELECT id,
+              received_on::text,
+              source_type,
+              trim_scale(original_base_qty)::text AS original_base_qty,
+              trim_scale(remaining_base_qty)::text AS remaining_base_qty,
+              unit_cost_paisa::text,
+              status,
+              lot_code,
+              batch_code,
+              expires_on::text
+       FROM inventory_lots
+       WHERE tenant_id = $1
+         AND variant_id = $2
+       ORDER BY received_on ASC, id ASC`,
+      [tenantId, variantId],
+    )
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      receivedOn: row.received_on,
+      sourceType: row.source_type,
+      originalBaseQty: row.original_base_qty,
+      remainingBaseQty: row.remaining_base_qty,
+      unitCostPaisa: row.unit_cost_paisa,
+      status: row.status,
+      lotCode: row.lot_code,
+      batchCode: row.batch_code,
+      expiresOn: row.expires_on,
+    }))
   }
 }
