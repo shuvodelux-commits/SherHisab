@@ -590,21 +590,41 @@ export class ProductMasterService {
         )
       }
 
-      if (
-        await this.repository.hasInventoryHistory(
-          this.tenantId,
-          current.defaultVariantId,
-        )
-      ) {
-        throw new ProductValidationError(
-          'Base unit cannot be changed after inventory history exists',
-        )
-      }
     }
 
     try {
       await withDatabaseTransaction(this.database, async (database) => {
         const repository = new ProductMasterRepository(database)
+
+        if (baseUnitChanged) {
+          const lockedProduct = await repository.lockProductForAdvanced(
+            this.tenantId,
+            productId,
+          )
+          if (!lockedProduct) {
+            throw new ProductNotFoundError('Product not found.')
+          }
+
+          const lockedVariant = await repository.lockDefaultVariant(
+            this.tenantId,
+            current.defaultVariantId,
+          )
+          if (!lockedVariant) {
+            throw new ProductNotFoundError('Default Product variant not found.')
+          }
+
+          if (
+            await repository.hasInventoryHistory(
+              this.tenantId,
+              current.defaultVariantId,
+            )
+          ) {
+            throw new ProductValidationError(
+              'Base unit cannot be changed after inventory history exists',
+            )
+          }
+        }
+
         const updated = await repository.updateProductIdentity(
           this.tenantId,
           productId,

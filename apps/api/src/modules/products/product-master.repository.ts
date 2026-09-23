@@ -587,6 +587,23 @@ export class ProductMasterRepository {
     return (result.rowCount ?? 0) > 0
   }
 
+  async lockDefaultVariant(
+    tenantId: string,
+    variantId: string,
+  ): Promise<boolean> {
+    const result = await this.db.query<{ id: string }>(
+      `SELECT id
+       FROM product_variants
+       WHERE tenant_id = $1
+         AND id = $2
+         AND is_default
+       FOR UPDATE`,
+      [tenantId, variantId],
+    )
+
+    return Boolean(result.rows[0])
+  }
+
   async hasInventoryHistory(
     tenantId: string,
     variantId: string,
