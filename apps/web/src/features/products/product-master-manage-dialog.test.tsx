@@ -139,7 +139,7 @@ describe('ProductMasterManageDialog', () => {
     expect(
       await screen.findByRole('dialog', { name: 'Product Settings' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Hardware')).toBeInTheDocument()
+    expect(await screen.findByText('Hardware')).toBeInTheDocument()
     expect(screen.getByText('Pipe')).toBeInTheDocument()
     expect(screen.getByText('Inactive')).toBeInTheDocument()
 
