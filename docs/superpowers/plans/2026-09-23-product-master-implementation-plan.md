@@ -830,7 +830,7 @@ Map PostgreSQL unique violations (`23505`) into `ProductConflictError` in the se
 
 - [ ] **Step 7: Implement tenant-bound master service**
 
-`ProductMasterService` constructor requires `tenantId` and a repository. Service methods trim names/symbols, verify IDs belong to the trusted tenant, and archive via `is_active = FALSE` rather than delete.
+`ProductMasterService` constructor is `new ProductMasterService(tenantId, database)`. It may create a `ProductMasterRepository(database)` for ordinary reads. Write methods create transaction-scoped repositories after `withDatabaseTransaction(database, ...)`. Service methods trim names/symbols, verify IDs belong to the trusted tenant, and archive via `is_active = FALSE` rather than delete.
 
 - [ ] **Step 8: Run master tests and verify GREEN**
 
@@ -921,7 +921,7 @@ Cover these exact behaviors:
 - editing a Product may retain its currently assigned archived Category/Unit, but cannot newly assign a different inactive Category/Unit;
 - base-unit change succeeds before inventory history;
 - base-unit change rejects after opening/adjustment history exists;
-- failure injected after Product insert rolls back Product, Variant, Unit mapping, lot, and movement.
+- a duplicate-barcode failure that occurs after Product insertion rolls back Product, Variant, Unit mapping, lot, and movement.
 
 For rollback proof, pre-create a conflicting active barcode and then create another Product using the same barcode. The duplicate barcode must fail after Product/default-Variant/base-Unit writes have begun, and the transaction must roll all of those writes back. Do not rely on a mock to prove database rollback.
 
@@ -938,16 +938,16 @@ Expected: FAIL because Product lifecycle methods do not exist.
 Repository methods must be explicit and tenant-scoped:
 
 ```ts
-insertProduct(client, tenantId, fields)
-insertDefaultVariant(client, tenantId, productId, fields)
-upsertBaseProductUnit(client, tenantId, productId, unitId)
-insertPrimaryBarcode(client, tenantId, variantId, unitId, barcode)
+insertProduct(tenantId, fields)
+insertDefaultVariant(tenantId, productId, fields)
+upsertBaseProductUnit(tenantId, productId, unitId)
+insertPrimaryBarcode(tenantId, variantId, unitId, barcode)
 findProductDetail(tenantId, productId)
 listProducts(tenantId, filters)
 countProducts(tenantId, filters)
-updateProductIdentity(client, tenantId, productId, fields)
+updateProductIdentity(tenantId, productId, fields)
 setProductActive(tenantId, productId, active)
-hasInventoryHistory(client, tenantId, variantId)
+hasInventoryHistory(tenantId, variantId)
 ```
 
 The Product list query calculates `stockBaseQty` as the Product-level total across all active stock-bearing Variants:
@@ -965,10 +965,10 @@ Do not add `current_stock` to `products`.
 `InventoryRepository` must expose:
 
 ```ts
-createLot(client, input): Promise<{ id: string }>
-createMovement(client, input): Promise<{ id: string }>
-createMovementLotAllocation(client, input): Promise<void>
-getVariantBalance(client, tenantId, variantId): Promise<string>
+createLot(input): Promise<{ id: string }>
+createMovement(input): Promise<{ id: string }>
+createMovementLotAllocation(input): Promise<void>
+getVariantBalance(tenantId: string, variantId: string): Promise<string>
 ```
 
 All quantity values stay strings at repository boundaries.
@@ -1155,7 +1155,7 @@ git commit -m "feat: add fifo stock adjustments"
   - `replaceAlternativeUnits(productId, input)`
   - `replaceSpecifications(productId, input)`
   - `replaceVariantConfiguration(productId, input)`
-  - advanced Product detail payload.
+  - advanced Product detail payload containing alternative Units, specifications, and non-default Variant details with each Variant's movement-derived `stockBaseQty` and `hasInventoryHistory` flag.
 
 - [ ] **Step 1: Define advanced input contracts**
 
@@ -1304,8 +1304,8 @@ git commit -m "feat: add advanced product configuration"
   - `PUT /products/:id/units`
   - `PUT /products/:id/specifications`
   - `PUT /products/:id/variants`
-  - `GET/POST/PATCH /product-categories`
-  - `GET/POST/PATCH /units`.
+  - `GET /product-categories`, `POST /product-categories`, `PATCH /product-categories/:id`
+  - `GET /units`, `POST /units`, `PATCH /units/:id`.
 
 - [ ] **Step 1: Write route RED tests**
 
@@ -1317,6 +1317,7 @@ Required route assertions:
 - Tenant A only receives Tenant A Products;
 - POST body containing Tenant B's `tenantId` is ignored and cannot create in Tenant B;
 - cross-tenant category/unit/variant IDs return 400 or 404 without leakage;
+- `variantId` supplied to stock-adjustment/lots endpoints must belong to the Product in the path and the trusted tenant;
 - duplicate Product/barcode/SKU returns 409;
 - invalid quantity/money/conversion returns 400;
 - missing Product returns 404;
@@ -1572,6 +1573,7 @@ git commit -m "feat: add sherhisab product ui primitives"
 - Create: `apps/web/src/features/products/product-page.test.tsx`
 - Modify: `apps/web/src/app/router.tsx`
 - Modify: `apps/web/src/components/sidebar.tsx`
+- Modify: `apps/web/src/components/topbar.tsx`
 - Modify: `apps/web/src/styles.css`
 
 **Interfaces:**
@@ -1673,6 +1675,8 @@ Add `/app/products` to TanStack Router.
 
 Replace Product/Inventory access with a real TanStack `Link` in Sidebar so keyboard/navigation semantics work. Do not leave navigation as a no-op button.
 
+Update `Topbar` to derive the current section title from the router path so `/app/products` shows `Products` instead of the foundation hard-coded `Dashboard` title. Keep the language control added in Task 8.
+
 - [ ] **Step 8: Run Product page test and verify GREEN**
 
 ```bash
@@ -1692,7 +1696,7 @@ Expected: PASS.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add apps/web/src/features/products apps/web/src/app/router.tsx apps/web/src/components/sidebar.tsx apps/web/src/styles.css
+git add apps/web/src/features/products apps/web/src/app/router.tsx apps/web/src/components/sidebar.tsx apps/web/src/components/topbar.tsx apps/web/src/styles.css
 git commit -m "feat: add compact products page"
 ```
 
@@ -1736,6 +1740,7 @@ Also assert:
 - purchase/selling price are converted to paisa by exact helper;
 - create validation displays server error without closing dialog;
 - successful create invalidates Product query and closes dialog;
+- a Product that retains an archived current Category/Unit can still save unrelated edits, while other inactive masters are not selectable;
 - Full English hides Bangla helper;
 - Full Bangla hides English label.
 
@@ -1787,7 +1792,7 @@ Collapsed `<details>` or equivalent compact control with:
   - fixed conversion value only when Fixed;
 - Specifications key/value rows;
 - Enable Variants toggle;
-- when enabled: Option definitions/values and generated/manual Variant rows for display name, SKU, purchase price, selling price, minimum stock.
+- when enabled: Option definitions/values and generated/manual Variant rows for display name, SKU, purchase price, selling price, minimum stock. New Variant rows begin with zero stock; stock is added after creation through the explicit Adjust Stock flow.
 
 Do not show lot/batch transaction-entry fields here; this is policy/configuration only.
 
@@ -1876,6 +1881,7 @@ Payload:
 
 Use clear copy:
 
+- for a Variant-enabled Product, require/select the specific Variant before submission;
 - `Add stock` for positive;
 - `Remove stock` for negative;
 - no ambiguous direct “Current Stock” editor.
