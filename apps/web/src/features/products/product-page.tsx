@@ -18,6 +18,10 @@ import {
 import { createProductColumns } from './product-columns'
 import { ProductFormDialog } from './product-form-dialog'
 import { ProductMasterManageDialog } from './product-master-manage-dialog'
+import {
+  ProductLotsDialog,
+  StockAdjustDialog,
+} from './stock-adjust-dialog'
 import type { ProductStatusFilter } from './product-types'
 
 const PAGE_SIZE = 50
@@ -34,6 +38,10 @@ export function ProductPage() {
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
   const [editProductId, setEditProductId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [stockAction, setStockAction] = useState<'adjust' | 'lots' | null>(
+    null,
+  )
+  const [stockProductId, setStockProductId] = useState<string | null>(null)
 
   const filters = {
     search,
@@ -60,6 +68,12 @@ export function ProductPage() {
     enabled: formOpen && formMode === 'edit' && Boolean(editProductId),
   })
 
+  const stockProductQuery = useQuery({
+    queryKey: ['product', stockProductId],
+    queryFn: () => getProduct(stockProductId!),
+    enabled: Boolean(stockAction && stockProductId),
+  })
+
   const statusMutation = useMutation({
     mutationFn: ({
       id,
@@ -83,6 +97,14 @@ export function ProductPage() {
           setEditProductId(product.id)
           setFormMode('edit')
           setFormOpen(true)
+        },
+        onAdjustStock: (product) => {
+          setStockProductId(product.id)
+          setStockAction('adjust')
+        },
+        onViewLots: (product) => {
+          setStockProductId(product.id)
+          setStockAction('lots')
         },
       }),
     [statusMutation],
@@ -291,6 +313,57 @@ export function ProductPage() {
         onOpenChange={setSettingsOpen}
         open={settingsOpen}
       />
+
+      {stockAction === 'adjust' && stockProductQuery.data ? (
+        <StockAdjustDialog
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              setStockAction(null)
+              setStockProductId(null)
+            }
+          }}
+          open
+          product={stockProductQuery.data}
+        />
+      ) : null}
+
+      {stockAction === 'lots' && stockProductQuery.data ? (
+        <ProductLotsDialog
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              setStockAction(null)
+              setStockProductId(null)
+            }
+          }}
+          open
+          product={stockProductQuery.data}
+        />
+      ) : null}
+
+      {stockAction && stockProductQuery.isError ? (
+        <div className="products-inline-error" role="alert">
+          {stockProductQuery.error instanceof Error
+            ? stockProductQuery.error.message
+            : 'Could not load Product details.'}
+          <Button
+            onClick={() => stockProductQuery.refetch()}
+            size="small"
+            variant="secondary"
+          >
+            Retry
+          </Button>
+          <Button
+            onClick={() => {
+              setStockAction(null)
+              setStockProductId(null)
+            }}
+            size="small"
+            variant="ghost"
+          >
+            Close
+          </Button>
+        </div>
+      ) : null}
     </main>
   )
 }
