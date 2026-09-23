@@ -348,7 +348,7 @@ describe.skipIf(!hasDatabase)('product master lifecycle', () => {
   it('allows retaining archived current masters but rejects newly assigning inactive masters', async () => {
     const tenant = await createProductTestTenant('Archived Reference Tenant')
     const service = new ProductMasterService(tenant.id, getPool())
-    const baseUnitId = await pieceUnitId(service)
+    await pieceUnitId(service)
     const category = await service.createCategory('Current Category')
     const customUnit = await service.createUnit({ name: 'Meter', symbol: 'm' })
     const product = await service.createProduct(

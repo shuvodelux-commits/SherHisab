@@ -59,7 +59,7 @@ interface VariantInsertFields {
   minimumStockBaseQty: string
 }
 
-interface ProductUpdateFields extends ProductInsertFields {}
+type ProductUpdateFields = ProductInsertFields
 
 function mapCategory(row: CategoryRow): CategoryRecord {
   return {
