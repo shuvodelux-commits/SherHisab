@@ -222,7 +222,9 @@ describe('ProductPage', () => {
       ).toBe(true)
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Next' }),
+    )
 
     await waitFor(() => {
       expect(
