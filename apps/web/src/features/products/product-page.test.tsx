@@ -199,6 +199,17 @@ describe('ProductPage', () => {
       ).toBeInTheDocument()
     }
 
+    for (const heading of [
+      'Purchase Price',
+      'Selling Price',
+      'Stock',
+      'Min Stock',
+    ]) {
+      expect(
+        screen.getByRole('columnheader', { name: heading }),
+      ).toHaveAttribute('data-align', 'right')
+    }
+
     const categoryFilter = screen.getByLabelText('Category filter')
     const statusFilter = screen.getByLabelText('Status filter')
     expect(categoryFilter.tagName).not.toBe('SELECT')
@@ -213,6 +224,14 @@ describe('ProductPage', () => {
     expect(screen.getByText('৳18.75')).toBeInTheDocument()
     expect(screen.getByText('2.5')).toBeInTheDocument()
     expect(screen.getByText('0.125')).toBeInTheDocument()
+
+    for (const value of ['৳12.50', '৳18.75', '2.5', '0.125']) {
+      expect(screen.getByRole('cell', { name: value })).toHaveAttribute(
+        'data-align',
+        'right',
+      )
+    }
+
     const activeStatusCell = screen.getByRole('cell', { name: 'Active' })
     const activeStatus = activeStatusCell.querySelector('[data-slot="badge"]')
     expect(activeStatus).not.toBeNull()

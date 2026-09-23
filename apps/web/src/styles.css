@@ -628,8 +628,6 @@ p {
 
 .data-table th,
 .data-table td {
-  min-height: 34px;
-  padding: 7px 10px;
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: middle;
@@ -638,10 +636,26 @@ p {
 
 .data-table th {
   height: 34px;
+  padding: 0 10px;
   background: var(--surface-muted);
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
+}
+
+.data-table td {
+  height: 36px;
+  padding: 0 10px;
+}
+
+.data-table th[data-align='right'],
+.data-table td[data-align='right'] {
+  text-align: right;
+}
+
+.data-table th[data-align='center'],
+.data-table td[data-align='center'] {
+  text-align: center;
 }
 
 .data-table tbody tr:hover {
@@ -1297,12 +1311,12 @@ p {
 }
 
 .products-table .data-table {
-  min-width: 1040px;
+  min-width: 980px;
 }
 
 .product-name-cell {
   display: flex;
-  min-width: 170px;
+  min-width: 150px;
   flex-direction: column;
   gap: 2px;
 }
@@ -1321,8 +1335,7 @@ p {
 .product-money,
 .product-quantity {
   display: block;
-  min-width: 72px;
-  text-align: right;
+  text-align: inherit;
   font-variant-numeric: tabular-nums;
 }
 

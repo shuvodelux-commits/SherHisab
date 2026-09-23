@@ -5,6 +5,14 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table'
 
+type DataTableColumnMeta = {
+  align?: 'left' | 'center' | 'right'
+}
+
+function columnAlignment(meta: unknown): DataTableColumnMeta['align'] {
+  return (meta as DataTableColumnMeta | undefined)?.align
+}
+
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, unknown>[]
   data: TData[]
@@ -29,7 +37,11 @@ export function DataTable<TData>({
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
-                <th key={header.id} scope="col">
+                <th
+                  data-align={columnAlignment(header.column.columnDef.meta)}
+                  key={header.id}
+                  scope="col"
+                >
                   {header.isPlaceholder
                     ? null
                     : flexRender(
@@ -47,7 +59,10 @@ export function DataTable<TData>({
             table.getRowModel().rows.map((row) => (
               <tr key={row.id}>
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id}>
+                  <td
+                    data-align={columnAlignment(cell.column.columnDef.meta)}
+                    key={cell.id}
+                  >
                     {flexRender(
                       cell.column.columnDef.cell,
                       cell.getContext(),
