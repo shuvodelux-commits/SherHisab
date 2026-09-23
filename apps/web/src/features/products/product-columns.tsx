@@ -16,6 +16,8 @@ import type { ProductListItemDto } from './product-types'
 interface ProductColumnsOptions {
   onSetStatus: (product: ProductListItemDto, isActive: boolean) => void
   onEdit: (product: ProductListItemDto) => void
+  onAdjustStock: (product: ProductListItemDto) => void
+  onViewLots: (product: ProductListItemDto) => void
 }
 
 function money(value: string) {
@@ -25,6 +27,8 @@ function money(value: string) {
 export function createProductColumns({
   onSetStatus,
   onEdit,
+  onAdjustStock,
+  onViewLots,
 }: ProductColumnsOptions): ColumnDef<ProductListItemDto, unknown>[] {
   return [
     {
@@ -132,8 +136,12 @@ export function createProductColumns({
               <DropdownMenuItem onSelect={() => onEdit(product)}>
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem>Adjust Stock</DropdownMenuItem>
-              <DropdownMenuItem>View Lots</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onAdjustStock(product)}>
+                Adjust Stock
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onViewLots(product)}>
+                View Lots
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 data-danger={product.isActive ? 'true' : undefined}
