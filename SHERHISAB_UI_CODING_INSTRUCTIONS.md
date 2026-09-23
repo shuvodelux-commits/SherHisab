@@ -742,6 +742,133 @@ Rules:
 - Horizontal is the normal SherHisab orientation; use vertical only when the workflow/layout genuinely requires it.
 - Do not replace Tabs, ToggleGroup, Pagination, InputGroup, or Combobox with Button Group when those components better express the interaction.
 
+# 17B. Tooltips for Compact and Complex Actions
+
+Use the official shadcn `Tooltip` component to explain compact, icon-only, unfamiliar, or complex controls without permanently adding visual noise.
+
+Reference: https://ui.shadcn.com/docs/components/base/tooltip
+
+Use one shared `TooltipProvider` at the application root. Do not create separate providers for ordinary page controls.
+
+Use the official composition:
+
+- `Tooltip`
+- `TooltipTrigger`
+- `TooltipContent`
+
+## Tooltip Is Required
+
+Use a Tooltip for:
+
+- icon-only buttons;
+- compact toolbar icons whose purpose is not fully obvious from surrounding context;
+- uncommon/technical actions that use short button text;
+- complex actions where a short explanation prevents misuse;
+- disabled icon/text actions when the user benefits from knowing why the action is unavailable.
+
+Examples:
+
+```text
+[↻]                → Refresh data
+[⋮]                → More actions
+[columns icon]     → Show or hide columns
+[adjust icon]      → Adjust stock
+[archive icon]     → Archive product
+[calculator icon]  → Open calculator
+```
+
+For complex actions:
+
+```text
+Adjust Stock
+Tooltip: Add or remove stock without editing the product master.
+
+Reverse
+Tooltip: Creates a reversing entry; it does not delete the original transaction.
+
+Unpriced Lots
+Tooltip: Show received stock lots that do not yet have a final purchase cost.
+```
+
+## Tooltip Is Usually Not Needed
+
+Do not add redundant tooltips to self-explanatory text buttons such as:
+
+- Save
+- Cancel
+- Delete
+- Add Product
+- Print
+- Export
+- Next
+- Previous
+
+A tooltip is useful only when it adds information that is not already obvious.
+
+## Icon-Only Button Rules
+
+Every icon-only Button must also have:
+
+- an accessible name such as `aria-label`;
+- a Tooltip with a short human-readable action label when hover/focus explanation is useful;
+- the project's configured icon library;
+- the normal shadcn icon/button sizing rules.
+
+Tooltip is **not** a replacement for the accessible name.
+
+## Complex Feature Tooltip Rules
+
+Use a Tooltip to give a short explanation for advanced or unfamiliar actions while keeping the interface clean.
+
+Good tooltip content explains one of:
+
+- what the action does;
+- why the action is unavailable;
+- what a technical term means;
+- a keyboard shortcut;
+- a short consequence that prevents confusion.
+
+Keep it concise. If the explanation needs multiple paragraphs, links, controls, or rich interaction, use `Popover`, `HoverCard`, Dialog, or inline helper text instead.
+
+## Disabled Controls
+
+When a disabled Button needs explanation, follow the official shadcn disabled-button Tooltip pattern so the Tooltip can still be triggered even though the Button itself is disabled.
+
+Examples:
+
+```text
+Complete Sale (disabled)
+Tooltip: Add at least one product before completing the sale.
+
+Delete (disabled)
+Tooltip: This product has transaction history and cannot be deleted.
+```
+
+## Keyboard Shortcuts
+
+When a control has a useful keyboard shortcut, the Tooltip may show the shortcut beside the action label using the standard keyboard-key presentation.
+
+Example:
+
+```text
+Save changes    Ctrl+S
+Search products /
+```
+
+Do not display shortcuts that are not actually implemented.
+
+## Tooltip UX Rules
+
+- Tooltips must work on keyboard focus as well as pointer hover.
+- Keep content short, normally one label or one concise sentence.
+- Choose `side` only when placement materially improves usability; otherwise use the shared default.
+- Do not hide required validation, payment totals, due balances, stock warnings, irreversible consequences, or other essential business information exclusively in a Tooltip.
+- Do not use Tooltip as a confirmation mechanism.
+- Do not put buttons/forms/interactive workflows inside Tooltip content.
+- Avoid tooltip spam: ordinary labels, badges, and fully clear text controls do not need one.
+- Tooltip language follows the active SherHisab language mode.
+- For touch/mobile workflows, essential understanding must remain available without depending only on hover behavior.
+
 # 18. Inputs, Selects, Comboboxes
 
 Recommended desktop height:
