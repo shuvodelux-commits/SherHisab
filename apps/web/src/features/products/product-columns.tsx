@@ -67,6 +67,7 @@ export function createProductColumns({
     {
       id: 'purchasePrice',
       header: 'Purchase Price',
+      meta: { align: 'right' },
       cell: ({ row }) => (
         <span className="product-money">
           {money(row.original.defaultPurchasePricePaisa)}
@@ -76,6 +77,7 @@ export function createProductColumns({
     {
       id: 'sellingPrice',
       header: 'Selling Price',
+      meta: { align: 'right' },
       cell: ({ row }) => (
         <span className="product-money">
           {money(row.original.defaultSellingPricePaisa)}
@@ -85,6 +87,7 @@ export function createProductColumns({
     {
       id: 'stock',
       header: 'Stock',
+      meta: { align: 'right' },
       cell: ({ row }) => (
         <span className="product-quantity">
           {formatNumber(row.original.stockBaseQty, {
@@ -96,6 +99,7 @@ export function createProductColumns({
     {
       id: 'minimumStock',
       header: 'Min Stock',
+      meta: { align: 'right' },
       cell: ({ row }) => (
         <span className="product-quantity">
           {formatNumber(row.original.minimumStockBaseQty, {
@@ -116,6 +120,7 @@ export function createProductColumns({
     {
       id: 'actions',
       header: 'Actions',
+      meta: { align: 'center' },
       cell: ({ row }) => {
         const product = row.original
 
