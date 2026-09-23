@@ -92,7 +92,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
             className="auth-submit"
             disabled={submitting}
             type="submit"
-            variant="primary"
+            variant="default"
           >
             {submitting ? 'Signing in…' : 'Sign in'}
           </Button>

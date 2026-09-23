@@ -40,6 +40,7 @@ function setSystemDark(matches: boolean) {
 describe('ThemeProvider', () => {
   afterEach(() => {
     window.localStorage.clear()
+    document.documentElement.classList.remove('light', 'dark')
     delete document.documentElement.dataset.theme
   })
 
@@ -53,7 +54,8 @@ describe('ThemeProvider', () => {
     )
 
     expect(screen.getByTestId('theme-mode')).toHaveTextContent('system')
-    expect(document.documentElement.dataset.theme).toBe('dark')
+    expect(document.documentElement).toHaveClass('dark')
+    expect(document.documentElement).not.toHaveClass('light')
   })
 
   it('persists and applies explicit theme overrides', () => {
@@ -67,12 +69,14 @@ describe('ThemeProvider', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Dark' }))
 
-    expect(document.documentElement.dataset.theme).toBe('dark')
+    expect(document.documentElement).toHaveClass('dark')
+    expect(document.documentElement).not.toHaveClass('light')
     expect(window.localStorage.getItem('sherhisab-theme-mode')).toBe('dark')
 
     fireEvent.click(screen.getByRole('button', { name: 'Light' }))
 
-    expect(document.documentElement.dataset.theme).toBe('light')
+    expect(document.documentElement).toHaveClass('light')
+    expect(document.documentElement).not.toHaveClass('dark')
     expect(window.localStorage.getItem('sherhisab-theme-mode')).toBe('light')
   })
 })

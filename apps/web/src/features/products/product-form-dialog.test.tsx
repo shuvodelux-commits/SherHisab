@@ -169,6 +169,8 @@ describe('ProductFormDialog', () => {
     expect(screen.getByLabelText('Opening Stock')).toBeEnabled()
     expect(screen.queryByText('Current Stock')).not.toBeInTheDocument()
 
+    expect(screen.getByRole('separator')).toBeInTheDocument()
+
     const advanced = screen.getByRole('button', { name: 'Advanced' })
     expect(advanced).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByText('Tracking')).not.toBeInTheDocument()
@@ -185,7 +187,14 @@ describe('ProductFormDialog', () => {
       target: { value: '5' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Variants' }))
+    expect(screen.getByLabelText('Tracking').tagName).not.toBe('SELECT')
+    expect(screen.getByLabelText('Tracking')).toHaveAttribute(
+      'data-slot',
+      'select-trigger',
+    )
+    const variantsCheckbox = screen.getByRole('checkbox', { name: 'Enable Variants' })
+    expect(variantsCheckbox).toHaveAttribute('data-slot', 'checkbox')
+    fireEvent.click(variantsCheckbox)
 
     expect(screen.getByLabelText('Opening Stock')).toBeDisabled()
     expect(screen.getByLabelText('Opening Stock')).toHaveValue('0')

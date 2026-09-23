@@ -218,7 +218,9 @@ describe('ProductMasterManageDialog', () => {
     const fetchMock = installFetch()
     renderDialog()
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Units' }))
+    const unitsTab = await screen.findByRole('tab', { name: 'Units' })
+    expect(unitsTab.closest('[data-slot="tabs-list"]')).not.toBeNull()
+    fireEvent.click(unitsTab)
 
     expect(screen.getByText('Piece')).toBeInTheDocument()
     expect(screen.getByText('pcs')).toBeInTheDocument()

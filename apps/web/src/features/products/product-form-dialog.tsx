@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from '../../components/ui/dialog'
 import { Input } from '../../components/ui/input'
+import { Separator } from '../../components/ui/separator'
 import {
   SearchCombobox,
   type SearchComboboxOption,
@@ -577,6 +578,8 @@ export function ProductFormDialog({
                 </div>
               </div>
 
+              <Separator className="product-form-separator" />
+
               <div className="product-advanced-toggle-wrap">
                 <Button
                   aria-expanded={advancedOpen}
@@ -621,7 +624,7 @@ export function ProductFormDialog({
               <Button
                 disabled={saveMutation.isPending}
                 type="submit"
-                variant="primary"
+                variant="default"
               >
                 {saveMutation.isPending ? 'Saving...' : 'Save Product'}
               </Button>
@@ -674,7 +677,7 @@ export function ProductFormDialog({
             <Button
               disabled={!newCategoryName.trim()}
               onClick={() => void createCategoryInline()}
-              variant="primary"
+              variant="default"
             >
               Create category
             </Button>
@@ -740,7 +743,7 @@ export function ProductFormDialog({
             <Button
               disabled={!newUnitName.trim()}
               onClick={() => void createUnitInline()}
-              variant="primary"
+              variant="default"
             >
               Create unit
             </Button>

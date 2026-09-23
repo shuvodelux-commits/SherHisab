@@ -1,24 +1,26 @@
 import type { HTMLAttributes } from 'react'
 
-type BadgeTone =
-  | 'neutral'
-  | 'info'
-  | 'success'
-  | 'warning'
-  | 'danger'
+type BadgeVariant =
+  | 'default'
+  | 'secondary'
+  | 'destructive'
+  | 'outline'
+  | 'ghost'
+  | 'link'
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
-  tone?: BadgeTone
+  variant?: BadgeVariant
 }
 
 export function Badge({
   className = '',
-  tone = 'neutral',
+  variant = 'secondary',
   ...props
 }: BadgeProps) {
   return (
     <span
-      className={`ui-badge ui-badge-${tone} ${className}`.trim()}
+      className={`ui-badge ui-badge-${variant} ${className}`.trim()}
+      data-slot="badge"
       {...props}
     />
   )

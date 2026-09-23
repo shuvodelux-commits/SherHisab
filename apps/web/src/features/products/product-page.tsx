@@ -10,6 +10,14 @@ import { Button } from '../../components/ui/button'
 import { DataTable } from '../../components/ui/data-table'
 import { Input } from '../../components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select'
+import {
   getProduct,
   listCategories,
   listProducts,
@@ -18,6 +26,7 @@ import {
 import { createProductColumns } from './product-columns'
 import { ProductFormDialog } from './product-form-dialog'
 import { ProductMasterManageDialog } from './product-master-manage-dialog'
+import { ProductStatusConfirmDialog } from './product-status-confirm-dialog'
 import {
   ProductLotsDialog,
   StockAdjustDialog,
@@ -42,6 +51,10 @@ export function ProductPage() {
     null,
   )
   const [stockProductId, setStockProductId] = useState<string | null>(null)
+  const [pendingDeactivate, setPendingDeactivate] = useState<{
+    id: string
+    name: string
+  } | null>(null)
 
   const filters = {
     search,
@@ -83,6 +96,7 @@ export function ProductPage() {
       isActive: boolean
     }) => setProductStatus(id, isActive),
     onSuccess: async () => {
+      setPendingDeactivate(null)
       await queryClient.invalidateQueries({ queryKey: ['products'] })
     },
   })
@@ -91,7 +105,12 @@ export function ProductPage() {
     () =>
       createProductColumns({
         onSetStatus: (product, isActive) => {
-          statusMutation.mutate({ id: product.id, isActive })
+          if (isActive) {
+            statusMutation.mutate({ id: product.id, isActive: true })
+            return
+          }
+
+          setPendingDeactivate({ id: product.id, name: product.name })
         },
         onEdit: (product) => {
           setEditProductId(product.id)
@@ -149,22 +168,27 @@ export function ProductPage() {
           value={search}
         />
 
-        <select
-          aria-label="Category filter"
-          className="product-filter-select"
-          onChange={(event) => {
-            setCategoryId(event.target.value)
+        <Select
+          onValueChange={(value) => {
+            setCategoryId(value === '__all__' ? '' : value)
             resetPage()
           }}
-          value={categoryId}
+          value={categoryId || '__all__'}
         >
-          <option value="">All categories</option>
-          {(categoriesQuery.data ?? []).map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger aria-label="Category filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="__all__">All categories</SelectItem>
+              {(categoriesQuery.data ?? []).map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
 
         <Input
           aria-label="Brand filter"
@@ -176,26 +200,31 @@ export function ProductPage() {
           value={brand}
         />
 
-        <select
-          aria-label="Status filter"
-          className="product-filter-select"
-          onChange={(event) => {
-            setStatus(event.target.value as ProductStatusFilter)
+        <Select
+          onValueChange={(value) => {
+            setStatus(value as ProductStatusFilter)
             resetPage()
           }}
           value={status}
         >
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="all">All status</option>
-        </select>
+          <SelectTrigger aria-label="Status filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="all">All status</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
 
         <span className="products-toolbar-secondary">
           <Button
             onClick={() => setSettingsOpen(true)}
-            variant="secondary"
+            variant="outline"
           >
-            <Settings2 aria-hidden="true" size={14} />
+            <Settings2 aria-hidden="true" data-icon="inline-start" size={14} />
             {' '}Product Settings
           </Button>
         </span>
@@ -207,9 +236,9 @@ export function ProductPage() {
               setFormMode('create')
               setFormOpen(true)
             }}
-            variant="primary"
+            variant="default"
           >
-            <Plus aria-hidden="true" size={14} />
+            <Plus aria-hidden="true" data-icon="inline-start" size={14} />
             {' '}Add Product
           </Button>
         </span>
@@ -263,7 +292,7 @@ export function ProductPage() {
               onClick={() =>
                 setOffset(Math.max(0, currentOffset - PAGE_SIZE))
               }
-              size="small"
+              size="sm"
               variant="secondary"
             >
               Previous
@@ -271,7 +300,7 @@ export function ProductPage() {
             <Button
               disabled={currentOffset + limit >= total}
               onClick={() => setOffset(currentOffset + PAGE_SIZE)}
-              size="small"
+              size="sm"
               variant="secondary"
             >
               Next
@@ -301,7 +330,7 @@ export function ProductPage() {
             : 'Could not load Product details.'}
           <Button
             onClick={() => editProductQuery.refetch()}
-            size="small"
+            size="sm"
             variant="secondary"
           >
             Retry
@@ -312,6 +341,25 @@ export function ProductPage() {
       <ProductMasterManageDialog
         onOpenChange={setSettingsOpen}
         open={settingsOpen}
+      />
+
+      <ProductStatusConfirmDialog
+        onConfirm={() => {
+          if (pendingDeactivate) {
+            statusMutation.mutate({
+              id: pendingDeactivate.id,
+              isActive: false,
+            })
+          }
+        }}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !statusMutation.isPending) {
+            setPendingDeactivate(null)
+          }
+        }}
+        open={Boolean(pendingDeactivate)}
+        pending={statusMutation.isPending}
+        productName={pendingDeactivate?.name ?? ''}
       />
 
       {stockAction === 'adjust' && stockProductQuery.data ? (
@@ -347,7 +395,7 @@ export function ProductPage() {
             : 'Could not load Product details.'}
           <Button
             onClick={() => stockProductQuery.refetch()}
-            size="small"
+            size="sm"
             variant="secondary"
           >
             Retry
@@ -357,7 +405,7 @@ export function ProductPage() {
               setStockAction(null)
               setStockProductId(null)
             }}
-            size="small"
+            size="sm"
             variant="ghost"
           >
             Close

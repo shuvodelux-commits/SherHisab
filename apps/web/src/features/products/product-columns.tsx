@@ -108,7 +108,14 @@ export function createProductColumns({
       id: 'status',
       header: 'Status',
       cell: ({ row }) => (
-        <Badge tone={row.original.isActive ? 'success' : 'neutral'}>
+        <Badge
+          className={
+            row.original.isActive
+              ? 'sher-badge-success'
+              : 'sher-badge-neutral'
+          }
+          variant="outline"
+        >
           {row.original.isActive ? 'Active' : 'Inactive'}
         </Badge>
       ),
@@ -125,7 +132,7 @@ export function createProductColumns({
               <Button
                 aria-label={`Actions for ${product.name}`}
                 className="product-actions-trigger"
-                size="small"
+                size="icon-sm"
                 variant="ghost"
               >
                 <MoreHorizontal aria-hidden="true" size={16} />
