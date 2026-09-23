@@ -57,7 +57,7 @@ describe.skipIf(!hasDatabase)('product master schema', () => {
       [variant.rows[0]!.id],
     )
 
-    expect(row.rows[0]?.qty).toBe('0.125')
+    expect(row.rows[0]?.qty).toBe('0.12500000')
   })
 
   it('rejects a category from another tenant', async () => {
