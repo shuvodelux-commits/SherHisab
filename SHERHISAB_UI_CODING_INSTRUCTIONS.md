@@ -785,6 +785,40 @@ For quick create/edit flows, keep modal width focused.
 
 ---
 
+# 20A. Official shadcn Data Table Standard
+
+Use the official shadcn Data Table pattern as the visual and interaction foundation for SherHisab operational lists.
+
+Reference: https://ui.shadcn.com/docs/components/base/data-table
+
+Required behavior:
+
+- shadcn `Table` primitives for rendering;
+- TanStack Table for table state and behavior;
+- sortable business columns where sorting is useful;
+- sorting indicators in the column header;
+- compact filter/search controls above the table;
+- pagination for paginated datasets;
+- column visibility only where it improves the workflow;
+- row actions through the standard action menu;
+- row selection only for real bulk actions;
+- server-side pagination/filtering/sorting for large ERP datasets;
+- stable column definitions and stable row IDs.
+
+Sorting rules:
+
+- Clicking a sortable header cycles through the supported sort states.
+- Show a clear sort-direction indicator beside the active column label.
+- Do not make every column sortable. Enable sorting only when the order is meaningful.
+- Text columns use text/alphanumeric sorting.
+- Money, quantity, balance, and percentage columns sort by their underlying numeric values, not formatted strings.
+- Date columns sort by their canonical date/time value, not localized display text.
+- Status/action/display-only columns are not sortable unless the business workflow specifically needs it.
+- Preserve the user's active sorting while paging/filtering when appropriate.
+- For large datasets, send sorting state to the server rather than sorting only the current page in the browser.
+
+SherHisab is currently on `@tanstack/react-table ^8.21.3`. The current shadcn documentation shows the TanStack Table v9 feature API. Use the same official shadcn Data Table UX and composition without silently upgrading the TanStack major version. A v9 migration must be an explicit, separately verified dependency task.
+
 # 21. TanStack Table Rules
 
 TanStack Table is the standard data-grid foundation.
