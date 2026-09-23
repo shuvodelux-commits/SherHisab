@@ -2160,6 +2160,150 @@ For TanStack/shadcn Data Tables:
 - keep its width stable;
 - use the same shared RowActions component/pattern across modules where possible.
 
+# 25A. Popover for Compact Product-Specific Inputs
+
+Use the official shadcn `Popover` when a compact cart/table row needs a small set of additional product-specific fields without permanently expanding the row.
+
+Reference: https://ui.shadcn.com/docs/components/base/popover
+
+This is especially useful in POS / Sales / Purchase rows where different business types require different measurements or attributes.
+
+Examples:
+
+- Fabric: Gauze + Knot
+- Fabric: Width + Length
+- Wood: Length + Width + Thickness
+- Steel: Length + Diameter / Gauge
+- Battery: Capacity + Warranty
+- Medicine: Batch + Expiry when the workflow requires manual selection
+- Furniture/custom goods: Size + Finish when those attributes affect the line item
+- Hardware: Piece count + alternate unit conversion detail when needed
+
+The main row stays compact; the Popover exposes only the extra fields for that line.
+
+## Compact Cart Pattern
+
+Example:
+
+```text
+Product              Qty    Price      Details
+Cotton Fabric        2      ৳450       [Gauze 40 · Knot 12]
+                                            ↓
+                                      Popover
+                                      Gauze [40]
+                                      Knot  [12]
+                                      [Apply]
+```
+
+The trigger should show a concise summary of the current values whenever possible, rather than a vague `Details` label.
+
+Good:
+
+```text
+Gauze 40 · Knot 12
+6 ft × 4 ft
+12V · 100Ah
+Batch B-42 · Exp 06/27
+```
+
+Less useful:
+
+```text
+More
+Details
+Edit
+```
+
+## Official Composition
+
+Use:
+
+- `Popover`
+- `PopoverTrigger`
+- `PopoverContent`
+- `PopoverHeader`
+- `PopoverTitle`
+- `PopoverDescription` when helpful
+- `FieldGroup`
+- `Field`
+- `FieldLabel`
+- shadcn `Input` / `InputGroup` / `Select` / `Combobox` according to the established SherHisab control rules
+
+The official shadcn Popover supports forms inside `PopoverContent`.
+
+## Required Product-Specific Fields
+
+If the extra fields are required to calculate or complete the sale:
+
+- make the incomplete state visible in the cart row;
+- do not hide the fact that required information is missing;
+- show a small warning/status such as `Details required`;
+- prevent final completion when required values are missing;
+- when useful, automatically open the Popover immediately after adding that product;
+- on validation error, keep/reopen the Popover and focus the invalid field.
+
+The Popover may hide the form fields, but it must not hide the **requirement**.
+
+## Optional Product-Specific Fields
+
+For optional metadata:
+
+- keep the row clean by default;
+- open the Popover only when the user chooses to add/edit those values;
+- show the summary in the trigger once values exist.
+
+## Calculation Rules
+
+If Gauze/Knot/Length/Width or another product-specific value affects:
+
+- quantity;
+- unit conversion;
+- sale price;
+- line total;
+- stock deduction;
+
+then update the visible cart row immediately after Apply/selection.
+
+The row must show the resulting quantity/price/total clearly; the user should not have to reopen the Popover to understand the final financial result.
+
+Business calculations remain domain logic, not Popover-only UI state.
+
+## Apply / Auto-Save
+
+For a tiny local line-item edit, either of these is acceptable:
+
+- explicit `Apply` Button; or
+- immediate controlled update when each field is changed.
+
+Prefer explicit Apply when several fields combine to calculate one result, because it prevents half-completed calculations.
+
+If Apply is asynchronous, use the existing Button + Spinner rule:
+
+```text
+Apply → Applying…
+```
+
+## When Not to Use Popover
+
+Do not use Popover when the extra workflow is too large or important for a small floating surface.
+
+Use:
+
+- `Dialog` for a focused multi-field edit;
+- `Sheet` for larger side-panel detail/configuration;
+- inline fields when the values are required on nearly every line and hiding them would slow the common workflow.
+
+As a practical rule, Popover is best for a **small, tightly related field set**, usually around 1–4 compact inputs.
+
+## Accessibility / Mobile
+
+- Give the trigger an accessible label.
+- Preserve keyboard focus behavior from the official component.
+- Keep fields labelled.
+- Do not depend on hover.
+- On very narrow/mobile POS layouts, ensure the Popover remains usable; if the field set becomes cramped, use the established Sheet/Drawer pattern for that breakpoint.
+- Do not allow the floating surface to cover the line total or critical payment controls unnecessarily.
+
 # 26. POS Rules
 
 POS may be denser than other pages.
