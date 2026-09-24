@@ -404,6 +404,40 @@ export const productRoutes = new Hono<AppEnv>()
       },
     ),
   )
+  .patch(
+    '/products/:productId/lots/:lotId/selling-price',
+    async (c) => {
+      if (
+        !c
+          .get('permissions')
+          .includes('INVENTORY_EDIT_LOT_SELLING_PRICE')
+      ) {
+        return c.json({ error: 'Forbidden' }, 403)
+      }
+
+      let body: Record<string, unknown>
+
+      try {
+        body = await readJsonObject(c)
+      } catch (error) {
+        return mapProductError(c, error)
+      }
+
+      return withProductServices(
+        c,
+        async ({ inventoryService, userId }) =>
+          c.json(
+            await inventoryService.updateLotSellingPrice(
+              c.get('tenantId'),
+              c.req.param('productId'),
+              c.req.param('lotId'),
+              stringValue(body, 'sellingPricePaisa'),
+              userId,
+            ),
+          ),
+      )
+    },
+  )
   .put('/products/:productId/units', async (c) => {
     let body: Record<string, unknown>
 

@@ -3,6 +3,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { app } from '../../src/app'
 import { closePool, getPool } from '../../src/db/pool'
 import { AuthService } from '../../src/modules/auth/auth.service'
+import type { UserRole } from '../../src/modules/auth/permissions'
 import { SESSION_COOKIE_NAME } from '../../src/modules/auth/session'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
 import type { CreateProductInput } from '../../src/modules/products/product.types'
@@ -27,7 +28,10 @@ function readSessionCookie(setCookieHeader: string | null): string {
   return cookie
 }
 
-async function createAuthenticatedFixture(name: string) {
+async function createAuthenticatedFixture(
+  name: string,
+  role: UserRole = 'STAFF',
+) {
   const tenant = await createProductTestTenant(name)
   const password = 'strong-password-123'
   const authService = new AuthService()
@@ -36,6 +40,7 @@ async function createAuthenticatedFixture(name: string) {
     name: `${name} Owner`,
     email: `owner-${randomUUID()}@example.com`,
     password,
+    role,
   })
   const login = await app.request('http://localhost/api/auth/login', {
     method: 'POST',
@@ -467,6 +472,237 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
       stockBaseQty: '1.5',
       stockValuePaisa: '2500',
     })
+  })
+
+  it('lists and audits Owner edits to an active lot selling price', async () => {
+    const fixture = await createAuthenticatedFixture(
+      'Lot Selling Price Owner Tenant',
+      'OWNER',
+    )
+    const unitId = await pieceUnitId(fixture.service)
+    const product = await fixture.service.createProduct(
+      {
+        ...createPayload(unitId, 'Owner Priced Product'),
+        openingStockBaseQty: '2',
+      },
+      fixture.user.id,
+    )
+
+    const listed = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots`,
+    )
+    expect(listed.status).toBe(200)
+    const lots = (await listed.json()) as Array<{
+      id: string
+      unitCostPaisa: string
+      defaultSellingPricePaisa: string
+      remainingBaseQty: string
+    }>
+    expect(lots).toHaveLength(1)
+    expect(lots[0]).toMatchObject({
+      unitCostPaisa: '1000',
+      defaultSellingPricePaisa: '1500',
+      remainingBaseQty: '2',
+    })
+
+    const lotId = lots[0]!.id
+    const update = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots/${lotId}/selling-price`,
+      {
+        method: 'PATCH',
+        body: { sellingPricePaisa: '1750' },
+      },
+    )
+    expect(update.status).toBe(200)
+    expect(await update.json()).toMatchObject({
+      id: lotId,
+      unitCostPaisa: '1000',
+      defaultSellingPricePaisa: '1750',
+      remainingBaseQty: '2',
+    })
+
+    const audit = await getPool().query<{
+      old_selling_price_paisa: string
+      new_selling_price_paisa: string
+      changed_by_user_id: string
+    }>(
+      `SELECT
+         old_selling_price_paisa::text,
+         new_selling_price_paisa::text,
+         changed_by_user_id
+       FROM inventory_lot_selling_price_audit
+       WHERE tenant_id = $1 AND lot_id = $2`,
+      [fixture.tenant.id, lotId],
+    )
+    expect(audit.rows).toEqual([
+      {
+        old_selling_price_paisa: '1500',
+        new_selling_price_paisa: '1750',
+        changed_by_user_id: fixture.user.id,
+      },
+    ])
+  })
+
+  it('forbids Staff from editing a lot selling price without permission', async () => {
+    const fixture = await createAuthenticatedFixture(
+      'Lot Price Staff Tenant',
+      'STAFF',
+    )
+    const unitId = await pieceUnitId(fixture.service)
+    const product = await fixture.service.createProduct(
+      {
+        ...createPayload(unitId, 'Staff Priced Product'),
+        openingStockBaseQty: '1',
+      },
+      fixture.user.id,
+    )
+    const listed = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots`,
+    )
+    const lots = (await listed.json()) as Array<{ id: string }>
+
+    const response = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots/${lots[0]!.id}/selling-price`,
+      {
+        method: 'PATCH',
+        body: { sellingPricePaisa: '1800' },
+      },
+    )
+
+    expect(response.status).toBe(403)
+  })
+
+  it('allows explicitly granted Staff to edit a lot selling price', async () => {
+    const fixture = await createAuthenticatedFixture(
+      'Granted Lot Price Staff Tenant',
+      'STAFF',
+    )
+    const authService = new AuthService()
+    const owner = await authService.createUser({
+      tenantId: fixture.tenant.id,
+      name: 'Granting Owner',
+      email: `granting-owner-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    await authService.grantPermission({
+      tenantId: fixture.tenant.id,
+      userId: fixture.user.id,
+      permission: 'INVENTORY_EDIT_LOT_SELLING_PRICE',
+      grantedByUserId: owner.id,
+    })
+
+    const unitId = await pieceUnitId(fixture.service)
+    const product = await fixture.service.createProduct(
+      {
+        ...createPayload(unitId, 'Granted Staff Product'),
+        openingStockBaseQty: '1',
+      },
+      fixture.user.id,
+    )
+    const listed = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots`,
+    )
+    const lots = (await listed.json()) as Array<{ id: string }>
+
+    const response = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots/${lots[0]!.id}/selling-price`,
+      {
+        method: 'PATCH',
+        body: { sellingPricePaisa: '1850' },
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      defaultSellingPricePaisa: '1850',
+    })
+  })
+
+  it('rejects selling-price edits for depleted lots', async () => {
+    const fixture = await createAuthenticatedFixture(
+      'Depleted Lot Price Tenant',
+      'OWNER',
+    )
+    const unitId = await pieceUnitId(fixture.service)
+    const product = await fixture.service.createProduct(
+      {
+        ...createPayload(unitId, 'Depleted Lot Product'),
+        openingStockBaseQty: '1',
+      },
+      fixture.user.id,
+    )
+    const listed = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots`,
+    )
+    const lots = (await listed.json()) as Array<{ id: string }>
+    const lotId = lots[0]!.id
+
+    const consume = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/stock-adjustments`,
+      {
+        method: 'POST',
+        body: {
+          deltaBaseQty: '-1',
+          note: 'Deplete lot',
+        },
+      },
+    )
+    expect(consume.status).toBe(200)
+
+    const response = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/lots/${lotId}/selling-price`,
+      {
+        method: 'PATCH',
+        body: { sellingPricePaisa: '1900' },
+      },
+    )
+
+    expect(response.status).toBe(409)
+  })
+
+  it('does not edit a lot that belongs to another tenant', async () => {
+    const tenantA = await createAuthenticatedFixture(
+      'Lot Price Tenant A',
+      'OWNER',
+    )
+    const tenantB = await createAuthenticatedFixture(
+      'Lot Price Tenant B',
+      'OWNER',
+    )
+    const unitB = await pieceUnitId(tenantB.service)
+    const productB = await tenantB.service.createProduct(
+      {
+        ...createPayload(unitB, 'Tenant B Product'),
+        openingStockBaseQty: '1',
+      },
+      tenantB.user.id,
+    )
+    const listedB = await privateRequest(
+      tenantB.cookie,
+      `/products/${productB.id}/lots`,
+    )
+    const lotsB = (await listedB.json()) as Array<{ id: string }>
+
+    const response = await privateRequest(
+      tenantA.cookie,
+      `/products/${productB.id}/lots/${lotsB[0]!.id}/selling-price`,
+      {
+        method: 'PATCH',
+        body: { sellingPricePaisa: '1950' },
+      },
+    )
+
+    expect(response.status).toBe(404)
   })
 
   it('edits masters and only deletes masters that are not referenced', async () => {

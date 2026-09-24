@@ -1,7 +1,11 @@
 import Decimal from 'decimal.js'
 import type { DatabaseClient } from '../../db/request-database'
 import { withDatabaseTransaction } from '../../db/transaction'
-import { ProductNotFoundError, ProductValidationError } from './product.errors'
+import {
+  ProductConflictError,
+  ProductNotFoundError,
+  ProductValidationError,
+} from './product.errors'
 import {
   InventoryRepository,
   type InventoryLotRecord,
@@ -269,6 +273,65 @@ export class InventoryService {
         unitCostPaisa: item.unitCostPaisa,
       })
     }
+  }
+
+  async updateLotSellingPrice(
+    tenantId: string,
+    productId: string,
+    lotId: string,
+    sellingPricePaisa: string,
+    actorUserId: string,
+  ): Promise<InventoryLotRecord> {
+    const normalizedSellingPrice = parseMoneyPaisa(
+      sellingPricePaisa,
+      'Selling price',
+    )
+
+    return withDatabaseTransaction(
+      this.database,
+      async (database) => {
+        const repository = new InventoryRepository(database)
+        const lot = await repository.lockLotForSellingPriceUpdate(
+          tenantId,
+          productId,
+          lotId,
+        )
+
+        if (!lot) {
+          throw new ProductNotFoundError('Inventory lot not found')
+        }
+
+        if (lot.status !== 'ACTIVE') {
+          throw new ProductConflictError(
+            'Depleted lot selling price cannot be changed.',
+          )
+        }
+
+        if (
+          lot.defaultSellingPricePaisa === normalizedSellingPrice
+        ) {
+          return lot
+        }
+
+        await repository.updateLotSellingPrice({
+          tenantId,
+          lotId,
+          sellingPricePaisa: normalizedSellingPrice,
+        })
+        await repository.createLotSellingPriceAudit({
+          tenantId,
+          lotId,
+          oldSellingPricePaisa: lot.defaultSellingPricePaisa,
+          newSellingPricePaisa: normalizedSellingPrice,
+          changedByUserId: actorUserId,
+        })
+
+        return {
+          ...lot,
+          defaultSellingPricePaisa: normalizedSellingPrice,
+        }
+      },
+    )
   }
 
   async listLots(
