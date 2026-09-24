@@ -82,6 +82,7 @@ export function DataTable<TData>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     manualSorting,
+    sortDescFirst: false,
   })
 
   const hideableColumns = table
