@@ -421,4 +421,125 @@ describe.skipIf(!hasDatabase)('product conversion profiles', () => {
       }),
     ).rejects.toBeInstanceOf(ProductValidationError)
   })
+
+  it('persists Product conversion configuration without replacing legacy alternative units', async () => {
+    const tenant = await createProductTestTenant('Product Conversion Integration')
+    const owner = await new AuthService().createUser({
+      tenantId: tenant.id,
+      name: 'Product Conversion Owner',
+      email: `owner-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    const products = new ProductMasterService(tenant.id, getPool())
+    const gira = await products.createUnit({ name: 'Integration Gira', symbol: 'igira' })
+    const gauge = await products.createUnit({ name: 'Integration Gauge', symbol: 'igauge' })
+
+    const conversionProfile: ConversionProfileInput = {
+      type: 'COMPOUND',
+      baseUnitId: gira.id,
+      pricingUnitId: gauge.id,
+      pricingBaseFactorNumerator: '16',
+      pricingBaseFactorDenominator: '1',
+      displayPrecision: 2,
+      components: [
+        {
+          key: 'gauge',
+          label: 'Gauge',
+          unitId: gauge.id,
+          baseFactorNumerator: '16',
+          baseFactorDenominator: '1',
+          sortOrder: 0,
+          minValue: '0',
+          maxExclusive: null,
+          allowFraction: false,
+          autoNormalizeRemainder: false,
+        },
+        {
+          key: 'gira',
+          label: 'Gira',
+          unitId: gira.id,
+          baseFactorNumerator: '1',
+          baseFactorDenominator: '1',
+          sortOrder: 1,
+          minValue: '0',
+          maxExclusive: '16',
+          allowFraction: false,
+          autoNormalizeRemainder: false,
+        },
+      ],
+    }
+
+    const product = await products.createProduct(
+      {
+        name: 'Integrated Fabric',
+        baseUnitId: gira.id,
+        defaultPurchasePricePaisa: '10000',
+        defaultSellingPricePaisa: '30000',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'SIMPLE',
+        advanced: {
+          alternativeUnits: [
+            {
+              unitId: gauge.id,
+              conversionMode: 'FIXED',
+              conversionToBase: '16',
+            },
+          ],
+          conversionProfile,
+        },
+      },
+      owner.id,
+    )
+
+    const first = await products.getAdvancedConfiguration(product.id)
+    expect(first.alternativeUnits).toEqual([
+      expect.objectContaining({
+        unit: expect.objectContaining({ id: gauge.id }),
+        conversionMode: 'FIXED',
+        conversionToBase: '16',
+      }),
+    ])
+    expect(first.conversionProfile).toMatchObject({
+      type: 'COMPOUND',
+      version: 1,
+      baseUnitId: gira.id,
+      pricingUnitId: gauge.id,
+      pricingBaseFactorNumerator: '16',
+      pricingBaseFactorDenominator: '1',
+    })
+
+    await products.updateProduct(product.id, {
+      name: product.name,
+      brand: product.brand,
+      categoryId: product.category?.id ?? null,
+      baseUnitId: product.baseUnit.id,
+      barcode: product.primaryBarcode ?? '',
+      defaultPurchasePricePaisa: product.defaultPurchasePricePaisa,
+      defaultSellingPricePaisa: product.defaultSellingPricePaisa,
+      minimumStockBaseQty: product.minimumStockBaseQty,
+      trackingMode: product.trackingMode,
+      advanced: {
+        conversionProfile: {
+          ...conversionProfile,
+          displayPrecision: 3,
+        },
+      },
+    })
+
+    const second = await products.getAdvancedConfiguration(product.id)
+    expect(second.conversionProfile).toMatchObject({
+      version: 2,
+      displayPrecision: 3,
+    })
+    expect(second.alternativeUnits).toEqual([
+      expect.objectContaining({
+        unit: expect.objectContaining({ id: gauge.id }),
+        conversionMode: 'FIXED',
+        conversionToBase: '16',
+      }),
+    ])
+  })
+
 })
