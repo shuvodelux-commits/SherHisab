@@ -874,7 +874,220 @@ Inventory deduction:
 
 - 37 Gira.
 
-### 27.3 Conversion profiles
+### 27.3 Inline Expandable Conversion Cart Row
+
+The fabric cart screenshot supplied during design review is the visual/interaction reference for compound quantity entry.
+
+This is **not** a popup, modal, side panel, or separate measurement form. The conversion editor belongs directly inside the same cart line and expands downward beneath that Product.
+
+#### Collapsed state
+
+A compound-conversion Product uses the same compact cart-row structure as an ordinary Product:
+
+- Product image when available;
+- Product name;
+- compact Product metadata such as Width, Color, Code/SKU or Variant;
+- configured display/pricing Unit;
+- calculated display Qty;
+- editable Selling Price when permission allows;
+- calculated line Total;
+- remove action;
+- a small expand/collapse chevron beside the Product name.
+
+Example summary for fabric:
+
+```text
+Muslin Fabric Black  [⌄]
+Width: 44" | Color: Black | Code: FAB-001
+
+Unit      Qty      Price      Total
+Gauge     2.31     300        ...
+```
+
+The collapsed row must remain dense enough for normal counter use. The cashier should not be forced to keep every conversion editor open.
+
+#### Expanded state
+
+Clicking the chevron expands a full-width detail area **immediately below that same cart row**.
+
+Fabric example:
+
+```text
+Muslin Fabric Black  [⌃]        Gauge   2.31   300   Total
+
+    Gauge                         Gira
+    [ 2                         ] [ 5                         ]
+
+                                      Total Amount     [calculated]
+```
+
+The expanded panel must visually belong to the Product row. It should use the same subtle border/background treatment as the cart, not look like a detached form.
+
+For the approved fabric profile:
+
+- field 1 = Gauge;
+- field 2 = Gira;
+- conversion = 1 Gauge = 16 Gira;
+- entering Gauge/Gira updates the compact row immediately;
+- the compact Qty is a calculated summary, not a second independent quantity source.
+
+For example:
+
+- Gauge = 2;
+- Gira = 5;
+- normalized quantity = 37 Gira;
+- pricing quantity = 37 / 16 Gauge;
+- the compact row may display a rounded human-friendly Qty such as `2.31`;
+- financial calculation must still use the exact normalized/pricing quantity and configured money-rounding rules, not the rounded display text.
+
+#### Authoritative input rule
+
+For a compound/custom conversion profile, the expanded component fields are the authoritative cashier input.
+
+The compact Qty field is derived from them.
+
+Do not permit two conflicting quantity sources such as:
+
+- compact Qty = 2.50;
+- Gauge/Gira = 2 Gauge + 5 Gira.
+
+If the UI visually renders the compact Qty in an input-shaped control to preserve cart alignment, it is read-only for compound profiles unless that profile explicitly implements a deterministic reverse conversion.
+
+Simple products continue to use the ordinary editable Qty field.
+
+#### Generic reuse
+
+The same inline pattern must be reusable for every custom conversion profile.
+
+Examples:
+
+**Pipe**
+
+```text
+Unit summary: Pipe / Feet
+
+Expanded:
+Pipe [ 1 ]    Feet [ 5 ]
+```
+
+If 1 Pipe = 20 Feet:
+
+- normalized base quantity = 25 Feet.
+
+**Fabric**
+
+```text
+Expanded:
+Gauge [ 2 ]   Gira [ 5 ]
+```
+
+If 1 Gauge = 16 Gira:
+
+- normalized base quantity = 37 Gira.
+
+**Carton / Piece**
+
+```text
+Expanded:
+Carton [ 3 ]  Piece [ 4 ]
+```
+
+The Product conversion profile defines:
+
+- labels;
+- field order;
+- exact conversion ratios;
+- base inventory unit;
+- pricing unit;
+- allowed ranges;
+- whether remainder values are bounded;
+- display formatting.
+
+Do not hard-code Gauge/Gira behavior inside the POS component.
+
+#### Validation
+
+Client-side validation gives immediate feedback, but the server recalculates the conversion independently.
+
+Examples:
+
+- Gira for a 16-Gira Gauge profile must normally satisfy `0 <= gira < 16`;
+- Feet remainder for a 20-Foot Pipe profile must normally satisfy `0 <= feet < 20`;
+- negative component quantities are rejected;
+- a line whose normalized quantity is zero cannot be sold;
+- Product-specific fractional rules are validated from the conversion profile.
+
+If an operator enters a remainder equal to or above one whole parent unit, the UI may normalize it automatically when the profile allows it. Example: 1 Gauge + 18 Gira may normalize to 2 Gauge + 2 Gira. The server remains authoritative.
+
+#### Interaction with price, shortage and stock
+
+Conversion expansion changes quantity only.
+
+After any component change SherHisab must immediately recompute:
+
+1. normalized base quantity;
+2. pricing quantity;
+3. automatic FIFO/FEFO pricing when the line is in automatic price mode;
+4. line Total;
+5. available own stock;
+6. any shortage amount;
+7. Own Stock / Vendor / Negative Stock panel state.
+
+Therefore a Fabric line can show both an expanded conversion editor and, if needed, a shortage-resolution panel beneath it.
+
+The layout order is:
+
+```text
+Main cart row
+↓
+Conversion editor when expanded
+↓
+Serial/Batch/Warranty controls when required
+↓
+Shortage resolution when required
+```
+
+#### Draft, Template, Edit and Return preservation
+
+The component values are part of transaction state, not temporary UI-only values.
+
+Persist/snapshot them for:
+
+- Draft save/load;
+- Reusable Template line defaults;
+- Duplicate Invoice starting values when compatible;
+- Invoice Edit;
+- Invoice print/view;
+- Sales Return;
+- Batch Return.
+
+A returned Fabric line should therefore be able to show the original human quantity representation, not only an opaque decimal/base quantity.
+
+Historical records preserve both:
+
+- human-entered component snapshot;
+- normalized base quantity used for inventory.
+
+Changing the Product's conversion profile later must not reinterpret an old Invoice.
+
+#### Responsive behavior
+
+Desktop/tablet:
+
+- expanded fields remain inline under the row;
+- use a compact grid, normally two or three fields per row where space permits.
+
+Mobile:
+
+- the same cart line expands vertically;
+- component fields may stack;
+- do not move conversion entry into a separate modal solely because the viewport is small.
+
+The interaction principle remains the same at every breakpoint:
+
+> **Select Product → cart row stays compact → expand that row only when the Product needs compound quantity input.**
+
+### 27.4 Conversion profiles
 
 Support reusable profiles:
 
