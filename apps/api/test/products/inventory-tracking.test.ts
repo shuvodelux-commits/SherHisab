@@ -593,3 +593,203 @@ describe.skipIf(!hasDatabase)('batch expiry tracking', () => {
     ])
   })
 })
+
+
+describe.skipIf(!hasDatabase)('product capture fields', () => {
+  afterEach(async () => {
+    await cleanupProductTestTenants()
+  })
+
+  afterAll(async () => {
+    await closePool()
+  })
+
+  it('validates typed capture definitions and select options', async () => {
+    const fixture = await createTrackingFixture('Capture Definitions')
+    const tracking = new TrackingService(
+      fixture.tenant.id,
+      getPool(),
+    )
+
+    const definitions = await tracking.replaceCaptureFields(
+      fixture.first.id,
+      [
+        {
+          key: 'prescription_no',
+          label: 'Prescription No',
+          type: 'text',
+          required: true,
+        },
+        {
+          key: 'dosage_form',
+          label: 'Dosage Form',
+          type: 'select',
+          selectOptions: ['Tablet', 'Syrup'],
+          required: true,
+        },
+        {
+          key: 'manufactured_on',
+          label: 'Manufactured On',
+          type: 'date',
+          required: false,
+        },
+        {
+          key: 'strength',
+          label: 'Strength',
+          type: 'number',
+          required: false,
+        },
+      ],
+    )
+
+    expect(definitions).toEqual([
+      expect.objectContaining({
+        key: 'prescription_no',
+        label: 'Prescription No',
+        type: 'text',
+        selectOptions: [],
+        required: true,
+        sortOrder: 0,
+      }),
+      expect.objectContaining({
+        key: 'dosage_form',
+        label: 'Dosage Form',
+        type: 'select',
+        selectOptions: ['Tablet', 'Syrup'],
+        required: true,
+        sortOrder: 1,
+      }),
+      expect.objectContaining({
+        key: 'manufactured_on',
+        type: 'date',
+        selectOptions: [],
+        sortOrder: 2,
+      }),
+      expect.objectContaining({
+        key: 'strength',
+        type: 'number',
+        selectOptions: [],
+        sortOrder: 3,
+      }),
+    ])
+
+    await expect(
+      tracking.replaceCaptureFields(fixture.first.id, [
+        {
+          key: 'invalid_select',
+          label: 'Invalid Select',
+          type: 'select',
+          selectOptions: [],
+          required: false,
+        },
+      ]),
+    ).rejects.toThrow('Select capture fields require at least one option')
+
+    await expect(
+      tracking.replaceCaptureFields(fixture.first.id, [
+        {
+          key: 'invalid_text',
+          label: 'Invalid Text',
+          type: 'text',
+          selectOptions: ['Not allowed'],
+          required: false,
+        },
+      ]),
+    ).rejects.toThrow(
+      'Only select capture fields can define select options',
+    )
+  })
+
+  it('stores immutable sale-line capture snapshots after Product definitions change', async () => {
+    const fixture = await createTrackingFixture('Capture Snapshot')
+    const tracking = new TrackingService(
+      fixture.tenant.id,
+      getPool(),
+    )
+    const definitions = await tracking.replaceCaptureFields(
+      fixture.first.id,
+      [
+        {
+          key: 'prescription_no',
+          label: 'Prescription No',
+          type: 'text',
+          required: true,
+        },
+        {
+          key: 'dosage_form',
+          label: 'Dosage Form',
+          type: 'select',
+          selectOptions: ['Tablet', 'Syrup'],
+          required: true,
+        },
+      ],
+    )
+    const salesLineId = await insertSalesLine({
+      tenantId: fixture.tenant.id,
+      userId: fixture.owner.id,
+      variantId: fixture.first.defaultVariantId,
+    })
+
+    const created = await tracking.snapshotCaptureValues({
+      productId: fixture.first.id,
+      salesLineId,
+      values: {
+        prescription_no: 'RX-2026-001',
+        dosage_form: 'Tablet',
+      },
+    })
+
+    expect(created).toEqual([
+      expect.objectContaining({
+        definitionId: definitions[0]?.id,
+        key: 'prescription_no',
+        label: 'Prescription No',
+        type: 'text',
+        value: 'RX-2026-001',
+      }),
+      expect.objectContaining({
+        definitionId: definitions[1]?.id,
+        key: 'dosage_form',
+        label: 'Dosage Form',
+        type: 'select',
+        value: 'Tablet',
+      }),
+    ])
+
+    await tracking.replaceCaptureFields(fixture.first.id, [
+      {
+        key: 'prescription_no',
+        label: 'Updated Prescription Label',
+        type: 'text',
+        required: true,
+      },
+      {
+        key: 'dosage_form',
+        label: 'Updated Dosage Label',
+        type: 'select',
+        selectOptions: ['Capsule'],
+        required: true,
+      },
+    ])
+
+    const stored =
+      await tracking.listCaptureValueSnapshots(salesLineId)
+
+    expect(stored).toEqual([
+      expect.objectContaining({
+        definitionId: definitions[0]?.id,
+        key: 'prescription_no',
+        label: 'Prescription No',
+        type: 'text',
+        value: 'RX-2026-001',
+      }),
+      expect.objectContaining({
+        definitionId: definitions[1]?.id,
+        key: 'dosage_form',
+        label: 'Dosage Form',
+        type: 'select',
+        value: 'Tablet',
+      }),
+    ])
+  })
+})
