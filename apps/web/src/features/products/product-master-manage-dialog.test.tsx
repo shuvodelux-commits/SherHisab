@@ -307,7 +307,7 @@ describe('ProductMasterManageDialog', () => {
     })
   })
 
-  it('manages Units with optional symbols, async () => {
+  it('manages Units with optional symbols', async () => {
     const fetchMock = installFetch()
     renderDialog()
 
