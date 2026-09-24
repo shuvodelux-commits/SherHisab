@@ -2,7 +2,21 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { Client } from 'pg'
-import { describe, expect, it } from 'vitest'
+import {
+  afterAll,
+  afterEach,
+  describe,
+  expect,
+  it,
+} from 'vitest'
+import { closePool, getPool } from '../../src/db/pool'
+import { AuthService } from '../../src/modules/auth/auth.service'
+import { ProductMasterService } from '../../src/modules/products/product-master.service'
+import { TrackingService } from '../../src/modules/products/tracking.service'
+import {
+  cleanupProductTestTenants,
+  createProductTestTenant,
+} from './product-test-helpers'
 
 const hasDatabase = Boolean(process.env.DATABASE_URL)
 
@@ -158,5 +172,321 @@ describe.skipIf(!hasDatabase)('inventory tracking migration', () => {
         await cleanup.end()
       }
     }
+  })
+})
+
+
+async function createTrackingFixture(name: string) {
+  const tenant = await createProductTestTenant(name)
+  const owner = await new AuthService().createUser({
+    tenantId: tenant.id,
+    name: `${name} Owner`,
+    email: `owner-${randomUUID()}@example.com`,
+    password: 'strong-password-123',
+    role: 'OWNER',
+  })
+  const products = new ProductMasterService(tenant.id, getPool())
+  const unit = (await products.listUnits()).find(
+    (candidate) => candidate.symbol === 'pcs',
+  )
+
+  if (!unit) {
+    throw new Error('Default Piece unit not found')
+  }
+
+  const first = await products.createProduct(
+    {
+      name: `${name} First`,
+      baseUnitId: unit.id,
+      defaultPurchasePricePaisa: '1000',
+      defaultSellingPricePaisa: '1500',
+      openingStockBaseQty: '0',
+      minimumStockBaseQty: '0',
+      trackingMode: 'SIMPLE',
+    },
+    owner.id,
+  )
+  const second = await products.createProduct(
+    {
+      name: `${name} Second`,
+      baseUnitId: unit.id,
+      defaultPurchasePricePaisa: '1200',
+      defaultSellingPricePaisa: '1800',
+      openingStockBaseQty: '0',
+      minimumStockBaseQty: '0',
+      trackingMode: 'SIMPLE',
+    },
+    owner.id,
+  )
+
+  await getPool().query(
+    `UPDATE products
+     SET tracking_mode = 'SERIAL'
+     WHERE tenant_id = $1
+       AND id = ANY($2::uuid[])`,
+    [tenant.id, [first.id, second.id]],
+  )
+
+  return { tenant, owner, first, second }
+}
+
+async function insertSerial(input: {
+  tenantId: string
+  variantId: string
+  serialNumber: string
+}) {
+  const result = await getPool().query<{ id: string }>(
+    `INSERT INTO inventory_serials
+     (tenant_id, variant_id, serial_number, received_on)
+     VALUES ($1, $2, $3, '2026-09-24')
+     RETURNING id`,
+    [input.tenantId, input.variantId, input.serialNumber],
+  )
+
+  const id = result.rows[0]?.id
+  if (!id) {
+    throw new Error('Failed to create serial fixture')
+  }
+
+  return id
+}
+
+async function insertSalesLine(input: {
+  tenantId: string
+  userId: string
+  variantId: string
+}) {
+  const invoice = await getPool().query<{ id: string }>(
+    `INSERT INTO sales_invoices
+     (tenant_id, business_date, created_by_user_id)
+     VALUES ($1, '2026-09-24', $2)
+     RETURNING id`,
+    [input.tenantId, input.userId],
+  )
+  const saleId = invoice.rows[0]?.id
+
+  if (!saleId) {
+    throw new Error('Failed to create sale fixture')
+  }
+
+  const line = await getPool().query<{ id: string }>(
+    `INSERT INTO sales_lines
+     (
+       tenant_id,
+       sale_id,
+       variant_id,
+       base_qty,
+       pricing_mode,
+       automatic_sales_total_paisa,
+       final_sales_total_paisa,
+       cogs_paisa
+     )
+     VALUES ($1, $2, $3, 1, 'LOT', 1500, 1500, 1000)
+     RETURNING id`,
+    [input.tenantId, saleId, input.variantId],
+  )
+
+  const lineId = line.rows[0]?.id
+  if (!lineId) {
+    throw new Error('Failed to create sales line fixture')
+  }
+
+  return lineId
+}
+
+describe.skipIf(!hasDatabase)('serial and warranty tracking', () => {
+  afterEach(async () => {
+    await cleanupProductTestTenants()
+  })
+
+  afterAll(async () => {
+    await closePool()
+  })
+
+  it('requires exactly one available serial per whole sale unit and rejects wrong-Variant selections', async () => {
+    const fixture = await createTrackingFixture('Serial Validation')
+    const firstSerial = await insertSerial({
+      tenantId: fixture.tenant.id,
+      variantId: fixture.first.defaultVariantId,
+      serialNumber: 'SER-001',
+    })
+    const secondSerial = await insertSerial({
+      tenantId: fixture.tenant.id,
+      variantId: fixture.first.defaultVariantId,
+      serialNumber: 'SER-002',
+    })
+    const wrongVariantSerial = await insertSerial({
+      tenantId: fixture.tenant.id,
+      variantId: fixture.second.defaultVariantId,
+      serialNumber: 'SER-OTHER',
+    })
+    const tracking = new TrackingService(
+      fixture.tenant.id,
+      getPool(),
+    )
+
+    await expect(
+      tracking.validateAndLockSerials({
+        variantId: fixture.first.defaultVariantId,
+        baseQty: '2',
+        serialIds: [firstSerial],
+      }),
+    ).rejects.toThrow('exactly 2 serials')
+
+    await expect(
+      tracking.validateAndLockSerials({
+        variantId: fixture.first.defaultVariantId,
+        baseQty: '2',
+        serialIds: [firstSerial, firstSerial],
+      }),
+    ).rejects.toThrow('Serial selections must be unique')
+
+    await expect(
+      tracking.validateAndLockSerials({
+        variantId: fixture.first.defaultVariantId,
+        baseQty: '2',
+        serialIds: [firstSerial, wrongVariantSerial],
+      }),
+    ).rejects.toThrow('Serial is unavailable for this Variant')
+
+    await expect(
+      tracking.validateAndLockSerials({
+        variantId: fixture.first.defaultVariantId,
+        baseQty: '2',
+        serialIds: [firstSerial, secondSerial],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: firstSerial,
+        serialNumber: 'SER-001',
+      }),
+      expect.objectContaining({
+        id: secondSerial,
+        serialNumber: 'SER-002',
+      }),
+    ])
+  })
+
+  it('locks selected serials so a competing sale cannot validate the same serial after it is sold', async () => {
+    const fixture = await createTrackingFixture('Serial Lock')
+    const serialId = await insertSerial({
+      tenantId: fixture.tenant.id,
+      variantId: fixture.first.defaultVariantId,
+      serialNumber: 'LOCK-001',
+    })
+    const firstClient = await getPool().connect()
+    const secondClient = await getPool().connect()
+
+    try {
+      await firstClient.query('BEGIN')
+      await secondClient.query('BEGIN')
+
+      const firstTracking = new TrackingService(
+        fixture.tenant.id,
+        firstClient,
+      )
+      const secondTracking = new TrackingService(
+        fixture.tenant.id,
+        secondClient,
+      )
+
+      await firstTracking.validateAndLockSerials({
+        variantId: fixture.first.defaultVariantId,
+        baseQty: '1',
+        serialIds: [serialId],
+      })
+
+      const competing = secondTracking.validateAndLockSerials({
+        variantId: fixture.first.defaultVariantId,
+        baseQty: '1',
+        serialIds: [serialId],
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 25))
+      await firstClient.query(
+        `UPDATE inventory_serials
+         SET status = 'SOLD', updated_at = NOW()
+         WHERE tenant_id = $1 AND id = $2`,
+        [fixture.tenant.id, serialId],
+      )
+      await firstClient.query('COMMIT')
+
+      await expect(competing).rejects.toThrow(
+        'Serial is unavailable for this Variant',
+      )
+      await secondClient.query('ROLLBACK')
+    } finally {
+      await firstClient.query('ROLLBACK').catch(() => undefined)
+      await secondClient.query('ROLLBACK').catch(() => undefined)
+      firstClient.release()
+      secondClient.release()
+    }
+  })
+
+  it('keeps a warranty snapshot unchanged after the Product warranty policy changes', async () => {
+    const fixture = await createTrackingFixture('Warranty Snapshot')
+    const tracking = new TrackingService(
+      fixture.tenant.id,
+      getPool(),
+    )
+    const salesLineId = await insertSalesLine({
+      tenantId: fixture.tenant.id,
+      userId: fixture.owner.id,
+      variantId: fixture.first.defaultVariantId,
+    })
+
+    await tracking.replaceWarrantyPolicy(
+      fixture.first.id,
+      {
+        enabled: true,
+        durationValue: 12,
+        durationUnit: 'MONTH',
+        provider: 'SherHisab Shop',
+        text: 'Battery replacement warranty',
+      },
+    )
+
+    const snapshot = await tracking.createWarrantySnapshot({
+      productId: fixture.first.id,
+      salesLineId,
+      serialId: null,
+      startsOn: '2026-09-24',
+    })
+
+    expect(snapshot).toMatchObject({
+      durationValue: 12,
+      durationUnit: 'MONTH',
+      provider: 'SherHisab Shop',
+      text: 'Battery replacement warranty',
+      startsOn: '2026-09-24',
+      expiresOn: '2027-09-24',
+    })
+
+    await tracking.replaceWarrantyPolicy(
+      fixture.first.id,
+      {
+        enabled: true,
+        durationValue: 6,
+        durationUnit: 'MONTH',
+        provider: 'Changed Provider',
+        text: 'Changed policy text',
+      },
+    )
+
+    const stored = await tracking.listWarrantySnapshots(
+      salesLineId,
+    )
+
+    expect(stored).toEqual([
+      expect.objectContaining({
+        id: snapshot.id,
+        durationValue: 12,
+        durationUnit: 'MONTH',
+        provider: 'SherHisab Shop',
+        text: 'Battery replacement warranty',
+        startsOn: '2026-09-24',
+        expiresOn: '2027-09-24',
+      }),
+    ])
   })
 })
