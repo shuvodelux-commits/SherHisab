@@ -611,4 +611,45 @@ describe.skipIf(!hasDatabase)('product conversion profiles', () => {
     )
   })
 
+  it('requires an active conversion profile to be replaced or cleared when the base unit changes', async () => {
+    const fixture = await createConversionFixture('Base Unit Conversion Guard')
+    await replaceFabricProfile(fixture)
+    const newBaseUnit = await fixture.products.createUnit({
+      name: 'New Base Unit',
+      symbol: 'newbase',
+    })
+
+    await expect(
+      fixture.products.updateProduct(fixture.product.id, {
+        name: fixture.product.name,
+        brand: fixture.product.brand,
+        categoryId: fixture.product.category?.id ?? null,
+        baseUnitId: newBaseUnit.id,
+        barcode: fixture.product.primaryBarcode ?? '',
+        defaultPurchasePricePaisa:
+          fixture.product.defaultPurchasePricePaisa,
+        defaultSellingPricePaisa:
+          fixture.product.defaultSellingPricePaisa,
+        minimumStockBaseQty: fixture.product.minimumStockBaseQty,
+        trackingMode: fixture.product.trackingMode,
+      }),
+    ).rejects.toThrow(
+      'Conversion profile must be replaced or cleared when changing the base unit',
+    )
+
+    const unchanged = await fixture.products.getProduct(
+      fixture.product.id,
+    )
+    expect(unchanged.baseUnit.id).toBe(fixture.gira.id)
+
+    const advanced =
+      await fixture.products.getAdvancedConfiguration(
+        fixture.product.id,
+      )
+    expect(advanced.conversionProfile).toMatchObject({
+      baseUnitId: fixture.gira.id,
+      version: 1,
+    })
+  })
+
 })
