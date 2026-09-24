@@ -490,3 +490,106 @@ describe.skipIf(!hasDatabase)('serial and warranty tracking', () => {
     ])
   })
 })
+
+
+describe.skipIf(!hasDatabase)('batch expiry tracking', () => {
+  afterEach(async () => {
+    await cleanupProductTestTenants()
+  })
+
+  afterAll(async () => {
+    await closePool()
+  })
+
+  it('lists only unexpired batches in FEFO order', async () => {
+    const fixture = await createTrackingFixture('Batch FEFO')
+
+    await getPool().query(
+      `UPDATE products
+       SET tracking_mode = 'BATCH_EXPIRY',
+           allocation_policy = 'FEFO'
+       WHERE tenant_id = $1 AND id = $2`,
+      [fixture.tenant.id, fixture.first.id],
+    )
+
+    const insertLot = async (input: {
+      batchCode: string
+      receivedOn: string
+      expiresOn: string
+    }) => {
+      const result = await getPool().query<{ id: string }>(
+        `INSERT INTO inventory_lots
+         (
+           tenant_id,
+           variant_id,
+           source_type,
+           received_on,
+           unit_cost_paisa,
+           default_sell_price_paisa,
+           original_base_qty,
+           remaining_base_qty,
+           batch_code,
+           expires_on
+         )
+         VALUES ($1,$2,'ADJUSTMENT',$3,1000,1500,5,5,$4,$5)
+         RETURNING id`,
+        [
+          fixture.tenant.id,
+          fixture.first.defaultVariantId,
+          input.receivedOn,
+          input.batchCode,
+          input.expiresOn,
+        ],
+      )
+
+      const id = result.rows[0]?.id
+      if (!id) {
+        throw new Error('Failed to create batch fixture')
+      }
+      return id
+    }
+
+    const laterExpiry = await insertLot({
+      batchCode: 'BATCH-LATER',
+      receivedOn: '2026-01-01',
+      expiresOn: '2027-01-01',
+    })
+    const earlierExpiry = await insertLot({
+      batchCode: 'BATCH-EARLIER',
+      receivedOn: '2026-06-01',
+      expiresOn: '2026-10-15',
+    })
+    await insertLot({
+      batchCode: 'BATCH-EXPIRED',
+      receivedOn: '2025-12-01',
+      expiresOn: '2026-09-20',
+    })
+
+    const batches = await new TrackingService(
+      fixture.tenant.id,
+      getPool(),
+    ).listSellableBatches(
+      fixture.first.defaultVariantId,
+      '2026-09-24',
+    )
+
+    expect(
+      batches.map((batch) => ({
+        id: batch.id,
+        batchCode: batch.batchCode,
+        expiresOn: batch.expiresOn,
+      })),
+    ).toEqual([
+      {
+        id: earlierExpiry,
+        batchCode: 'BATCH-EARLIER',
+        expiresOn: '2026-10-15',
+      },
+      {
+        id: laterExpiry,
+        batchCode: 'BATCH-LATER',
+        expiresOn: '2027-01-01',
+      },
+    ])
+  })
+})
