@@ -163,6 +163,8 @@ describe('Cloudflare runtime', () => {
           user_id: 'user-1',
           tenant_id: 'tenant-1',
           expires_at: new Date(Date.now() + 60_000),
+          role: 'OWNER',
+          permission_keys: [],
         },
       ],
     })
@@ -189,6 +191,11 @@ describe('Cloudflare runtime', () => {
     expect(await response.json()).toEqual({
       userId: 'user-1',
       tenantId: 'tenant-1',
+      role: 'OWNER',
+      permissions: [
+        'SALES_OVERRIDE_SELLING_PRICE',
+        'INVENTORY_EDIT_LOT_SELLING_PRICE',
+      ],
     })
 
     expect(pgMock.poolQuery).not.toHaveBeenCalled()

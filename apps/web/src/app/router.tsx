@@ -5,6 +5,7 @@ import {
   Link,
   Outlet,
 } from '@tanstack/react-router'
+import { PosPage } from '../features/pos/pos-page'
 import { ProductPage } from '../features/products/product-page'
 import { AuthenticatedLayout } from '../routes/_authenticated'
 import { DashboardPage } from '../routes/_authenticated/index'
@@ -55,10 +56,17 @@ const productsRoute = createRoute({
   component: ProductPage,
 })
 
+const posRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/pos',
+  component: PosPage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   authenticatedRoute.addChildren([
     dashboardRoute,
+    posRoute,
     productsRoute,
   ]),
 ])

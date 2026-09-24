@@ -501,6 +501,7 @@ describe.skipIf(!hasDatabase)('product master lifecycle', () => {
           deltaBaseQty: '1',
           note: 'Concurrent stock arrives',
           unitCostPaisa: '1000',
+          sellingPricePaisa: '1500',
         },
       )
       await waitForLockWait(adjustmentPid)

@@ -2183,3 +2183,310 @@ p {
     padding: 18px;
   }
 }
+
+
+/* POS / FIFO LOT PRICING */
+
+.pos-page {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.pos-page-heading {
+  margin: 0;
+}
+
+.pos-feedback {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.pos-feedback-error {
+  border-color: color-mix(in srgb, var(--danger) 24%, var(--border));
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.pos-feedback-success {
+  border-color: color-mix(in srgb, var(--success) 24%, var(--border));
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.pos-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 12px;
+  min-height: calc(100vh - 160px);
+}
+
+.pos-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.pos-catalog-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pos-panel-heading,
+.pos-cart-heading {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pos-search-wrap {
+  position: relative;
+  padding: 10px 12px 8px;
+}
+
+.pos-search-wrap > svg {
+  position: absolute;
+  top: 20px;
+  left: 22px;
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.pos-search-wrap .ui-input {
+  padding-left: 32px;
+}
+
+.pos-product-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 0;
+  padding: 4px 12px 12px;
+  overflow-y: auto;
+}
+
+.pos-product-card.ui-button {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  min-height: 102px;
+  height: auto;
+  padding: 10px;
+  gap: 2px;
+  text-align: left;
+  white-space: normal;
+}
+
+.pos-product-card-name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.pos-product-card-meta,
+.pos-product-card-stock {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.pos-product-card-price {
+  margin-top: 4px;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-cart-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pos-cart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pos-cart-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pos-cart-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.pos-cart-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.pos-cart-table th,
+.pos-cart-table td {
+  min-height: 36px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.pos-cart-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pos-number-column {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-actions-column {
+  width: 36px;
+  text-align: center !important;
+}
+
+.pos-cart-product {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.pos-cart-input {
+  height: 34px;
+  font-size: 14px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-cart-qty {
+  width: 84px;
+  margin-left: auto;
+  text-align: right;
+}
+
+.pos-cart-price {
+  width: 104px;
+  margin-left: auto;
+  text-align: right;
+}
+
+.pos-price-cell {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+}
+
+.pos-manual-price-note {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--warning);
+  font-size: 12px;
+}
+
+.pos-manual-price-note .ui-button-link {
+  min-height: 22px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.pos-below-cost-warning {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.pos-line-error,
+.pos-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.pos-muted {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.pos-lot-breakdown-row td {
+  background: var(--surface-muted);
+}
+
+.pos-lot-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-cart-empty {
+  padding: 28px 12px !important;
+  color: var(--text-muted);
+  text-align: center !important;
+}
+
+.pos-cart-footer {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.pos-total-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.pos-total-row strong {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 960px) {
+  .pos-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-catalog-panel {
+    max-height: 420px;
+  }
+}
+
+@media (max-width: 560px) {
+  .pos-page {
+    padding: 10px;
+  }
+
+  .pos-product-list {
+    grid-template-columns: 1fr;
+  }
+}

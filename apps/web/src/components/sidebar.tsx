@@ -29,7 +29,11 @@ const navigationItems = [
     to: '/app' as const,
     exact: true,
   },
-  { icon: ShoppingCart, label: 'Sales' },
+  {
+    icon: ShoppingCart,
+    label: 'POS',
+    to: '/app/pos' as const,
+  },
   { icon: ReceiptText, label: 'Purchases' },
   { icon: Boxes, label: 'Products', to: '/app/products' as const },
   { icon: Users, label: 'Parties' },

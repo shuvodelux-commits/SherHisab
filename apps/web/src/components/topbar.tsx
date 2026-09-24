@@ -22,6 +22,10 @@ interface TopbarProps {
 }
 
 function pageMeta(pathname: string) {
+  if (pathname.startsWith('/app/pos')) {
+    return { en: 'POS', bn: 'ক্যাশ কাউন্টার' }
+  }
+
   if (pathname.startsWith('/app/products')) {
     return { en: 'Products', bn: 'পণ্য ও স্টক' }
   }

@@ -603,6 +603,7 @@ describe.skipIf(!hasDatabase)('advanced product configuration', () => {
           deltaBaseQty: '1',
           note: 'Concurrent Variant stock',
           unitCostPaisa: '1000',
+          sellingPricePaisa: '1500',
         },
       )
       await waitForLockWait(adjustmentPid)
@@ -676,6 +677,7 @@ describe.skipIf(!hasDatabase)('advanced product configuration', () => {
         deltaBaseQty: '1',
         note: 'Initial variant stock',
         unitCostPaisa: '1000',
+        sellingPricePaisa: '1500',
       },
     )
 
