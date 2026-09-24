@@ -12,6 +12,8 @@ import type {
   AdvancedProductConfigurationInput,
   AlternativeUnitInput,
   CreateProductInput,
+  ProductSortBy,
+  ProductSortDirection,
   ReplaceVariantConfigurationInput,
   SpecificationInput,
   TrackingMode,
@@ -260,6 +262,10 @@ export const productRoutes = new Hono<AppEnv>()
           | 'inactive'
           | 'all'
           | undefined,
+        sortBy: c.req.query('sortBy') as ProductSortBy | undefined,
+        sortDir: c.req.query('sortDir') as
+          | ProductSortDirection
+          | undefined,
         limit: limitRaw === undefined ? undefined : Number(limitRaw),
         offset: offsetRaw === undefined ? undefined : Number(offsetRaw),
       })
@@ -497,6 +503,15 @@ export const productRoutes = new Hono<AppEnv>()
     }
 
     return withProductServices(c, async ({ productService }) => {
+      if (body.name !== undefined) {
+        return c.json(
+          await productService.updateCategory(
+            c.req.param('categoryId'),
+            stringValue(body, 'name'),
+          ),
+        )
+      }
+
       return c.json(
         await productService.setCategoryActive(
           c.req.param('categoryId'),
@@ -505,6 +520,12 @@ export const productRoutes = new Hono<AppEnv>()
       )
     })
   })
+  .delete('/product-categories/:categoryId', (c) =>
+    withProductServices(c, async ({ productService }) => {
+      await productService.deleteCategory(c.req.param('categoryId'))
+      return c.body(null, 204)
+    }),
+  )
   .get('/units', (c) =>
     withProductServices(c, async ({ productService }) => {
       return c.json(
@@ -544,6 +565,27 @@ export const productRoutes = new Hono<AppEnv>()
     }
 
     return withProductServices(c, async ({ productService }) => {
+      if (body.name !== undefined || body.symbol !== undefined) {
+        const current = await productService.listUnits(true)
+        const unit = current.find(
+          (candidate) => candidate.id === c.req.param('unitId'),
+        )
+
+        if (!unit) {
+          throw new ProductNotFoundError('Unit not found.')
+        }
+
+        return c.json(
+          await productService.updateUnit(c.req.param('unitId'), {
+            name: stringValue(body, 'name', unit.name),
+            symbol:
+              body.symbol === undefined
+                ? unit.symbol
+                : nullableStringValue(body, 'symbol'),
+          }),
+        )
+      }
+
       return c.json(
         await productService.setUnitActive(
           c.req.param('unitId'),
@@ -552,3 +594,9 @@ export const productRoutes = new Hono<AppEnv>()
       )
     })
   })
+  .delete('/units/:unitId', (c) =>
+    withProductServices(c, async ({ productService }) => {
+      await productService.deleteUnit(c.req.param('unitId'))
+      return c.body(null, 204)
+    }),
+  )

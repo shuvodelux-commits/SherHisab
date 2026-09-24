@@ -295,6 +295,38 @@ describe('ProductPage', () => {
     })
   })
 
+  it('requests server-side sorting when a Product header is sorted', async () => {
+    const fetchMock = installFetch()
+    renderPage()
+
+    const sortButton = await screen.findByRole('button', {
+      name: 'Sort by Selling Price',
+    })
+    fireEvent.click(sortButton)
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) => {
+          const url =
+            typeof input === 'string'
+              ? input
+              : input instanceof URL
+                ? input.toString()
+                : input.url
+          if (!url.startsWith('/api/private/products')) {
+            return false
+          }
+          const parsed = new URL(url, 'https://sherhisab.test')
+          return (
+            parsed.searchParams.get('sortBy') === 'sellingPrice' &&
+            parsed.searchParams.get('sortDir') === 'asc' &&
+            parsed.searchParams.get('offset') === '0'
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+
   it('renders a useful empty state', async () => {
     installFetch({ items: [], total: 0 })
 

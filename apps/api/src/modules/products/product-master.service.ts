@@ -34,6 +34,15 @@ import {
   requireName,
 } from './product.validation'
 
+function isForeignKeyViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '23503'
+  )
+}
+
 function isUniqueViolation(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -50,6 +59,18 @@ function requireTrackingMode(value: TrackingMode): TrackingMode {
 
   return value
 }
+
+const PRODUCT_SORT_KEYS = new Set([
+  'name',
+  'category',
+  'brand',
+  'unit',
+  'purchasePrice',
+  'sellingPrice',
+  'stock',
+  'minimumStock',
+  'status',
+])
 
 function clampInteger(
   value: number | undefined,
@@ -308,6 +329,84 @@ export class ProductMasterService {
     }
   }
 
+  async updateCategory(
+    categoryId: string,
+    name: string,
+  ): Promise<CategoryRecord> {
+    const normalizedName = requireName(name, 'Category name')
+
+    try {
+      const category = await withDatabaseTransaction(
+        this.database,
+        async (database) => {
+          return new ProductMasterRepository(database).updateCategory(
+            this.tenantId,
+            categoryId,
+            normalizedName,
+          )
+        },
+      )
+
+      if (!category) {
+        throw new ProductNotFoundError('Category not found.')
+      }
+
+      return category
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ProductConflictError(
+          'A category with this name already exists.',
+        )
+      }
+
+      throw error
+    }
+  }
+
+  async deleteCategory(categoryId: string): Promise<void> {
+    try {
+      await withDatabaseTransaction(this.database, async (database) => {
+        const repository = new ProductMasterRepository(database)
+        const category = await repository.findCategoryById(
+          this.tenantId,
+          categoryId,
+        )
+
+        if (!category) {
+          throw new ProductNotFoundError('Category not found.')
+        }
+
+        if (
+          await repository.categoryIsReferenced(
+            this.tenantId,
+            categoryId,
+          )
+        ) {
+          throw new ProductConflictError(
+            'This category is used by products. Archive it instead.',
+          )
+        }
+
+        if (
+          !(await repository.deleteCategory(
+            this.tenantId,
+            categoryId,
+          ))
+        ) {
+          throw new ProductNotFoundError('Category not found.')
+        }
+      })
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        throw new ProductConflictError(
+          'This category is used by products. Archive it instead.',
+        )
+      }
+
+      throw error
+    }
+  }
+
   async listUnits(includeInactive = false): Promise<UnitRecord[]> {
     return this.repository.listUnits(this.tenantId, includeInactive)
   }
@@ -356,6 +455,79 @@ export class ProductMasterService {
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ProductConflictError('A unit with this name already exists.')
+      }
+
+      throw error
+    }
+  }
+
+  async updateUnit(
+    unitId: string,
+    input: CreateUnitInput,
+  ): Promise<UnitRecord> {
+    const name = requireName(input.name, 'Unit name')
+    const symbol = input.symbol?.trim() || null
+
+    try {
+      const unit = await withDatabaseTransaction(
+        this.database,
+        async (database) => {
+          return new ProductMasterRepository(database).updateUnit(
+            this.tenantId,
+            unitId,
+            { name, symbol },
+          )
+        },
+      )
+
+      if (!unit) {
+        throw new ProductNotFoundError('Unit not found.')
+      }
+
+      return unit
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ProductConflictError('A unit with this name already exists.')
+      }
+
+      throw error
+    }
+  }
+
+  async deleteUnit(unitId: string): Promise<void> {
+    try {
+      await withDatabaseTransaction(this.database, async (database) => {
+        const repository = new ProductMasterRepository(database)
+        const unit = await repository.findUnitById(this.tenantId, unitId)
+
+        if (!unit) {
+          throw new ProductNotFoundError('Unit not found.')
+        }
+
+        if (
+          unit.name.trim().toLocaleLowerCase('en-US') === 'piece' &&
+          unit.symbol?.trim().toLocaleLowerCase('en-US') === 'pcs'
+        ) {
+          throw new ProductConflictError(
+            'The default Piece unit cannot be deleted.',
+          )
+        }
+
+        if (await repository.unitIsReferenced(this.tenantId, unitId)) {
+          throw new ProductConflictError(
+            'This unit is used by products. Archive it instead.',
+          )
+        }
+
+        if (!(await repository.deleteUnit(this.tenantId, unitId))) {
+          throw new ProductNotFoundError('Unit not found.')
+        }
+      })
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        throw new ProductConflictError(
+          'This unit is used by products. Archive it instead.',
+        )
       }
 
       throw error
@@ -521,11 +693,23 @@ export class ProductMasterService {
       throw new ProductValidationError('Product status filter is invalid')
     }
 
+    const sortBy = filters.sortBy ?? 'name'
+    if (!PRODUCT_SORT_KEYS.has(sortBy)) {
+      throw new ProductValidationError('Product sort column is invalid')
+    }
+
+    const sortDir = filters.sortDir ?? 'asc'
+    if (sortDir !== 'asc' && sortDir !== 'desc') {
+      throw new ProductValidationError('Product sort direction is invalid')
+    }
+
     const limit = clampInteger(filters.limit, 50, 1, 100)
     const offset = clampInteger(filters.offset, 0, 0, Number.MAX_SAFE_INTEGER)
     const normalizedFilters: ProductListFilters = {
       ...filters,
       status,
+      sortBy,
+      sortDir,
       limit,
       offset,
     }

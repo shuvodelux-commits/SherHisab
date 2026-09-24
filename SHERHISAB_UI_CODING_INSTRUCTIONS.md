@@ -147,11 +147,14 @@ Do not use Satoshi in the ERP application.
 
 ## Bangla Font
 
-Use **Noto Sans Bengali** for Bangla text.
+Use **SolaimanLipi** for Bangla UI text.
 
 ```css
-font-family: "Noto Sans Bengali", "Nirmala UI", sans-serif;
+font-family: "SolaimanLipi", "Noto Sans Bengali", "Nirmala UI", sans-serif;
 ```
+
+Load SolaimanLipi as a web font so Cloudflare/browser users do not depend on
+the font being installed on their device.
 
 ## Monospace Font
 
@@ -169,28 +172,31 @@ Do not use monospace for normal money values or body text.
 
 ## Recommended Type Scale
 
+SherHisab operational UI text uses only **15px** and **16px**.
+
 ```text
-Page title                    18px / 600
-Section title                 14–16px / 600
-Tabs                          13px / 500
-Body                          13–14px / 400
-Form label                    12–13px / 500
-Bangla helper                 10–11px / 400
-Table header                  11px / 600
-Table body                    13px / 400–500
-Button                        13px / 500
-Badge                         11–12px / 500
-Large dashboard metric        22–26px / 600
-Technical ID                  12px / 500 mono
+Page title                    16px / 600
+Section title                 16px / 600
+Tabs                          15px / 500
+Body                          15px / 400
+Form label                    15px / 500
+Bangla helper                 15px / 400
+Table header                  15px / 600
+Table body                    15px / 400–500
+Button                        15px / 500
+Badge                         15px / 500
+Dashboard metric              16px / 600
+Technical ID                  15px / 500 mono
 ```
 
-Avoid unnecessary `700` weight.
+Do not shrink operational UI text below 15px merely to gain density. Preserve
+compactness through spacing, row height, borders, and concise wording.
 
-Use `600` only when the interface needs strong emphasis.
-
-For financial values:
+For financial and quantity values:
 
 ```css
+font-size: 15px;
+font-weight: 600;
 font-variant-numeric: tabular-nums;
 ```
 
@@ -786,8 +792,8 @@ Recommended module-tab treatment:
 
 ```text
 height                36–40px
-label                 13px / 500
-Bangla helper         9–10px / 400 when used
+label                 15px / 500
+Bangla helper         15px / 400 when used
 active text           foreground / primary emphasis
 active indicator      thin line
 inactive text         muted foreground
@@ -1503,7 +1509,7 @@ Normal SherHisab desktop Input/InputGroup height should remain aligned with adja
 
 Keep:
 
-- 13px input text;
+- 15px input text;
 - 1px semantic border;
 - shared 6px control radius;
 - semantic focus ring;
@@ -1883,9 +1889,9 @@ Dense row           34–36px
 ## Typography
 
 ```text
-Header              11px / 600
-Body                13px / 400–500
-Meta/helper         10px / 400
+Header              15px / 600
+Body                15px / 400–500
+Meta/helper         15px / 400
 ```
 
 ## Alignment
@@ -1917,7 +1923,29 @@ Use:
 
 ## Sorting
 
+Every normal business-data column in a SherHisab operational DataTable should
+be sortable unless sorting would be meaningless (for example the display-only
+Actions column).
+
+Use the official shadcn/TanStack sortable-header pattern:
+
+- the header itself is the compact sort trigger;
+- show neutral, ascending, and descending indicators;
+- keep Actions non-sortable;
+- for server-paginated lists, sort the complete filtered dataset on the server
+  before LIMIT/OFFSET rather than sorting only the visible page.
+
 Sorting controls should feel like table labels, not large buttons.
+
+## Column Visibility
+
+Operational DataTables should expose a compact **Columns** dropdown when the
+table has optional columns.
+
+Use checked menu items for visible columns. Keep essential identity columns and
+the Actions column locked visible when hiding them would make the table hard to
+use. Column visibility state should survive filtering, sorting, and pagination
+within the current screen session.
 
 ## Sticky Regions
 
@@ -3560,7 +3588,7 @@ Dub border-first SaaS system
 
 Typography:
 Inter for English/UI
-Noto Sans Bengali for Bangla
+SolaimanLipi for Bangla
 Geist Mono / JetBrains Mono only for technical IDs
 
 Brand accent:

@@ -41,11 +41,19 @@ function installFetch() {
       url === '/api/private/product-categories/cat-active' &&
       init?.method === 'PATCH'
     ) {
+      const body = JSON.parse(String(init.body))
       return jsonResponse({
         id: 'cat-active',
-        name: 'Hardware',
-        isActive: false,
+        name: body.name ?? 'Hardware',
+        isActive: body.isActive ?? true,
       })
+    }
+
+    if (
+      url === '/api/private/product-categories/cat-active' &&
+      init?.method === 'DELETE'
+    ) {
+      return new Response(null, { status: 204 })
     }
 
     if (
@@ -63,11 +71,12 @@ function installFetch() {
       url === '/api/private/units/unit-active' &&
       init?.method === 'PATCH'
     ) {
+      const body = JSON.parse(String(init.body))
       return jsonResponse({
         id: 'unit-active',
-        name: 'Piece',
-        symbol: 'pcs',
-        isActive: false,
+        name: body.name ?? 'Piece',
+        symbol: body.symbol ?? 'pcs',
+        isActive: body.isActive ?? true,
       })
     }
 
@@ -143,9 +152,11 @@ describe('ProductMasterManageDialog', () => {
     expect(screen.getByText('Pipe')).toBeInTheDocument()
     expect(screen.getByText('Inactive')).toBeInTheDocument()
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Archive category Hardware' }),
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Actions for category Hardware' }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
     )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }))
 
     await waitFor(() => {
       expect(
@@ -158,9 +169,11 @@ describe('ProductMasterManageDialog', () => {
       ).toBe(true)
     })
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Activate category Pipe' }),
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Actions for category Pipe' }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
     )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Activate' }))
 
     await waitFor(() => {
       expect(
@@ -169,6 +182,56 @@ describe('ProductMasterManageDialog', () => {
             input === '/api/private/product-categories/cat-old' &&
             init?.method === 'PATCH' &&
             JSON.parse(String(init.body)).isActive === true,
+        ),
+      ).toBe(true)
+    })
+  })
+
+  it('edits and deletes a category from the row actions menu', async () => {
+    const fetchMock = installFetch()
+    renderDialog()
+
+    await screen.findByText('Hardware')
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Actions for category Hardware' }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
+    )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
+
+    const editInput = screen.getByLabelText('Edit category name')
+    fireEvent.change(editInput, { target: { value: 'Tools' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Category' }))
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            input === '/api/private/product-categories/cat-active' &&
+            init?.method === 'PATCH' &&
+            JSON.parse(String(init.body)).name === 'Tools',
+        ),
+      ).toBe(true)
+    })
+
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Actions for category Hardware' }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
+    )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+
+    expect(
+      await screen.findByRole('alertdialog', {
+        name: 'Delete category Hardware?',
+      }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Category' }))
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            input === '/api/private/product-categories/cat-active' &&
+            init?.method === 'DELETE',
         ),
       ).toBe(true)
     })
@@ -214,6 +277,40 @@ describe('ProductMasterManageDialog', () => {
     ).toBeInTheDocument()
   })
 
+  it('edits a Unit name and symbol from its row actions menu', async () => {
+    const fetchMock = installFetch()
+    renderDialog()
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Units' }))
+    await screen.findByText('Piece')
+
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Actions for unit Piece' }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
+    )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }))
+
+    fireEvent.change(screen.getByLabelText('Edit unit name'), {
+      target: { value: 'Pieces' },
+    })
+    fireEvent.change(screen.getByLabelText('Edit unit symbol'), {
+      target: { value: 'pc' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Unit' }))
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            input === '/api/private/units/unit-active' &&
+            init?.method === 'PATCH' &&
+            JSON.parse(String(init.body)).name === 'Pieces' &&
+            JSON.parse(String(init.body)).symbol === 'pc',
+        ),
+      ).toBe(true)
+    })
+  })
+
   it('manages Units with optional symbols', async () => {
     const fetchMock = installFetch()
     renderDialog()
@@ -246,9 +343,11 @@ describe('ProductMasterManageDialog', () => {
       ).toBe(true)
     })
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Archive unit Piece' }),
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Actions for unit Piece' }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
     )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }))
 
     await waitFor(() => {
       expect(

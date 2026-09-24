@@ -34,6 +34,7 @@ export function createProductColumns({
     {
       accessorKey: 'name',
       header: 'Product',
+      enableHiding: false,
       cell: ({ row }) => {
         const product = row.original
         return (
@@ -50,6 +51,7 @@ export function createProductColumns({
     },
     {
       id: 'category',
+      accessorFn: (product) => product.category?.name ?? '',
       header: 'Category',
       cell: ({ row }) => row.original.category?.name ?? 'Uncategorized',
     },
@@ -60,12 +62,15 @@ export function createProductColumns({
     },
     {
       id: 'unit',
+      accessorFn: (product) =>
+        product.baseUnit.symbol || product.baseUnit.name,
       header: 'Unit',
       cell: ({ row }) =>
         row.original.baseUnit.symbol || row.original.baseUnit.name,
     },
     {
       id: 'purchasePrice',
+      accessorFn: (product) => Number(product.defaultPurchasePricePaisa),
       header: 'Purchase Price',
       meta: { align: 'right' },
       cell: ({ row }) => (
@@ -76,6 +81,7 @@ export function createProductColumns({
     },
     {
       id: 'sellingPrice',
+      accessorFn: (product) => Number(product.defaultSellingPricePaisa),
       header: 'Selling Price',
       meta: { align: 'right' },
       cell: ({ row }) => (
@@ -86,6 +92,7 @@ export function createProductColumns({
     },
     {
       id: 'stock',
+      accessorFn: (product) => Number(product.stockBaseQty),
       header: 'Stock',
       meta: { align: 'right' },
       cell: ({ row }) => (
@@ -98,6 +105,7 @@ export function createProductColumns({
     },
     {
       id: 'minimumStock',
+      accessorFn: (product) => Number(product.minimumStockBaseQty),
       header: 'Min Stock',
       meta: { align: 'right' },
       cell: ({ row }) => (
@@ -110,6 +118,7 @@ export function createProductColumns({
     },
     {
       id: 'status',
+      accessorFn: (product) => (product.isActive ? 'Active' : 'Inactive'),
       header: 'Status',
       cell: ({ row }) => (
         <Badge
@@ -127,6 +136,8 @@ export function createProductColumns({
     {
       id: 'actions',
       header: 'Actions',
+      enableHiding: false,
+      enableSorting: false,
       meta: { align: 'center' },
       cell: ({ row }) => {
         const product = row.original

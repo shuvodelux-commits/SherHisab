@@ -26,6 +26,10 @@ function productQueryString(filters: ProductListFilters): string {
   }
 
   params.set('status', filters.status ?? 'active')
+  if (filters.sortBy) {
+    params.set('sortBy', filters.sortBy)
+    params.set('sortDir', filters.sortDir ?? 'asc')
+  }
   params.set('limit', String(filters.limit ?? 50))
   params.set('offset', String(filters.offset ?? 0))
 
@@ -63,6 +67,25 @@ export function createCategory(name: string): Promise<ProductCategoryDto> {
   )
 }
 
+export function updateCategory(
+  id: string,
+  name: string,
+): Promise<ProductCategoryDto> {
+  return apiRequest<ProductCategoryDto>(
+    `${API_ROOT}/product-categories/${id}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    },
+  )
+}
+
+export function deleteCategory(id: string): Promise<void> {
+  return apiRequest<void>(`${API_ROOT}/product-categories/${id}`, {
+    method: 'DELETE',
+  })
+}
+
 export function setCategoryStatus(
   id: string,
   isActive: boolean,
@@ -90,6 +113,22 @@ export function createUnit(input: {
   return apiRequest<ProductUnitDto>(`${API_ROOT}/units`, {
     method: 'POST',
     body: JSON.stringify(input),
+  })
+}
+
+export function updateUnit(
+  id: string,
+  input: { name: string; symbol?: string | null },
+): Promise<ProductUnitDto> {
+  return apiRequest<ProductUnitDto>(`${API_ROOT}/units/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteUnit(id: string): Promise<void> {
+  return apiRequest<void>(`${API_ROOT}/units/${id}`, {
+    method: 'DELETE',
   })
 }
 

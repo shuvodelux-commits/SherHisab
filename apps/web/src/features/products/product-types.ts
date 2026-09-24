@@ -1,5 +1,16 @@
 export type TrackingMode = 'SIMPLE' | 'LOT' | 'BATCH'
 export type ProductStatusFilter = 'active' | 'inactive' | 'all'
+export type ProductSortBy =
+  | 'name'
+  | 'category'
+  | 'brand'
+  | 'unit'
+  | 'purchasePrice'
+  | 'sellingPrice'
+  | 'stock'
+  | 'minimumStock'
+  | 'status'
+export type ProductSortDirection = 'asc' | 'desc'
 export type ConversionMode = 'FIXED' | 'VARIABLE'
 
 export interface ProductCategoryDto {
@@ -44,6 +55,8 @@ export interface ProductListFilters {
   categoryId?: string
   brand?: string
   status?: ProductStatusFilter
+  sortBy?: ProductSortBy
+  sortDir?: ProductSortDirection
   limit?: number
   offset?: number
 }

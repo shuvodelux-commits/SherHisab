@@ -179,6 +179,41 @@ const productSelect = `
    AND dv.is_default
 `
 
+function productSortExpression(
+  sortBy: ProductListFilters['sortBy'],
+): string {
+  switch (sortBy) {
+    case 'category':
+      return "COALESCE(lower(c.name), '')"
+    case 'brand':
+      return 'lower(p.brand)'
+    case 'unit':
+      return "lower(COALESCE(NULLIF(u.symbol, ''), u.name))"
+    case 'purchasePrice':
+      return 'dv.default_purchase_price_paisa'
+    case 'sellingPrice':
+      return 'dv.default_selling_price_paisa'
+    case 'stock':
+      return `(
+        SELECT COALESCE(SUM(im_sort.base_qty_delta), 0)
+        FROM product_variants pv_sort
+        LEFT JOIN inventory_movements im_sort
+          ON im_sort.tenant_id = pv_sort.tenant_id
+         AND im_sort.variant_id = pv_sort.id
+        WHERE pv_sort.tenant_id = p.tenant_id
+          AND pv_sort.product_id = p.id
+          AND pv_sort.is_active
+      )`
+    case 'minimumStock':
+      return 'dv.minimum_stock_base_qty'
+    case 'status':
+      return 'p.is_active'
+    case 'name':
+    default:
+      return 'lower(p.name)'
+  }
+}
+
 export class ProductMasterRepository {
   constructor(private readonly db: DatabaseClient) {}
 
@@ -250,6 +285,52 @@ export class ProductMasterRepository {
     return row ? mapCategory(row) : null
   }
 
+  async updateCategory(
+    tenantId: string,
+    categoryId: string,
+    name: string,
+  ): Promise<CategoryRecord | null> {
+    const result = await this.db.query<CategoryRow>(
+      `UPDATE product_categories
+       SET name = $3, updated_at = NOW()
+       WHERE tenant_id = $1 AND id = $2
+       RETURNING id, name, is_active`,
+      [tenantId, categoryId, name],
+    )
+
+    const row = result.rows[0]
+    return row ? mapCategory(row) : null
+  }
+
+  async categoryIsReferenced(
+    tenantId: string,
+    categoryId: string,
+  ): Promise<boolean> {
+    const result = await this.db.query<{ is_referenced: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM products
+         WHERE tenant_id = $1 AND category_id = $2
+       ) AS is_referenced`,
+      [tenantId, categoryId],
+    )
+
+    return result.rows[0]?.is_referenced ?? false
+  }
+
+  async deleteCategory(
+    tenantId: string,
+    categoryId: string,
+  ): Promise<boolean> {
+    const result = await this.db.query(
+      `DELETE FROM product_categories
+       WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, categoryId],
+    )
+
+    return (result.rowCount ?? 0) > 0
+  }
+
   async listUnits(
     tenantId: string,
     includeInactive = false,
@@ -316,6 +397,63 @@ export class ProductMasterRepository {
 
     const row = result.rows[0]
     return row ? mapUnit(row) : null
+  }
+
+  async updateUnit(
+    tenantId: string,
+    unitId: string,
+    input: CreateUnitInput,
+  ): Promise<UnitRecord | null> {
+    const result = await this.db.query<UnitRow>(
+      `UPDATE units
+       SET name = $3,
+           symbol = $4,
+           updated_at = NOW()
+       WHERE tenant_id = $1 AND id = $2
+       RETURNING id, name, symbol, is_active`,
+      [tenantId, unitId, input.name, input.symbol ?? null],
+    )
+
+    const row = result.rows[0]
+    return row ? mapUnit(row) : null
+  }
+
+  async unitIsReferenced(
+    tenantId: string,
+    unitId: string,
+  ): Promise<boolean> {
+    const result = await this.db.query<{ is_referenced: boolean }>(
+      `SELECT (
+         EXISTS (
+           SELECT 1 FROM products
+           WHERE tenant_id = $1 AND base_unit_id = $2
+         )
+         OR EXISTS (
+           SELECT 1 FROM product_units
+           WHERE tenant_id = $1 AND unit_id = $2
+         )
+         OR EXISTS (
+           SELECT 1 FROM product_barcodes
+           WHERE tenant_id = $1 AND unit_id = $2
+         )
+       ) AS is_referenced`,
+      [tenantId, unitId],
+    )
+
+    return result.rows[0]?.is_referenced ?? false
+  }
+
+  async deleteUnit(
+    tenantId: string,
+    unitId: string,
+  ): Promise<boolean> {
+    const result = await this.db.query(
+      `DELETE FROM units
+       WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, unitId],
+    )
+
+    return (result.rowCount ?? 0) > 0
   }
 
   async insertProduct(
@@ -470,6 +608,8 @@ export class ProductMasterRepository {
     const status = filters.status ?? 'active'
     const limit = filters.limit ?? 50
     const offset = filters.offset ?? 0
+    const sortExpression = productSortExpression(filters.sortBy)
+    const sortDirection = filters.sortDir === 'desc' ? 'DESC' : 'ASC'
 
     const result = await this.db.query<ProductRow>(
       `${productSelect}
@@ -486,7 +626,7 @@ export class ProductMasterRepository {
            OR ($5::text = 'active' AND p.is_active)
            OR ($5::text = 'inactive' AND NOT p.is_active)
          )
-       ORDER BY lower(p.name), p.id
+       ORDER BY ${sortExpression} ${sortDirection}, lower(p.name), p.id
        LIMIT $6 OFFSET $7`,
       [tenantId, search, categoryId, brand, status, limit, offset],
     )
