@@ -449,6 +449,163 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
     expect(page.items[0]?.id).toBe(expensive.id)
   })
 
+  it('uses the next FIFO lot selling price for Product display and sorting', async () => {
+    const fixture = await createAuthenticatedFixture(
+      'FIFO Selling Price Route Tenant',
+    )
+    const unitId = await pieceUnitId(fixture.service)
+    const fifoProduct = await fixture.service.createProduct(
+      {
+        ...createPayload(unitId, 'FIFO Priced Product'),
+        defaultSellingPricePaisa: '9999',
+      },
+      fixture.user.id,
+    )
+
+    const fallbackResponse = await privateRequest(
+      fixture.cookie,
+      '/products?search=FIFO%20Priced%20Product&status=all',
+    )
+    expect(fallbackResponse.status).toBe(200)
+    const fallbackPage = (await fallbackResponse.json()) as {
+      items: Array<{
+        id: string
+        defaultSellingPricePaisa: string
+        currentSellingPricePaisa?: string
+      }>
+    }
+    expect(fallbackPage.items[0]).toMatchObject({
+      id: fifoProduct.id,
+      defaultSellingPricePaisa: '9999',
+      currentSellingPricePaisa: '9999',
+    })
+
+    for (const stockIn of [
+      {
+        businessDate: '2026-01-01',
+        sellingPricePaisa: '1100',
+        unitCostPaisa: '700',
+      },
+      {
+        businessDate: '2026-02-01',
+        sellingPricePaisa: '2200',
+        unitCostPaisa: '800',
+      },
+    ]) {
+      const response = await privateRequest(
+        fixture.cookie,
+        `/products/${fifoProduct.id}/stock-adjustments`,
+        {
+          method: 'POST',
+          body: {
+            deltaBaseQty: '1',
+            note: 'FIFO priced stock',
+            ...stockIn,
+          },
+        },
+      )
+      expect(response.status).toBe(200)
+    }
+
+    const stockedResponse = await privateRequest(
+      fixture.cookie,
+      '/products?search=FIFO%20Priced%20Product&status=all',
+    )
+    const stockedPage = (await stockedResponse.json()) as {
+      items: Array<{
+        defaultSellingPricePaisa: string
+        currentSellingPricePaisa?: string
+      }>
+    }
+    expect(stockedPage.items[0]).toMatchObject({
+      defaultSellingPricePaisa: '9999',
+      currentSellingPricePaisa: '1100',
+    })
+
+    const editDefault = await privateRequest(
+      fixture.cookie,
+      `/products/${fifoProduct.id}`,
+      {
+        method: 'PATCH',
+        body: { defaultSellingPricePaisa: '7777' },
+      },
+    )
+    expect(editDefault.status).toBe(200)
+
+    const afterDefaultEdit = await privateRequest(
+      fixture.cookie,
+      '/products?search=FIFO%20Priced%20Product&status=all',
+    )
+    const afterDefaultPage = (await afterDefaultEdit.json()) as {
+      items: Array<{
+        defaultSellingPricePaisa: string
+        currentSellingPricePaisa?: string
+      }>
+    }
+    expect(afterDefaultPage.items[0]).toMatchObject({
+      defaultSellingPricePaisa: '7777',
+      currentSellingPricePaisa: '1100',
+    })
+
+    const consume = await privateRequest(
+      fixture.cookie,
+      `/products/${fifoProduct.id}/stock-adjustments`,
+      {
+        method: 'POST',
+        body: {
+          deltaBaseQty: '-1',
+          note: 'Consume oldest FIFO lot',
+        },
+      },
+    )
+    expect(consume.status).toBe(200)
+
+    const afterConsume = await privateRequest(
+      fixture.cookie,
+      '/products?search=FIFO%20Priced%20Product&status=all',
+    )
+    const afterConsumePage = (await afterConsume.json()) as {
+      items: Array<{ currentSellingPricePaisa?: string }>
+    }
+    expect(afterConsumePage.items[0]?.currentSellingPricePaisa).toBe('2200')
+
+    const higherCurrent = await fixture.service.createProduct(
+      {
+        ...createPayload(unitId, 'Higher Current Price Product'),
+        defaultSellingPricePaisa: '100',
+      },
+      fixture.user.id,
+    )
+    const higherStock = await privateRequest(
+      fixture.cookie,
+      `/products/${higherCurrent.id}/stock-adjustments`,
+      {
+        method: 'POST',
+        body: {
+          deltaBaseQty: '1',
+          note: 'Higher lot price',
+          unitCostPaisa: '900',
+          sellingPricePaisa: '3300',
+          businessDate: '2026-01-01',
+        },
+      },
+    )
+    expect(higherStock.status).toBe(200)
+
+    const sorted = await privateRequest(
+      fixture.cookie,
+      '/products?sortBy=sellingPrice&sortDir=desc&status=all',
+    )
+    expect(sorted.status).toBe(200)
+    const sortedPage = (await sorted.json()) as {
+      items: Array<{ id: string; currentSellingPricePaisa?: string }>
+    }
+    expect(sortedPage.items[0]).toMatchObject({
+      id: higherCurrent.id,
+      currentSellingPricePaisa: '3300',
+    })
+  })
+
   it('returns remaining FIFO inventory value and sorts by Stock Value', async () => {
     const fixture = await createAuthenticatedFixture('Stock Value Route Tenant')
     const unitId = await pieceUnitId(fixture.service)

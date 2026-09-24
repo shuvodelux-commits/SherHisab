@@ -45,6 +45,7 @@ function product(
     variantCount: 3,
     defaultPurchasePricePaisa: '1250',
     defaultSellingPricePaisa: '1875',
+    currentSellingPricePaisa: '2225',
     stockBaseQty: '2.50000000',
     stockValuePaisa: '3125',
     minimumStockBaseQty: '0.12500000',
@@ -256,12 +257,13 @@ describe('ProductPage', () => {
     expect(screen.getByText('Cotton Roll')).toBeInTheDocument()
     expect(screen.getByText('3 variants')).toBeInTheDocument()
     expect(screen.getByText('৳12.50')).toBeInTheDocument()
-    expect(screen.getByText('৳18.75')).toBeInTheDocument()
+    expect(screen.getByText('৳22.25')).toBeInTheDocument()
+    expect(screen.queryByText('৳18.75')).not.toBeInTheDocument()
     expect(screen.getByText('2.5')).toBeInTheDocument()
     expect(screen.getByText('0.125')).toBeInTheDocument()
     expect(screen.getByText('৳31.25')).toBeInTheDocument()
 
-    for (const value of ['৳12.50', '৳18.75', '2.5', '0.125', '৳31.25']) {
+    for (const value of ['৳12.50', '৳22.25', '2.5', '0.125', '৳31.25']) {
       expect(screen.getByRole('cell', { name: value })).toHaveAttribute(
         'data-align',
         'right',

@@ -28,6 +28,7 @@ function createdProduct(): ProductDetailDto {
     variantCount: 1,
     defaultPurchasePricePaisa: '1250',
     defaultSellingPricePaisa: '1875',
+    currentSellingPricePaisa: '1875',
     stockBaseQty: '2.5',
     stockValuePaisa: '3125',
     minimumStockBaseQty: '0.125',

@@ -46,6 +46,7 @@ function simpleProduct(): ProductDetailDto {
     variantCount: 1,
     defaultPurchasePricePaisa: '1000',
     defaultSellingPricePaisa: '1500',
+    currentSellingPricePaisa: '1500',
     stockBaseQty: '5.25',
     stockValuePaisa: '5250',
     minimumStockBaseQty: '1',

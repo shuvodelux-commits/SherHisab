@@ -80,6 +80,7 @@ export interface ProductListItem {
   variantCount: number
   defaultPurchasePricePaisa: string
   defaultSellingPricePaisa: string
+  currentSellingPricePaisa: string
   stockBaseQty: string
   stockValuePaisa: string
   minimumStockBaseQty: string

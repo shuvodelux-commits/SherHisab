@@ -43,6 +43,7 @@ interface ProductRow {
   variant_count: number
   default_purchase_price_paisa: string
   default_selling_price_paisa: string
+  current_selling_price_paisa: string
   stock_base_qty: string
   stock_value_paisa: string
   minimum_stock_base_qty: string
@@ -108,6 +109,7 @@ function mapProduct(row: ProductRow): ProductDetail {
     variantCount: row.variant_count,
     defaultPurchasePricePaisa: row.default_purchase_price_paisa,
     defaultSellingPricePaisa: row.default_selling_price_paisa,
+    currentSellingPricePaisa: row.current_selling_price_paisa,
     stockBaseQty: row.stock_base_qty,
     stockValuePaisa: row.stock_value_paisa,
     minimumStockBaseQty: row.minimum_stock_base_qty,
@@ -117,6 +119,24 @@ function mapProduct(row: ProductRow): ProductDetail {
     primaryBarcode: row.primary_barcode,
   }
 }
+
+const currentSellingPriceExpression = `COALESCE(
+  (
+    SELECT il_price.default_sell_price_paisa
+    FROM product_variants pv_price
+    JOIN inventory_lots il_price
+      ON il_price.tenant_id = pv_price.tenant_id
+     AND il_price.variant_id = pv_price.id
+    WHERE pv_price.tenant_id = p.tenant_id
+      AND pv_price.product_id = p.id
+      AND pv_price.is_active
+      AND il_price.remaining_base_qty > 0
+      AND il_price.status = 'ACTIVE'
+    ORDER BY il_price.received_on ASC, il_price.id ASC
+    LIMIT 1
+  ),
+  dv.default_selling_price_paisa
+)`
 
 const productSelect = `
   SELECT
@@ -144,6 +164,7 @@ const productSelect = `
     ) AS variant_count,
     dv.default_purchase_price_paisa::text AS default_purchase_price_paisa,
     dv.default_selling_price_paisa::text AS default_selling_price_paisa,
+    (${currentSellingPriceExpression})::text AS current_selling_price_paisa,
     (
       SELECT trim_scale(COALESCE(SUM(im.base_qty_delta), 0))::text
       FROM product_variants pv_stock
@@ -208,7 +229,7 @@ function productSortExpression(
     case 'purchasePrice':
       return 'dv.default_purchase_price_paisa'
     case 'sellingPrice':
-      return 'dv.default_selling_price_paisa'
+      return currentSellingPriceExpression
     case 'stock':
       return `(
         SELECT COALESCE(SUM(im_sort.base_qty_delta), 0)

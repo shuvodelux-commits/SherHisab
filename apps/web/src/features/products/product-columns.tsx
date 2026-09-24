@@ -84,12 +84,12 @@ export function createProductColumns({
     },
     {
       id: 'sellingPrice',
-      accessorFn: (product) => Number(product.defaultSellingPricePaisa),
+      accessorFn: (product) => Number(product.currentSellingPricePaisa),
       header: 'Selling Price',
       meta: { align: 'right' },
       cell: ({ row }) => (
         <span className="product-money">
-          {money(row.original.defaultSellingPricePaisa)}
+          {money(row.original.currentSellingPricePaisa)}
         </span>
       ),
     },
