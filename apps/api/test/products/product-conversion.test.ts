@@ -650,6 +650,33 @@ describe.skipIf(!hasDatabase)('product conversion profiles', () => {
       baseUnitId: fixture.gira.id,
       version: 1,
     })
+
+    const cleared = await fixture.products.updateProduct(
+      fixture.product.id,
+      {
+        name: fixture.product.name,
+        brand: fixture.product.brand,
+        categoryId: fixture.product.category?.id ?? null,
+        baseUnitId: newBaseUnit.id,
+        barcode: fixture.product.primaryBarcode ?? '',
+        defaultPurchasePricePaisa:
+          fixture.product.defaultPurchasePricePaisa,
+        defaultSellingPricePaisa:
+          fixture.product.defaultSellingPricePaisa,
+        minimumStockBaseQty: fixture.product.minimumStockBaseQty,
+        trackingMode: fixture.product.trackingMode,
+        advanced: {
+          conversionProfile: null,
+        },
+      },
+    )
+    expect(cleared.baseUnit.id).toBe(newBaseUnit.id)
+
+    const clearedAdvanced =
+      await fixture.products.getAdvancedConfiguration(
+        fixture.product.id,
+      )
+    expect(clearedAdvanced.conversionProfile).toBeNull()
   })
 
 })

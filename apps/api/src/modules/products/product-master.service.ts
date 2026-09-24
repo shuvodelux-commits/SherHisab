@@ -810,6 +810,21 @@ export class ProductMasterService {
               'Base unit cannot be changed after inventory history exists',
             )
           }
+
+          const activeConversionProfile =
+            await new ConversionService(
+              this.tenantId,
+              database,
+            ).getActiveProfile(productId)
+
+          if (
+            activeConversionProfile &&
+            input.advanced?.conversionProfile === undefined
+          ) {
+            throw new ProductValidationError(
+              'Conversion profile must be replaced or cleared when changing the base unit',
+            )
+          }
         }
 
         const updated = await repository.updateProductIdentity(
