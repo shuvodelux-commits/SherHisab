@@ -84,10 +84,11 @@ But a passing targeted test does **not** replace the full suite when the full su
 Follow **Superpowers: verification-before-completion**:
 
 - Never say a change is complete, fixed, safe, or passing without fresh verification evidence.
-- Never push code based only on inspection or confidence.
-- Read the complete test/typecheck output and confirm the exit code is successful.
-- If tests or type checking fail, fix the issue and re-run verification before pushing.
-- If the current environment cannot run the required verification, **do not push the code**. Report the blocker and get verification from a suitable local/CI environment first.
+- Never merge or deploy code based only on inspection or confidence.
+- Read the complete GitHub CI output and confirm the required checks are successful before merge.
+- After merge, read the complete local test/typecheck/build output and confirm successful exit codes before deployment.
+- If GitHub CI fails, fix the branch on GitHub and re-run CI.
+- If local verification of the merged commit fails, do not deploy; debug the failure and update the GitHub branch/workflow through a new change.
 
 ## Failure Handling
 
@@ -97,20 +98,23 @@ When a test, type check, build, or runtime check fails:
 2. Identify the root cause before modifying code.
 3. For bugs, add a regression test first where applicable.
 4. Re-run the affected test.
-5. Re-run the full verification required above before push.
+5. Re-run the full GitHub CI verification before merge, then repeat the required local verification after merge before deployment.
 
 ## Git Discipline
 
-Before pushing:
+Implementation work is created on a GitHub feature/fix branch and reviewed through its diff/PR before merge.
+
+After the approved change is merged, synchronize the local checkout with:
 
 ```bash
-git status --short
-git diff --check
+git fetch origin
+git checkout main
+git pull --ff-only origin main
 ```
 
-Confirm only intended files changed.
+Before local verification/deployment, confirm the local checkout is clean except for explicitly approved local-only files and that `HEAD` matches the intended GitHub `main` commit.
 
-Do not use force-push for normal implementation work.
+Do not force-update `main` or use force-push for normal implementation work.
 
 ## Documentation-Only Changes
 
