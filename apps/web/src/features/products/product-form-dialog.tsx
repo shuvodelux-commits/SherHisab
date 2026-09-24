@@ -207,7 +207,7 @@ export function ProductFormDialog({
     mutationFn: async () => {
       const purchasePrice = parseTakaToPaisa(form.purchasePrice)
       const sellingPrice = parseTakaToPaisa(form.sellingPrice)
-      const advancedPayload = buildAdvancedPayload(advanced)
+      const advancedPayload = buildAdvancedPayload(advanced, form.baseUnitId)
 
       if (!form.name.trim()) {
         throw new Error('Product name is required.')

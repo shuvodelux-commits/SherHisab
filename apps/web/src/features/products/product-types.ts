@@ -13,6 +13,54 @@ export type ProductSortBy =
   | 'status'
 export type ProductSortDirection = 'asc' | 'desc'
 export type ConversionMode = 'FIXED' | 'VARIABLE'
+export type ConversionProfileType =
+  | 'SIMPLE'
+  | 'PACK'
+  | 'LENGTH'
+  | 'COMPOUND'
+  | 'CUSTOM_FIXED_RATIO'
+
+export interface ConversionComponentInput {
+  key: string
+  label: string
+  unitId: string
+  baseFactorNumerator: string
+  baseFactorDenominator: string
+  sortOrder: number
+  minValue: string
+  maxExclusive?: string | null
+  allowFraction: boolean
+  autoNormalizeRemainder: boolean
+}
+
+export interface ConversionProfileInput {
+  type: ConversionProfileType
+  baseUnitId: string
+  pricingUnitId: string
+  pricingBaseFactorNumerator: string
+  pricingBaseFactorDenominator: string
+  displayPrecision: number
+  components: ConversionComponentInput[]
+}
+
+export interface ConversionComponentDto
+  extends Omit<ConversionComponentInput, 'maxExclusive'> {
+  id: string
+  maxExclusive: string | null
+}
+
+export interface ConversionProfileDto {
+  id: string
+  productId: string
+  type: ConversionProfileType
+  version: number
+  baseUnitId: string
+  pricingUnitId: string
+  pricingBaseFactorNumerator: string
+  pricingBaseFactorDenominator: string
+  displayPrecision: number
+  components: ConversionComponentDto[]
+}
 
 export interface ProductCategoryDto {
   id: string
@@ -95,6 +143,7 @@ export interface ProductAdvancedConfigurationDto {
   alternativeUnits: ProductAlternativeUnitDto[]
   specifications: ProductSpecificationDto[]
   variants: ProductVariantDto[]
+  conversionProfile?: ConversionProfileDto | null
 }
 
 export interface AlternativeUnitInput {
@@ -133,6 +182,7 @@ export interface AdvancedProductConfigurationInput {
   alternativeUnits?: AlternativeUnitInput[]
   specifications?: SpecificationInput[]
   variantConfiguration?: ReplaceVariantConfigurationInput
+  conversionProfile?: ConversionProfileInput | null
 }
 
 export interface CreateProductPayload {

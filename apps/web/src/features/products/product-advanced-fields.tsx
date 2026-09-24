@@ -22,6 +22,7 @@ import { formatPaisaToTaka, parseTakaToPaisa } from '../../lib/money'
 import type {
   AdvancedProductConfigurationInput,
   ConversionMode,
+  ConversionProfileType,
   ProductAdvancedConfigurationDto,
   ProductUnitDto,
   TrackingMode,
@@ -62,8 +63,28 @@ export interface VariantFormRow {
   hasInventoryHistory: boolean
 }
 
+export interface ConversionComponentFormRow {
+  key: string
+  componentKey: string
+  label: string
+  unitId: string
+  numerator: string
+  denominator: string
+  minValue: string
+  maxExclusive: string
+  allowFraction: boolean
+  autoNormalizeRemainder: boolean
+}
+
 export interface ProductAdvancedFormState {
   trackingMode: TrackingMode
+  conversionEnabled: boolean
+  conversionType: ConversionProfileType
+  conversionPricingUnitId: string
+  conversionPricingFactorNumerator: string
+  conversionPricingFactorDenominator: string
+  conversionDisplayPrecision: string
+  conversionComponents: ConversionComponentFormRow[]
   alternativeUnits: AlternativeUnitFormRow[]
   specifications: SpecificationFormRow[]
   variantsEnabled: boolean
@@ -89,6 +110,13 @@ export function emptyAdvancedFormState(
 ): ProductAdvancedFormState {
   return {
     trackingMode,
+    conversionEnabled: false,
+    conversionType: 'COMPOUND',
+    conversionPricingUnitId: '',
+    conversionPricingFactorNumerator: '1',
+    conversionPricingFactorDenominator: '1',
+    conversionDisplayPrecision: '2',
+    conversionComponents: [],
     alternativeUnits: [],
     specifications: [],
     variantsEnabled: false,
@@ -120,8 +148,32 @@ export function advancedFormStateFromProduct(
     }
   }
 
+  const conversion = advanced.conversionProfile
+
   return {
     trackingMode,
+    conversionEnabled: Boolean(conversion),
+    conversionType: conversion?.type ?? 'COMPOUND',
+    conversionPricingUnitId: conversion?.pricingUnitId ?? '',
+    conversionPricingFactorNumerator:
+      conversion?.pricingBaseFactorNumerator ?? '1',
+    conversionPricingFactorDenominator:
+      conversion?.pricingBaseFactorDenominator ?? '1',
+    conversionDisplayPrecision:
+      conversion?.displayPrecision.toString() ?? '2',
+    conversionComponents:
+      conversion?.components.map((component, index) => ({
+        key: component.id ?? rowKey('conversion', index),
+        componentKey: component.key,
+        label: component.label,
+        unitId: component.unitId,
+        numerator: component.baseFactorNumerator,
+        denominator: component.baseFactorDenominator,
+        minValue: component.minValue,
+        maxExclusive: component.maxExclusive ?? '',
+        allowFraction: component.allowFraction,
+        autoNormalizeRemainder: component.autoNormalizeRemainder,
+      })) ?? [],
     alternativeUnits: advanced.alternativeUnits.map((item, index) => ({
       key: item.id ?? rowKey('alternative', index),
       unitId: item.unit.id,
@@ -163,6 +215,7 @@ export function advancedFormStateFromProduct(
 // eslint-disable-next-line react-refresh/only-export-components
 export function buildAdvancedPayload(
   state: ProductAdvancedFormState,
+  baseUnitId: string,
 ): AdvancedProductConfigurationInput {
   const options: VariantOptionInput[] = state.variantOptions
     .filter((option) => option.name.trim() || option.valuesText.trim())
@@ -185,7 +238,42 @@ export function buildAdvancedPayload(
     selections: { ...variant.selections },
   }))
 
+  const displayPrecision = Number.parseInt(
+    state.conversionDisplayPrecision || '2',
+    10,
+  )
+
   return {
+    conversionProfile: state.conversionEnabled
+      ? {
+          type: state.conversionType,
+          baseUnitId,
+          pricingUnitId: state.conversionPricingUnitId,
+          pricingBaseFactorNumerator:
+            state.conversionPricingFactorNumerator,
+          pricingBaseFactorDenominator:
+            state.conversionPricingFactorDenominator,
+          displayPrecision: Number.isFinite(displayPrecision)
+            ? displayPrecision
+            : 2,
+          components: state.conversionComponents.map(
+            (component, index) => ({
+              key: component.componentKey.trim(),
+              label: component.label.trim(),
+              unitId: component.unitId,
+              baseFactorNumerator: component.numerator,
+              baseFactorDenominator: component.denominator,
+              sortOrder: index,
+              minValue: component.minValue || '0',
+              maxExclusive:
+                component.maxExclusive.trim() || null,
+              allowFraction: component.allowFraction,
+              autoNormalizeRemainder:
+                component.autoNormalizeRemainder,
+            }),
+          ),
+        }
+      : null,
     alternativeUnits: state.alternativeUnits
       .filter((item) => item.unitId)
       .map((item) => ({
@@ -272,6 +360,536 @@ export function ProductAdvancedFields({
           />
         </p>
       </div>
+
+      <section className="product-advanced-section">
+        <div className="product-advanced-heading">
+          <div>
+            <strong>
+              <BilingualLabel
+                en="Quantity Conversion"
+                bn="পরিমাণ রূপান্তর"
+              />
+            </strong>
+            <p>
+              <BilingualLabel
+                layout="stacked"
+                en="Use exact ratios for compound business quantities such as Gauge + Gira, Pipe + Feet, or Carton + Piece."
+                bn="গজ + গিরা, পাইপ + ফুট বা কার্টন + পিসের মতো যৌগিক পরিমাণে সঠিক অনুপাত ব্যবহার করুন।"
+              />
+            </p>
+          </div>
+        </div>
+
+        <label className="product-check-row">
+          <Checkbox
+            aria-label={t(
+              'Enable custom quantity conversion',
+              'কাস্টম পরিমাণ রূপান্তর চালু করুন',
+            )}
+            checked={state.conversionEnabled}
+            onCheckedChange={(checked) =>
+              patch({ conversionEnabled: checked === true })
+            }
+          />
+          <span>
+            <strong>
+              {t(
+                'Enable custom quantity conversion',
+                'কাস্টম পরিমাণ রূপান্তর চালু করুন',
+              )}
+            </strong>
+            <small>
+              {t(
+                'The selected Product Unit remains the base inventory unit.',
+                'নির্বাচিত পণ্যের এককই মূল স্টক একক থাকবে।',
+              )}
+            </small>
+          </span>
+        </label>
+
+        {state.conversionEnabled ? (
+          <div className="product-variant-editor">
+            <div className="product-inline-grid">
+              <label className="product-field">
+                <BilingualLabel
+                  en="Profile Type"
+                  bn="প্রোফাইলের ধরন"
+                />
+                <Select
+                  onValueChange={(value) =>
+                    patch({
+                      conversionType:
+                        value as ConversionProfileType,
+                    })
+                  }
+                  value={state.conversionType}
+                >
+                  <SelectTrigger
+                    aria-label={t(
+                      'Conversion profile type',
+                      'রূপান্তর প্রোফাইলের ধরন',
+                    )}
+                    className="product-select"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="SIMPLE">
+                        {t('Simple', 'সাধারণ')}
+                      </SelectItem>
+                      <SelectItem value="PACK">
+                        {t('Pack', 'প্যাক')}
+                      </SelectItem>
+                      <SelectItem value="LENGTH">
+                        {t('Length', 'দৈর্ঘ্য')}
+                      </SelectItem>
+                      <SelectItem value="COMPOUND">
+                        {t('Compound', 'যৌগিক')}
+                      </SelectItem>
+                      <SelectItem value="CUSTOM_FIXED_RATIO">
+                        {t('Custom Fixed Ratio', 'কাস্টম নির্দিষ্ট অনুপাত')}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </label>
+
+              <label className="product-field">
+                <BilingualLabel
+                  en="Pricing Unit"
+                  bn="দাম নির্ধারণের একক"
+                />
+                <Select
+                  onValueChange={(value) =>
+                    patch({
+                      conversionPricingUnitId:
+                        value === SELECT_NONE ? '' : value,
+                    })
+                  }
+                  value={
+                    state.conversionPricingUnitId || SELECT_NONE
+                  }
+                >
+                  <SelectTrigger
+                    aria-label={t(
+                      'Pricing unit',
+                      'দাম নির্ধারণের একক',
+                    )}
+                    className="product-select"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={SELECT_NONE}>
+                        {t('Select unit', 'একক নির্বাচন করুন')}
+                      </SelectItem>
+                      {units
+                        .filter((unit) => unit.isActive)
+                        .map((unit) => (
+                          <SelectItem key={unit.id} value={unit.id}>
+                            {unit.name}
+                            {unit.symbol ? ` (${unit.symbol})` : ''}
+                          </SelectItem>
+                        ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </label>
+
+              <label className="product-field">
+                <BilingualLabel
+                  en="Pricing Factor Numerator"
+                  bn="দামের অনুপাত লব"
+                />
+                <Input
+                  aria-label={t(
+                    'Pricing factor numerator',
+                    'দামের অনুপাত লব',
+                  )}
+                  inputMode="numeric"
+                  onChange={(event) =>
+                    patch({
+                      conversionPricingFactorNumerator:
+                        event.target.value,
+                    })
+                  }
+                  value={state.conversionPricingFactorNumerator}
+                />
+              </label>
+
+              <label className="product-field">
+                <BilingualLabel
+                  en="Pricing Factor Denominator"
+                  bn="দামের অনুপাত হর"
+                />
+                <Input
+                  aria-label={t(
+                    'Pricing factor denominator',
+                    'দামের অনুপাত হর',
+                  )}
+                  inputMode="numeric"
+                  onChange={(event) =>
+                    patch({
+                      conversionPricingFactorDenominator:
+                        event.target.value,
+                    })
+                  }
+                  value={state.conversionPricingFactorDenominator}
+                />
+              </label>
+
+              <label className="product-field">
+                <BilingualLabel
+                  en="Display Precision"
+                  bn="প্রদর্শনের দশমিক"
+                />
+                <Input
+                  aria-label={t(
+                    'Conversion display precision',
+                    'রূপান্তর প্রদর্শনের দশমিক',
+                  )}
+                  inputMode="numeric"
+                  max="8"
+                  min="0"
+                  onChange={(event) =>
+                    patch({
+                      conversionDisplayPrecision:
+                        event.target.value,
+                    })
+                  }
+                  value={state.conversionDisplayPrecision}
+                />
+              </label>
+            </div>
+
+            <div className="product-advanced-heading">
+              <div>
+                <strong>
+                  <BilingualLabel
+                    en="Conversion Components"
+                    bn="রূপান্তর উপাদান"
+                  />
+                </strong>
+                <p>
+                  <BilingualLabel
+                    layout="stacked"
+                    en="Order the cashier inputs from whole unit to remainder. Ratios always convert into the Product base unit."
+                    bn="ক্যাশিয়ারের ইনপুট বড় একক থেকে অবশিষ্ট একক পর্যন্ত সাজান। সব অনুপাত পণ্যের মূল এককে রূপান্তর হবে।"
+                  />
+                </p>
+              </div>
+              <Button
+                onClick={() =>
+                  patch({
+                    conversionComponents: [
+                      ...state.conversionComponents,
+                      {
+                        key: rowKey(
+                          'conversion',
+                          state.conversionComponents.length,
+                        ),
+                        componentKey: '',
+                        label: '',
+                        unitId: '',
+                        numerator: '1',
+                        denominator: '1',
+                        minValue: '0',
+                        maxExclusive: '',
+                        allowFraction: false,
+                        autoNormalizeRemainder: false,
+                      },
+                    ],
+                  })
+                }
+                size="sm"
+                variant="secondary"
+              >
+                <Plus aria-hidden="true" data-icon="inline-start" />
+                {t(
+                  'Add Conversion Component',
+                  'রূপান্তর উপাদান যোগ করুন',
+                )}
+              </Button>
+            </div>
+
+            {state.conversionComponents.map((component, index) => (
+              <div
+                className="product-variant-row"
+                key={component.key}
+              >
+                <div className="product-inline-grid">
+                  <label className="product-field">
+                    <BilingualLabel en="Key" bn="কী" />
+                    <Input
+                      aria-label={t(
+                        `Conversion component key ${index + 1}`,
+                        `রূপান্তর উপাদান কী ${index + 1}`,
+                      )}
+                      onChange={(event) => {
+                        const rows = [
+                          ...state.conversionComponents,
+                        ]
+                        rows[index] = {
+                          ...component,
+                          componentKey: event.target.value,
+                        }
+                        patch({ conversionComponents: rows })
+                      }}
+                      value={component.componentKey}
+                    />
+                  </label>
+
+                  <label className="product-field">
+                    <BilingualLabel en="Label" bn="লেবেল" />
+                    <Input
+                      aria-label={t(
+                        `Conversion component label ${index + 1}`,
+                        `রূপান্তর উপাদান লেবেল ${index + 1}`,
+                      )}
+                      onChange={(event) => {
+                        const rows = [
+                          ...state.conversionComponents,
+                        ]
+                        rows[index] = {
+                          ...component,
+                          label: event.target.value,
+                        }
+                        patch({ conversionComponents: rows })
+                      }}
+                      value={component.label}
+                    />
+                  </label>
+
+                  <label className="product-field">
+                    <BilingualLabel en="Unit" bn="একক" />
+                    <Select
+                      onValueChange={(value) => {
+                        const rows = [
+                          ...state.conversionComponents,
+                        ]
+                        rows[index] = {
+                          ...component,
+                          unitId:
+                            value === SELECT_NONE ? '' : value,
+                        }
+                        patch({ conversionComponents: rows })
+                      }}
+                      value={component.unitId || SELECT_NONE}
+                    >
+                      <SelectTrigger
+                        aria-label={t(
+                          `Conversion component unit ${index + 1}`,
+                          `রূপান্তর উপাদান একক ${index + 1}`,
+                        )}
+                        className="product-select"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value={SELECT_NONE}>
+                            {t('Select unit', 'একক নির্বাচন করুন')}
+                          </SelectItem>
+                          {units
+                            .filter((unit) => unit.isActive)
+                            .map((unit) => (
+                              <SelectItem
+                                key={unit.id}
+                                value={unit.id}
+                              >
+                                {unit.name}
+                                {unit.symbol
+                                  ? ` (${unit.symbol})`
+                                  : ''}
+                              </SelectItem>
+                            ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </label>
+
+                  <label className="product-field">
+                    <BilingualLabel
+                      en="Factor Numerator"
+                      bn="অনুপাত লব"
+                    />
+                    <Input
+                      aria-label={t(
+                        `Conversion component numerator ${index + 1}`,
+                        `রূপান্তর উপাদান লব ${index + 1}`,
+                      )}
+                      inputMode="numeric"
+                      onChange={(event) => {
+                        const rows = [
+                          ...state.conversionComponents,
+                        ]
+                        rows[index] = {
+                          ...component,
+                          numerator: event.target.value,
+                        }
+                        patch({ conversionComponents: rows })
+                      }}
+                      value={component.numerator}
+                    />
+                  </label>
+
+                  <label className="product-field">
+                    <BilingualLabel
+                      en="Factor Denominator"
+                      bn="অনুপাত হর"
+                    />
+                    <Input
+                      aria-label={t(
+                        `Conversion component denominator ${index + 1}`,
+                        `রূপান্তর উপাদান হর ${index + 1}`,
+                      )}
+                      inputMode="numeric"
+                      onChange={(event) => {
+                        const rows = [
+                          ...state.conversionComponents,
+                        ]
+                        rows[index] = {
+                          ...component,
+                          denominator: event.target.value,
+                        }
+                        patch({ conversionComponents: rows })
+                      }}
+                      value={component.denominator}
+                    />
+                  </label>
+
+                  <label className="product-field">
+                    <BilingualLabel
+                      en="Minimum"
+                      bn="সর্বনিম্ন"
+                    />
+                    <Input
+                      aria-label={t(
+                        `Conversion component minimum ${index + 1}`,
+                        `রূপান্তর উপাদান সর্বনিম্ন ${index + 1}`,
+                      )}
+                      inputMode="decimal"
+                      onChange={(event) => {
+                        const rows = [
+                          ...state.conversionComponents,
+                        ]
+                        rows[index] = {
+                          ...component,
+                          minValue: event.target.value,
+                        }
+                        patch({ conversionComponents: rows })
+                      }}
+                      value={component.minValue}
+                    />
+                  </label>
+
+                  <label className="product-field">
+                    <BilingualLabel
+                      en="Max Exclusive"
+                      bn="সর্বোচ্চ সীমা"
+                    />
+                    <Input
+                      aria-label={t(
+                        `Conversion component max exclusive ${index + 1}`,
+                        `রূপান্তর উপাদান সর্বোচ্চ সীমা ${index + 1}`,
+                      )}
+                      inputMode="decimal"
+                      onChange={(event) => {
+                        const rows = [
+                          ...state.conversionComponents,
+                        ]
+                        rows[index] = {
+                          ...component,
+                          maxExclusive: event.target.value,
+                        }
+                        patch({ conversionComponents: rows })
+                      }}
+                      value={component.maxExclusive}
+                    />
+                  </label>
+                </div>
+
+                <div className="product-check-row">
+                  <Checkbox
+                    aria-label={t(
+                      `Allow fractional component ${index + 1}`,
+                      `ভগ্নাংশ অনুমোদন ${index + 1}`,
+                    )}
+                    checked={component.allowFraction}
+                    onCheckedChange={(checked) => {
+                      const rows = [
+                        ...state.conversionComponents,
+                      ]
+                      rows[index] = {
+                        ...component,
+                        allowFraction: checked === true,
+                      }
+                      patch({ conversionComponents: rows })
+                    }}
+                  />
+                  <span>
+                    {t(
+                      'Allow fractions',
+                      'ভগ্নাংশ অনুমোদন করুন',
+                    )}
+                  </span>
+
+                  <Checkbox
+                    aria-label={t(
+                      `Auto normalize remainder ${index + 1}`,
+                      `অবশিষ্ট স্বয়ংক্রিয় স্বাভাবিকীকরণ ${index + 1}`,
+                    )}
+                    checked={component.autoNormalizeRemainder}
+                    onCheckedChange={(checked) => {
+                      const rows = [
+                        ...state.conversionComponents,
+                      ]
+                      rows[index] = {
+                        ...component,
+                        autoNormalizeRemainder:
+                          checked === true,
+                      }
+                      patch({ conversionComponents: rows })
+                    }}
+                  />
+                  <span>
+                    {t(
+                      'Auto-normalize remainder',
+                      'অবশিষ্ট স্বয়ংক্রিয়ভাবে ঠিক করুন',
+                    )}
+                  </span>
+
+                  <Button
+                    aria-label={t(
+                      `Remove conversion component ${index + 1}`,
+                      `রূপান্তর উপাদান ${index + 1} সরান`,
+                    )}
+                    onClick={() =>
+                      patch({
+                        conversionComponents:
+                          state.conversionComponents.filter(
+                            (item) =>
+                              item.key !== component.key,
+                          ),
+                      })
+                    }
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <Trash2
+                      aria-hidden="true"
+                      data-icon="inline-start"
+                    />
+                    {t('Remove', 'সরান')}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
 
       <section className="product-advanced-section">
         <div className="product-advanced-heading">

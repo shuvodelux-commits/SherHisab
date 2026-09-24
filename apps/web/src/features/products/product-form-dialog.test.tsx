@@ -15,6 +15,8 @@ function jsonResponse(body: unknown, status = 200) {
 const activeCategory = { id: 'category-active', name: 'Hardware', isActive: true }
 const archivedCategory = { id: 'category-archived', name: 'Old Category', isActive: false }
 const activeUnit = { id: 'unit-active', name: 'Piece', symbol: 'pcs', isActive: true }
+const activeGiraUnit = { id: 'unit-gira', name: 'Gira', symbol: 'gira', isActive: true }
+const activeGaugeUnit = { id: 'unit-gauge', name: 'Gauge', symbol: 'gauge', isActive: true }
 const archivedUnit = { id: 'unit-archived', name: 'Old Unit', symbol: 'old', isActive: false }
 
 function createdProduct(): ProductDetailDto {
@@ -37,6 +39,59 @@ function createdProduct(): ProductDetailDto {
     isActive: true,
     primaryBarcode: '123456',
     advanced: { alternativeUnits: [], specifications: [], variants: [] },
+  }
+}
+
+function conversionProduct(): ProductDetailDto {
+  return {
+    ...createdProduct(),
+    id: 'product-conversion-edit',
+    name: 'Existing Fabric',
+    baseUnit: activeGiraUnit,
+    advanced: {
+      alternativeUnits: [],
+      specifications: [],
+      variants: [],
+      conversionProfile: {
+        id: 'conversion-profile-1',
+        productId: 'product-conversion-edit',
+        type: 'COMPOUND',
+        version: 3,
+        baseUnitId: 'unit-gira',
+        pricingUnitId: 'unit-gauge',
+        pricingBaseFactorNumerator: '16',
+        pricingBaseFactorDenominator: '1',
+        displayPrecision: 2,
+        components: [
+          {
+            id: 'conversion-component-gauge',
+            key: 'gauge',
+            label: 'Gauge',
+            unitId: 'unit-gauge',
+            baseFactorNumerator: '16',
+            baseFactorDenominator: '1',
+            sortOrder: 0,
+            minValue: '0',
+            maxExclusive: null,
+            allowFraction: false,
+            autoNormalizeRemainder: false,
+          },
+          {
+            id: 'conversion-component-gira',
+            key: 'gira',
+            label: 'Gira',
+            unitId: 'unit-gira',
+            baseFactorNumerator: '1',
+            baseFactorDenominator: '1',
+            sortOrder: 1,
+            minValue: '0',
+            maxExclusive: '16',
+            allowFraction: false,
+            autoNormalizeRemainder: false,
+          },
+        ],
+      },
+    },
   }
 }
 
@@ -77,7 +132,12 @@ function installFetch(options: { productError?: string } = {}) {
           201,
         )
       }
-      return jsonResponse([activeUnit, archivedUnit])
+      return jsonResponse([
+        activeUnit,
+        activeGiraUnit,
+        activeGaugeUnit,
+        archivedUnit,
+      ])
     }
 
     if (url === '/api/private/products' && init?.method === 'POST') {
@@ -85,6 +145,13 @@ function installFetch(options: { productError?: string } = {}) {
         return jsonResponse({ error: options.productError }, 409)
       }
       return jsonResponse(createdProduct(), 201)
+    }
+
+    if (
+      url === '/api/private/products/product-conversion-edit' &&
+      init?.method === 'PATCH'
+    ) {
+      return jsonResponse(conversionProduct())
     }
 
     if (
@@ -181,6 +248,151 @@ describe('ProductFormDialog', () => {
 
     expect(screen.getByRole('button', { name: 'Category' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Unit' })).toBeInTheDocument()
+  })
+
+  it('configures a generic exact quantity conversion profile from Advanced', async () => {
+    const fetchMock = installFetch()
+    renderForm()
+
+    fireEvent.change(await screen.findByLabelText('Product Name'), {
+      target: { value: 'Muslin Fabric Black' },
+    })
+    fireEvent.change(screen.getByLabelText('Purchase Price'), {
+      target: { value: '200' },
+    })
+    fireEvent.change(screen.getByLabelText('Selling Price'), {
+      target: { value: '300' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unit' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Gira/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+
+    expect(screen.getByText('Quantity Conversion')).toBeInTheDocument()
+    expect(screen.getByText('পরিমাণ রূপান্তর')).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'Enable custom quantity conversion',
+      }),
+    )
+
+    fireEvent.click(
+      screen.getByRole('combobox', { name: 'Conversion profile type' }),
+    )
+    fireEvent.click(await screen.findByRole('option', { name: 'Compound' }))
+
+    fireEvent.click(
+      screen.getByRole('combobox', { name: 'Pricing unit' }),
+    )
+    fireEvent.click(await screen.findByRole('option', { name: /Gauge/ }))
+
+    fireEvent.change(screen.getByLabelText('Pricing factor numerator'), {
+      target: { value: '16' },
+    })
+    fireEvent.change(screen.getByLabelText('Pricing factor denominator'), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText('Conversion display precision'), {
+      target: { value: '2' },
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Add Conversion Component' }),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Add Conversion Component' }),
+    )
+
+    fireEvent.change(screen.getByLabelText('Conversion component key 1'), {
+      target: { value: 'gauge' },
+    })
+    fireEvent.change(screen.getByLabelText('Conversion component label 1'), {
+      target: { value: 'Gauge' },
+    })
+    fireEvent.click(
+      screen.getByRole('combobox', { name: 'Conversion component unit 1' }),
+    )
+    fireEvent.click(await screen.findByRole('option', { name: /Gauge/ }))
+    fireEvent.change(
+      screen.getByLabelText('Conversion component numerator 1'),
+      { target: { value: '16' } },
+    )
+    fireEvent.change(
+      screen.getByLabelText('Conversion component denominator 1'),
+      { target: { value: '1' } },
+    )
+
+    fireEvent.change(screen.getByLabelText('Conversion component key 2'), {
+      target: { value: 'gira' },
+    })
+    fireEvent.change(screen.getByLabelText('Conversion component label 2'), {
+      target: { value: 'Gira' },
+    })
+    fireEvent.click(
+      screen.getByRole('combobox', { name: 'Conversion component unit 2' }),
+    )
+    fireEvent.click(await screen.findByRole('option', { name: /Gira/ }))
+    fireEvent.change(
+      screen.getByLabelText('Conversion component numerator 2'),
+      { target: { value: '1' } },
+    )
+    fireEvent.change(
+      screen.getByLabelText('Conversion component denominator 2'),
+      { target: { value: '1' } },
+    )
+    fireEvent.change(
+      screen.getByLabelText('Conversion component max exclusive 2'),
+      { target: { value: '16' } },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }))
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          input === '/api/private/products' && init?.method === 'POST',
+      )
+      expect(createCall).toBeDefined()
+      const body = JSON.parse(String(createCall?.[1]?.body))
+
+      expect(body.baseUnitId).toBe('unit-gira')
+      expect(body.advanced.conversionProfile).toEqual({
+        type: 'COMPOUND',
+        baseUnitId: 'unit-gira',
+        pricingUnitId: 'unit-gauge',
+        pricingBaseFactorNumerator: '16',
+        pricingBaseFactorDenominator: '1',
+        displayPrecision: 2,
+        components: [
+          {
+            key: 'gauge',
+            label: 'Gauge',
+            unitId: 'unit-gauge',
+            baseFactorNumerator: '16',
+            baseFactorDenominator: '1',
+            sortOrder: 0,
+            minValue: '0',
+            maxExclusive: null,
+            allowFraction: false,
+            autoNormalizeRemainder: false,
+          },
+          {
+            key: 'gira',
+            label: 'Gira',
+            unitId: 'unit-gira',
+            baseFactorNumerator: '1',
+            baseFactorDenominator: '1',
+            sortOrder: 1,
+            minValue: '0',
+            maxExclusive: '16',
+            allowFraction: false,
+            autoNormalizeRemainder: false,
+          },
+        ],
+      })
+    })
   })
 
   it('forces generic opening stock to zero when variants are enabled', async () => {
@@ -399,4 +611,87 @@ describe('ProductFormDialog', () => {
     expect(await screen.findByText('পণ্যের নাম')).toBeInTheDocument()
     expect(screen.queryByText('Product Name')).not.toBeInTheDocument()
   })
+  it('round-trips an existing exact conversion profile through Edit Product', async () => {
+    const fetchMock = installFetch()
+    renderForm({ mode: 'edit', product: conversionProduct() })
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Edit Product' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+
+    expect(
+      screen.getByRole('checkbox', {
+        name: 'Enable custom quantity conversion',
+      }),
+    ).toBeChecked()
+    expect(
+      screen.getByRole('combobox', {
+        name: 'Conversion profile type',
+      }),
+    ).toHaveTextContent('Compound')
+    expect(
+      screen.getByRole('combobox', { name: 'Pricing unit' }),
+    ).toHaveTextContent('Gauge')
+    expect(screen.getByLabelText('Pricing factor numerator')).toHaveValue('16')
+    expect(screen.getByLabelText('Pricing factor denominator')).toHaveValue('1')
+    expect(screen.getByLabelText('Conversion component key 1')).toHaveValue(
+      'gauge',
+    )
+    expect(screen.getByLabelText('Conversion component key 2')).toHaveValue(
+      'gira',
+    )
+    expect(
+      screen.getByLabelText('Conversion component max exclusive 2'),
+    ).toHaveValue('16')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }))
+
+    await waitFor(() => {
+      const updateCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          input === '/api/private/products/product-conversion-edit' &&
+          init?.method === 'PATCH',
+      )
+      expect(updateCall).toBeDefined()
+      const body = JSON.parse(String(updateCall?.[1]?.body))
+
+      expect(body.advanced.conversionProfile).toEqual({
+        type: 'COMPOUND',
+        baseUnitId: 'unit-gira',
+        pricingUnitId: 'unit-gauge',
+        pricingBaseFactorNumerator: '16',
+        pricingBaseFactorDenominator: '1',
+        displayPrecision: 2,
+        components: [
+          {
+            key: 'gauge',
+            label: 'Gauge',
+            unitId: 'unit-gauge',
+            baseFactorNumerator: '16',
+            baseFactorDenominator: '1',
+            sortOrder: 0,
+            minValue: '0',
+            maxExclusive: null,
+            allowFraction: false,
+            autoNormalizeRemainder: false,
+          },
+          {
+            key: 'gira',
+            label: 'Gira',
+            unitId: 'unit-gira',
+            baseFactorNumerator: '1',
+            baseFactorDenominator: '1',
+            sortOrder: 1,
+            minValue: '0',
+            maxExclusive: '16',
+            allowFraction: false,
+            autoNormalizeRemainder: false,
+          },
+        ],
+      })
+    })
+  })
+
 })
