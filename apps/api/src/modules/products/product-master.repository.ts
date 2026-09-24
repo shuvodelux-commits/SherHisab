@@ -44,6 +44,7 @@ interface ProductRow {
   default_purchase_price_paisa: string
   default_selling_price_paisa: string
   stock_base_qty: string
+  stock_value_paisa: string
   minimum_stock_base_qty: string
   tracking_mode: TrackingMode
   variants_enabled: boolean
@@ -108,6 +109,7 @@ function mapProduct(row: ProductRow): ProductDetail {
     defaultPurchasePricePaisa: row.default_purchase_price_paisa,
     defaultSellingPricePaisa: row.default_selling_price_paisa,
     stockBaseQty: row.stock_base_qty,
+    stockValuePaisa: row.stock_value_paisa,
     minimumStockBaseQty: row.minimum_stock_base_qty,
     trackingMode: row.tracking_mode,
     variantsEnabled: row.variants_enabled,
@@ -152,6 +154,20 @@ const productSelect = `
         AND pv_stock.product_id = p.id
         AND pv_stock.is_active
     ) AS stock_base_qty,
+    (
+      SELECT COALESCE(
+        ROUND(SUM(il_value.remaining_base_qty * il_value.unit_cost_paisa)),
+        0
+      )::bigint::text
+      FROM product_variants pv_value
+      JOIN inventory_lots il_value
+        ON il_value.tenant_id = pv_value.tenant_id
+       AND il_value.variant_id = pv_value.id
+      WHERE pv_value.tenant_id = p.tenant_id
+        AND pv_value.product_id = p.id
+        AND pv_value.is_active
+        AND il_value.remaining_base_qty > 0
+    ) AS stock_value_paisa,
     trim_scale(dv.minimum_stock_base_qty)::text AS minimum_stock_base_qty,
     p.tracking_mode,
     p.variants_enabled,
@@ -206,6 +222,21 @@ function productSortExpression(
       )`
     case 'minimumStock':
       return 'dv.minimum_stock_base_qty'
+    case 'stockValue':
+      return `(
+        SELECT COALESCE(
+          SUM(il_sort.remaining_base_qty * il_sort.unit_cost_paisa),
+          0
+        )
+        FROM product_variants pv_value_sort
+        JOIN inventory_lots il_sort
+          ON il_sort.tenant_id = pv_value_sort.tenant_id
+         AND il_sort.variant_id = pv_value_sort.id
+        WHERE pv_value_sort.tenant_id = p.tenant_id
+          AND pv_value_sort.product_id = p.id
+          AND pv_value_sort.is_active
+          AND il_sort.remaining_base_qty > 0
+      )`
     case 'status':
       return 'p.is_active'
     case 'name':

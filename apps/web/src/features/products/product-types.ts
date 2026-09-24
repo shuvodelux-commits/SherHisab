@@ -9,6 +9,7 @@ export type ProductSortBy =
   | 'sellingPrice'
   | 'stock'
   | 'minimumStock'
+  | 'stockValue'
   | 'status'
 export type ProductSortDirection = 'asc' | 'desc'
 export type ConversionMode = 'FIXED' | 'VARIABLE'
@@ -37,6 +38,7 @@ export interface ProductListItemDto {
   defaultPurchasePricePaisa: string
   defaultSellingPricePaisa: string
   stockBaseQty: string
+  stockValuePaisa: string
   minimumStockBaseQty: string
   trackingMode: TrackingMode
   variantsEnabled: boolean

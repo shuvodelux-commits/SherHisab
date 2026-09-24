@@ -682,7 +682,7 @@ p {
   text-align: center;
 }
 
-.data-table-sort-button {
+.data-table th .data-table-sort-button {
   width: 100%;
   min-height: 28px;
   justify-content: flex-start;
@@ -692,11 +692,11 @@ p {
   font-weight: 600;
 }
 
-.data-table th[data-align='right'] .data-table-sort-button {
+.data-table th .data-table-sort-button[data-align='right'] {
   justify-content: flex-end;
 }
 
-.data-table th[data-align='center'] .data-table-sort-button {
+.data-table th .data-table-sort-button[data-align='center'] {
   justify-content: center;
 }
 

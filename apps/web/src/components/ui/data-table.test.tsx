@@ -42,6 +42,12 @@ describe('DataTable', () => {
       'data-align',
       'right',
     )
+    expect(
+      screen.getByRole('button', { name: 'Sort by Product' }),
+    ).toHaveAttribute('data-align', 'left')
+    expect(
+      screen.getByRole('button', { name: 'Sort by Stock' }),
+    ).toHaveAttribute('data-align', 'right')
   })
 
   it('shows an empty-state row when there is no data', () => {

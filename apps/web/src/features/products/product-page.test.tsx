@@ -46,6 +46,7 @@ function product(
     defaultPurchasePricePaisa: '1250',
     defaultSellingPricePaisa: '1875',
     stockBaseQty: '2.50000000',
+    stockValuePaisa: '3125',
     minimumStockBaseQty: '0.12500000',
     trackingMode: 'SIMPLE',
     variantsEnabled: true,
@@ -191,6 +192,7 @@ describe('ProductPage', () => {
       'Selling Price',
       'Stock',
       'Min Stock',
+      'Stock Value',
       'Status',
       'Actions',
     ]) {
@@ -199,11 +201,19 @@ describe('ProductPage', () => {
       ).toBeInTheDocument()
     }
 
+    const headerNames = screen
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent?.trim())
+    expect(headerNames.indexOf('Stock Value')).toBeLessThan(
+      headerNames.indexOf('Status'),
+    )
+
     for (const heading of [
       'Purchase Price',
       'Selling Price',
       'Stock',
       'Min Stock',
+      'Stock Value',
     ]) {
       expect(
         screen.getByRole('columnheader', { name: heading }),
@@ -224,8 +234,9 @@ describe('ProductPage', () => {
     expect(screen.getByText('৳18.75')).toBeInTheDocument()
     expect(screen.getByText('2.5')).toBeInTheDocument()
     expect(screen.getByText('0.125')).toBeInTheDocument()
+    expect(screen.getByText('৳31.25')).toBeInTheDocument()
 
-    for (const value of ['৳12.50', '৳18.75', '2.5', '0.125']) {
+    for (const value of ['৳12.50', '৳18.75', '2.5', '0.125', '৳31.25']) {
       expect(screen.getByRole('cell', { name: value })).toHaveAttribute(
         'data-align',
         'right',

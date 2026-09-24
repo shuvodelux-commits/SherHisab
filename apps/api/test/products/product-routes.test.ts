@@ -398,6 +398,77 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
     expect(page.items[0]?.id).toBe(expensive.id)
   })
 
+  it('returns remaining FIFO inventory value and sorts by Stock Value', async () => {
+    const fixture = await createAuthenticatedFixture('Stock Value Route Tenant')
+    const unitId = await pieceUnitId(fixture.service)
+
+    const valued = await fixture.service.createProduct(
+      {
+        ...createPayload(unitId, 'Valued Product'),
+        defaultPurchasePricePaisa: '1000',
+        openingStockBaseQty: '2',
+      },
+      null,
+    )
+
+    const restock = await privateRequest(
+      fixture.cookie,
+      `/products/${valued.id}/stock-adjustments`,
+      {
+        method: 'POST',
+        body: {
+          deltaBaseQty: '1',
+          note: 'Higher-cost restock',
+          unitCostPaisa: '2000',
+          businessDate: '2099-01-02',
+        },
+      },
+    )
+    expect(restock.status).toBe(200)
+
+    const consume = await privateRequest(
+      fixture.cookie,
+      `/products/${valued.id}/stock-adjustments`,
+      {
+        method: 'POST',
+        body: {
+          deltaBaseQty: '-1.5',
+          note: 'FIFO consumption',
+        },
+      },
+    )
+    expect(consume.status).toBe(200)
+
+    await fixture.service.createProduct(
+      {
+        ...createPayload(unitId, 'Lower Value Product'),
+        defaultPurchasePricePaisa: '500',
+        openingStockBaseQty: '1',
+      },
+      null,
+    )
+
+    const response = await privateRequest(
+      fixture.cookie,
+      '/products?sortBy=stockValue&sortDir=desc',
+    )
+    expect(response.status).toBe(200)
+
+    const page = (await response.json()) as {
+      items: Array<{
+        id: string
+        stockBaseQty: string
+        stockValuePaisa: string
+      }>
+    }
+
+    expect(page.items[0]).toMatchObject({
+      id: valued.id,
+      stockBaseQty: '1.5',
+      stockValuePaisa: '2500',
+    })
+  })
+
   it('edits masters and only deletes masters that are not referenced', async () => {
     const fixture = await createAuthenticatedFixture('Master Edit Delete Tenant')
     const baseUnitId = await pieceUnitId(fixture.service)

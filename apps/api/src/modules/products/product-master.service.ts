@@ -69,6 +69,7 @@ const PRODUCT_SORT_KEYS = new Set([
   'sellingPrice',
   'stock',
   'minimumStock',
+  'stockValue',
   'status',
 ])
 

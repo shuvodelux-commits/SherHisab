@@ -45,6 +45,7 @@ function simpleProduct(): ProductDetailDto {
     defaultPurchasePricePaisa: '1000',
     defaultSellingPricePaisa: '1500',
     stockBaseQty: '5.25',
+    stockValuePaisa: '5250',
     minimumStockBaseQty: '1',
     trackingMode: 'SIMPLE',
     variantsEnabled: false,

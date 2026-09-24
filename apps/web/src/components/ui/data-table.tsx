@@ -139,12 +139,12 @@ export function DataTable<TData>({
                         header.getContext(),
                       )
                   const sortingDirection = header.column.getIsSorted()
+                  const align =
+                    columnAlignment(header.column.columnDef.meta) ?? 'left'
 
                   return (
                     <th
-                      data-align={columnAlignment(
-                        header.column.columnDef.meta,
-                      )}
+                      data-align={align}
                       key={header.id}
                       scope="col"
                     >
@@ -152,6 +152,7 @@ export function DataTable<TData>({
                         <Button
                           aria-label={`Sort by ${label}`}
                           className="data-table-sort-button"
+                          data-align={align}
                           onClick={header.column.getToggleSortingHandler()}
                           size="sm"
                           type="button"
@@ -182,9 +183,9 @@ export function DataTable<TData>({
                 <tr key={row.id}>
                   {row.getVisibleCells().map((cell) => (
                     <td
-                      data-align={columnAlignment(
-                        cell.column.columnDef.meta,
-                      )}
+                      data-align={
+                        columnAlignment(cell.column.columnDef.meta) ?? 'left'
+                      }
                       key={cell.id}
                     >
                       {flexRender(

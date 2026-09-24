@@ -29,6 +29,7 @@ function createdProduct(): ProductDetailDto {
     defaultPurchasePricePaisa: '1250',
     defaultSellingPricePaisa: '1875',
     stockBaseQty: '2.5',
+    stockValuePaisa: '3125',
     minimumStockBaseQty: '0.125',
     trackingMode: 'SIMPLE',
     variantsEnabled: false,

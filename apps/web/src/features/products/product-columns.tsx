@@ -117,6 +117,17 @@ export function createProductColumns({
       ),
     },
     {
+      id: 'stockValue',
+      accessorFn: (product) => Number(product.stockValuePaisa),
+      header: 'Stock Value',
+      meta: { align: 'right' },
+      cell: ({ row }) => (
+        <span className="product-money">
+          {money(row.original.stockValuePaisa)}
+        </span>
+      ),
+    },
+    {
       id: 'status',
       accessorFn: (product) => (product.isActive ? 'Active' : 'Inactive'),
       header: 'Status',
