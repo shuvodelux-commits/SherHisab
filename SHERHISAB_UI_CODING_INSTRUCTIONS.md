@@ -3588,7 +3588,7 @@ Dub border-first SaaS system
 
 Typography:
 Inter for English/UI
-Noto Sans Bengali for Bangla
+SolaimanLipi for Bangla
 Geist Mono / JetBrains Mono only for technical IDs
 
 Brand accent:
