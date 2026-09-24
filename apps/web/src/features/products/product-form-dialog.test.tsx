@@ -219,12 +219,12 @@ describe('ProductFormDialog', () => {
     )
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Conversion profile type' }),
+      screen.getByRole('combobox', { name: 'Conversion profile type' }),
     )
     fireEvent.click(await screen.findByRole('option', { name: 'Compound' }))
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Pricing unit' }),
+      screen.getByRole('combobox', { name: 'Pricing unit' }),
     )
     fireEvent.click(await screen.findByRole('option', { name: /Gauge/ }))
 
@@ -252,7 +252,7 @@ describe('ProductFormDialog', () => {
       target: { value: 'Gauge' },
     })
     fireEvent.click(
-      screen.getByRole('button', { name: 'Conversion component unit 1' }),
+      screen.getByRole('combobox', { name: 'Conversion component unit 1' }),
     )
     fireEvent.click(await screen.findByRole('option', { name: /Gauge/ }))
     fireEvent.change(
@@ -271,7 +271,7 @@ describe('ProductFormDialog', () => {
       target: { value: 'Gira' },
     })
     fireEvent.click(
-      screen.getByRole('button', { name: 'Conversion component unit 2' }),
+      screen.getByRole('combobox', { name: 'Conversion component unit 2' }),
     )
     fireEvent.click(await screen.findByRole('option', { name: /Gira/ }))
     fireEvent.change(
