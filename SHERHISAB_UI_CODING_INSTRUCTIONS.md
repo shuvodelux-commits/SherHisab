@@ -137,10 +137,12 @@ The product should feel like:
 
 ## Primary Font
 
-Use **Inter** for all English UI.
+Use **Geist Variable** for the entire Latin/English ERP UI.
+
+Inter is only the fallback font behind Geist.
 
 ```css
-font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+font-family: "Geist Variable", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 ```
 
 Do not use Satoshi in the ERP application.
@@ -172,33 +174,37 @@ Do not use monospace for normal money values or body text.
 
 ## Recommended Type Scale
 
-SherHisab operational UI text uses only **15px** and **16px**.
+Follow the compact **shadcn-style 14px operational scale** consistently across
+the ERP. Do not invent per-screen font sizes.
 
 ```text
 Page title                    16px / 600
 Section title                 16px / 600
-Tabs                          15px / 500
-Body                          15px / 400
-Form label                    15px / 500
-Bangla helper                 15px / 400
-Table header                  15px / 600
-Table body                    15px / 400–500
-Button                        15px / 500
-Badge                         15px / 500
+Tabs                          14px / 500
+Body                          14px / 400
+Form label                    14px / 500
+Bangla helper                 14px / 400
+Table header                  14px / 500
+Table body                    14px / 400
+Button                        14px / 500
+Badge                         12px / 500
 Dashboard metric              16px / 600
-Technical ID                  15px / 500 mono
+Technical ID                  12–14px / 400–500 mono
 ```
 
-Do not shrink operational UI text below 15px merely to gain density. Preserve
-compactness through spacing, row height, borders, and concise wording.
+Use spacing, row height, borders, and concise wording for density rather than
+mixing arbitrary text sizes.
 
-For financial and quantity values:
+For ordinary financial and quantity values:
 
 ```css
-font-size: 15px;
-font-weight: 600;
+font-size: 14px;
+font-weight: 400;
 font-variant-numeric: tabular-nums;
 ```
+
+Use stronger weight only when the value is intentionally a dashboard metric or
+primary summary, not for normal table cells.
 
 ---
 
@@ -247,8 +253,35 @@ Translation applies to application UI:
 - generated descriptions
 - empty states
 - confirmations
+- section headings
+- helper text
+- placeholders
+- Select / Combobox option labels
+- tooltips and accessibility labels
 
-User data such as product names, customer names, supplier names, addresses, and notes remain exactly as entered.
+In **Full Bangla** mode, do not leave technical form sections partially in English.
+Advanced Product configuration, Variant fields, helper copy, buttons, dropdown
+options, and tooltips must all use Bangla UI text. Keep unavoidable business
+terms such as SKU recognizable, but explain them in plain Bangla when needed.
+
+### Bilingual display pattern
+
+In the default English + Bangla mode:
+
+- short labels, headings, tabs, and compact controls use **inline bilingual text**
+  with an em dash separator: `Value — মান`, `Tracking — স্টক ট্র্যাকিং`
+- keep the English label at the normal UI emphasis and the Bangla helper slightly
+  lower-emphasis, but on the same baseline
+- long helper/explanation copy uses **two lines**: English first, Bangla below
+- never concatenate scripts without spacing such as `Valueমান`
+- do not repeat both languages inline for long sentences
+- Full English and Full Bangla modes continue to show only the selected language
+
+Use the shared `BilingualLabel` component rather than hand-building bilingual
+spacing or separators per screen.
+
+User data such as product names, customer names, supplier names, addresses, notes,
+and user-defined option values remain exactly as entered.
 
 ---
 
@@ -847,6 +880,7 @@ Do not hand-style native buttons when a shadcn Button fits the action.
 | --- | --- | --- |
 | Main positive action on a surface | `default` | Add Product, Complete Sale, Save, Record Payment, Create Customer |
 | Secondary but visible action | `outline` | Cancel, Export, Print, View Details, Add Another |
+| Expand/collapse or disclosure control | `outline` or `ghost` | Advanced, More details, optional configuration section |
 | Lower-emphasis supporting action | `secondary` | Apply Filter, Duplicate, optional secondary workflow action |
 | Toolbar / row utility | `ghost` | More actions, Refresh, column controls, compact icon utilities |
 | Destructive action | `destructive` | Delete, Remove, Reverse when genuinely destructive |
@@ -857,6 +891,8 @@ Rules:
 - One clear primary/default button per dialog, form footer, or focused action area whenever possible.
 - Destructive color is reserved for destructive consequences, not ordinary negative-looking actions.
 - Use `outline` or `ghost` for secondary utilities rather than making every action primary blue.
+- Disclosure/expand controls such as **Advanced** must never use the primary/default blue treatment.
+- Do not stack two separators/borders for the same visual boundary. Use at most one shared Separator or one container border.
 - Prefer the built-in shadcn variants and sizes before custom styling.
 - Keep normal ERP action heights aligned with adjacent controls.
 - Do not use `rounded-full` for normal SherHisab ERP buttons. Preserve the shared compact radius system.

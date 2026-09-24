@@ -153,6 +153,7 @@ export function DataTable<TData>({
                           aria-label={`Sort by ${label}`}
                           className="data-table-sort-button"
                           data-align={align}
+                          data-sorted={sortingDirection ? 'true' : undefined}
                           onClick={header.column.getToggleSortingHandler()}
                           size="sm"
                           type="button"
@@ -160,11 +161,23 @@ export function DataTable<TData>({
                         >
                           <span>{renderedHeader}</span>
                           {sortingDirection === 'asc' ? (
-                            <ArrowUp aria-hidden="true" size={14} />
+                            <ArrowUp
+                              aria-hidden="true"
+                              className="data-table-sort-icon"
+                              size={12}
+                            />
                           ) : sortingDirection === 'desc' ? (
-                            <ArrowDown aria-hidden="true" size={14} />
+                            <ArrowDown
+                              aria-hidden="true"
+                              className="data-table-sort-icon"
+                              size={12}
+                            />
                           ) : (
-                            <ArrowUpDown aria-hidden="true" size={14} />
+                            <ArrowUpDown
+                              aria-hidden="true"
+                              className="data-table-sort-icon"
+                              size={12}
+                            />
                           )}
                         </Button>
                       ) : (

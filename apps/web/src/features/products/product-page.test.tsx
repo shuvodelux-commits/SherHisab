@@ -220,6 +220,31 @@ describe('ProductPage', () => {
       ).toHaveAttribute('data-align', 'right')
     }
 
+    for (const heading of [
+      'Product',
+      'Purchase Price',
+      'Selling Price',
+      'Stock',
+      'Stock Value',
+    ]) {
+      expect(
+        screen.getByRole('button', { name: `Sort by ${heading}` }),
+      ).toBeInTheDocument()
+    }
+
+    for (const heading of [
+      'Category',
+      'Brand',
+      'Unit',
+      'Min Stock',
+      'Status',
+      'Actions',
+    ]) {
+      expect(
+        screen.queryByRole('button', { name: `Sort by ${heading}` }),
+      ).not.toBeInTheDocument()
+    }
+
     const categoryFilter = screen.getByLabelText('Category filter')
     const statusFilter = screen.getByLabelText('Status filter')
     expect(categoryFilter.tagName).not.toBe('SELECT')

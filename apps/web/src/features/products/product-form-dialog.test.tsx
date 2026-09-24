@@ -170,10 +170,12 @@ describe('ProductFormDialog', () => {
     expect(screen.getByLabelText('Opening Stock')).toBeEnabled()
     expect(screen.queryByText('Current Stock')).not.toBeInTheDocument()
 
-    expect(screen.getByRole('separator')).toBeInTheDocument()
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument()
 
     const advanced = screen.getByRole('button', { name: 'Advanced' })
     expect(advanced).toHaveAttribute('aria-expanded', 'false')
+    expect(advanced).toHaveClass('ui-button-outline')
+    expect(advanced).toHaveClass('ui-button-sm')
     expect(screen.queryByText('Tracking')).not.toBeInTheDocument()
 
     expect(screen.getByRole('button', { name: 'Category' })).toBeInTheDocument()
@@ -308,6 +310,77 @@ describe('ProductFormDialog', () => {
     expect(screen.getByRole('button', { name: 'Unit' })).toHaveTextContent(
       'Old Unit (Inactive)',
     )
+  })
+
+  it('labels Variant fields clearly with bilingual guidance', async () => {
+    installFetch()
+    renderForm()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Variants' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Option' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Variant' }))
+
+    for (const [english, bangla] of [
+      ['Option Name', 'অপশনের নাম'],
+      ['Option Values', 'অপশনের মান'],
+      ['Variant Name', 'ভ্যারিয়েন্ট নাম'],
+      ['SKU', 'এসকেইউ'],
+      ['Purchase Price', 'কেনা দাম'],
+      ['Selling Price', 'বিক্রির দাম'],
+      ['Minimum Stock', 'ন্যূনতম স্টক'],
+    ] as const) {
+      expect(screen.getAllByText(english).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(bangla).length).toBeGreaterThan(0)
+    }
+
+    expect(
+      screen.getByRole('button', { name: 'About SKU' }),
+    ).toBeInTheDocument()
+  })
+
+  it('renders all Advanced Product guidance in Bangla in Full Bangla mode', async () => {
+    installFetch()
+    renderForm({ languageMode: 'bn' })
+
+    const advanced = await screen.findByRole('button', { name: 'অ্যাডভান্সড' })
+    fireEvent.click(advanced)
+
+    for (const label of [
+      'স্টক ট্র্যাকিং',
+      'বিকল্প একক',
+      'বৈশিষ্ট্য',
+      'ভ্যারিয়েন্ট চালু করুন',
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument()
+    }
+
+    expect(screen.queryByText('Tracking')).not.toBeInTheDocument()
+    expect(screen.queryByText('Alternative Units')).not.toBeInTheDocument()
+    expect(screen.queryByText('Specifications')).not.toBeInTheDocument()
+    expect(screen.queryByText('Enable Variants')).not.toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'ভ্যারিয়েন্ট চালু করুন' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'অপশন যোগ করুন' }))
+    fireEvent.click(screen.getByRole('button', { name: 'ভ্যারিয়েন্ট যোগ করুন' }))
+
+    for (const label of [
+      'অপশনের নাম',
+      'অপশনের মান',
+      'ভ্যারিয়েন্ট নাম',
+      'এসকেইউ',
+      'কেনা দাম',
+      'বিক্রির দাম',
+      'ন্যূনতম স্টক',
+    ]) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0)
+    }
+
+    expect(screen.queryByText('Option Name')).not.toBeInTheDocument()
+    expect(screen.queryByText('Variant Name')).not.toBeInTheDocument()
+    expect(screen.queryByText('Purchase Price')).not.toBeInTheDocument()
   })
 
   it('hides Bangla helpers in Full English mode', async () => {

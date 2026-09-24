@@ -39,6 +39,19 @@ import type {
 
 const SELECT_NONE = '__select_none__'
 
+function inventoryValuePaisa(quantity: string, unitCostPaisa: string): string {
+  const [whole = '0', fraction = ''] = quantity.split('.')
+  const scale = 10n ** BigInt(fraction.length)
+  const quantityUnits = BigInt(`${whole}${fraction}`)
+  const valueNumerator = quantityUnits * BigInt(unitCostPaisa)
+
+  return ((valueNumerator + scale / 2n) / scale).toString()
+}
+
+function lotSourceLabel(sourceType: 'OPENING' | 'ADJUSTMENT'): string {
+  return sourceType === 'OPENING' ? 'Opening' : 'Adjustment'
+}
+
 interface StockDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -332,6 +345,25 @@ export function ProductLotsDialog({
       (!product.variantsEnabled || Boolean(effectiveVariantId)),
   })
 
+  const lots = lotsQuery.data ?? []
+  const totalRemaining = lots.reduce(
+    (total, lot) => total + Number(lot.remainingBaseQty),
+    0,
+  )
+  const totalStockValuePaisa = lots
+    .reduce(
+      (total, lot) =>
+        total +
+        BigInt(
+          inventoryValuePaisa(
+            lot.remainingBaseQty,
+            lot.unitCostPaisa,
+          ),
+        ),
+      0n,
+    )
+    .toString()
+
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="product-lots-dialog">
@@ -385,56 +417,97 @@ export function ProductLotsDialog({
                 ? lotsQuery.error.message
                 : 'Could not load stock lots.'}
             </div>
-          ) : (lotsQuery.data ?? []).length === 0 ? (
+          ) : lots.length === 0 ? (
             <div className="stock-lots-state">
               No stock lots for this Product.
             </div>
           ) : (
-            <div className="stock-lots-table-wrap">
-              <table className="stock-lots-table">
-                <thead>
-                  <tr>
-                    <th>Lot</th>
-                    <th>Received</th>
-                    <th className="stock-number-column">Remaining</th>
-                    <th className="stock-number-column">Purchase Cost</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(lotsQuery.data ?? []).map((lot) => (
-                    <tr key={lot.id}>
-                      <td>
-                        <code className="stock-lot-id">{lot.id}</code>
-                      </td>
-                      <td>{lot.receivedOn}</td>
-                      <td className="stock-number-column">
-                        {formatNumber(lot.remainingBaseQty, {
-                          maximumFractionDigits: 8,
-                        })}
-                      </td>
-                      <td className="stock-number-column">
-                        ৳{formatPaisaToTaka(lot.unitCostPaisa)}
-                      </td>
-                      <td>
-                        <Badge
-                          className={
-                            lot.status === 'ACTIVE'
-                              ? 'sher-badge-success'
-                              : 'sher-badge-neutral'
-                          }
-                          variant="outline"
-                        >
-                          {lot.status === 'ACTIVE'
-                            ? 'Active'
-                            : 'Depleted'}
-                        </Badge>
-                      </td>
+            <>
+              <div className="stock-lots-summary">
+                <span>
+                  Total remaining:{' '}
+                  {formatNumber(totalRemaining.toString(), {
+                    maximumFractionDigits: 8,
+                  })}
+                </span>
+                <span>
+                  Total stock value: ৳
+                  {formatPaisaToTaka(totalStockValuePaisa)}
+                </span>
+              </div>
+
+              <div className="stock-lots-table-wrap">
+                <table className="stock-lots-table">
+                  <thead>
+                    <tr>
+                      <th>Lot ID</th>
+                      <th>Source</th>
+                      <th>Supplier</th>
+                      <th>Date</th>
+                      <th className="stock-number-column">Purchase Price</th>
+                      <th className="stock-number-column">Original Qty</th>
+                      <th className="stock-number-column">Remaining Qty</th>
+                      <th className="stock-number-column">Value</th>
+                      <th>Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {lots.map((lot, index) => {
+                      const valuePaisa = inventoryValuePaisa(
+                        lot.remainingBaseQty,
+                        lot.unitCostPaisa,
+                      )
+
+                      return (
+                        <tr key={lot.id}>
+                          <td>
+                            <code
+                              className="stock-lot-id"
+                              title={lot.id}
+                            >
+                              {'LOT-' + String(index + 1).padStart(6, '0')}
+                            </code>
+                          </td>
+                          <td>{lotSourceLabel(lot.sourceType)}</td>
+                          <td>Unattributed</td>
+                          <td>{lot.receivedOn}</td>
+                          <td className="stock-number-column">
+                            ৳{formatPaisaToTaka(lot.unitCostPaisa)}
+                          </td>
+                          <td className="stock-number-column">
+                            {formatNumber(lot.originalBaseQty, {
+                              maximumFractionDigits: 8,
+                            })}
+                          </td>
+                          <td className="stock-number-column">
+                            {formatNumber(lot.remainingBaseQty, {
+                              maximumFractionDigits: 8,
+                            })}
+                          </td>
+                          <td className="stock-number-column">
+                            ৳{formatPaisaToTaka(valuePaisa)}
+                          </td>
+                          <td>
+                            <Badge
+                              className={
+                                lot.status === 'ACTIVE'
+                                  ? 'sher-badge-success'
+                                  : 'sher-badge-neutral'
+                              }
+                              variant="outline"
+                            >
+                              {lot.status === 'ACTIVE'
+                                ? 'Active'
+                                : 'Depleted'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
 

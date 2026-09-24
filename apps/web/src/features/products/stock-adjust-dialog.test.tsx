@@ -494,15 +494,46 @@ describe('ProductLotsDialog', () => {
       await screen.findByRole('dialog', { name: 'Stock Lots' }),
     ).toBeInTheDocument()
 
+    await screen.findByRole('columnheader', { name: 'Lot ID' })
+
+    for (const heading of [
+      'Lot ID',
+      'Source',
+      'Supplier',
+      'Date',
+      'Purchase Price',
+      'Original Qty',
+      'Remaining Qty',
+      'Value',
+      'Status',
+    ]) {
+      expect(
+        screen.getByRole('columnheader', { name: heading }),
+      ).toBeInTheDocument()
+    }
+
+    expect(screen.getByText('Total remaining: 3.5')).toBeInTheDocument()
+    expect(screen.getByText('Total stock value: ৳40.00')).toBeInTheDocument()
+
     const rows = await screen.findAllByRole('row')
+    expect(within(rows[1]!).getByText('LOT-000001')).toBeInTheDocument()
+    expect(within(rows[2]!).getByText('LOT-000002')).toBeInTheDocument()
+    expect(within(rows[1]!).getByText('Opening')).toBeInTheDocument()
+    expect(within(rows[1]!).getByText('Unattributed')).toBeInTheDocument()
     expect(within(rows[1]!).getByText('2026-09-01')).toBeInTheDocument()
+    expect(within(rows[1]!).getByText('5')).toBeInTheDocument()
     expect(within(rows[1]!).getByText('1.5')).toBeInTheDocument()
     expect(within(rows[1]!).getByText('৳10.00')).toBeInTheDocument()
-    expect(within(rows[1]!).getByText('Active')).toBeInTheDocument()
+    expect(within(rows[1]!).getByText('৳15.00')).toBeInTheDocument()
+    const activeBadge = within(rows[1]!).getByText('Active')
+    expect(activeBadge).toBeInTheDocument()
+    expect(activeBadge).toHaveClass('sher-badge-success')
 
+    expect(within(rows[2]!).getByText('Adjustment')).toBeInTheDocument()
     expect(within(rows[2]!).getByText('2026-09-10')).toBeInTheDocument()
-    expect(within(rows[2]!).getByText('2')).toBeInTheDocument()
+    expect(within(rows[2]!).getAllByText('2')).toHaveLength(2)
     expect(within(rows[2]!).getByText('৳12.50')).toBeInTheDocument()
+    expect(within(rows[2]!).getByText('৳25.00')).toBeInTheDocument()
   })
 
   it('loads lots for preserved pre-Variant stock when explicitly selected', async () => {
@@ -518,7 +549,7 @@ describe('ProductLotsDialog', () => {
 
     await chooseSelectOption('Variant', 'Existing stock')
 
-    await screen.findByText('lot-red')
+    await screen.findByText('LOT-000001')
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([input]) =>
@@ -544,7 +575,7 @@ describe('ProductLotsDialog', () => {
 
     await chooseSelectOption('Variant', 'Red / L')
 
-    expect(await screen.findByText('lot-red')).toBeInTheDocument()
+    expect(await screen.findByText('LOT-000001')).toBeInTheDocument()
 
     await waitFor(() => {
       expect(

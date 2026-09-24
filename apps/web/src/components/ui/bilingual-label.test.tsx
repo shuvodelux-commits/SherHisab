@@ -16,11 +16,34 @@ describe('BilingualLabel', () => {
     window.localStorage.clear()
   })
 
-  it('renders English plus Bangla helper by default', () => {
+  it('renders compact bilingual labels with a visible separator by default', () => {
     renderLabel()
 
     expect(screen.getByText('Purchase Price')).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
     expect(screen.getByText('কেনা দাম')).toBeInTheDocument()
+  })
+
+  it('stacks long bilingual helper copy without an inline separator', () => {
+    render(
+      <LanguageProvider>
+        <BilingualLabel
+          bn="স্টক কীভাবে ট্র্যাক হবে তা নির্বাচন করুন।"
+          en="Choose how inventory is tracked."
+          layout="stacked"
+        />
+      </LanguageProvider>,
+    )
+
+    const label = screen
+      .getByText('Choose how inventory is tracked.')
+      .closest('.bilingual-label')
+
+    expect(label).toHaveClass('bilingual-label-stacked')
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('স্টক কীভাবে ট্র্যাক হবে তা নির্বাচন করুন।'),
+    ).toBeInTheDocument()
   })
 
   it('renders English only in Full English mode', () => {

@@ -53,11 +53,13 @@ export function createProductColumns({
       id: 'category',
       accessorFn: (product) => product.category?.name ?? '',
       header: 'Category',
+      enableSorting: false,
       cell: ({ row }) => row.original.category?.name ?? 'Uncategorized',
     },
     {
       accessorKey: 'brand',
       header: 'Brand',
+      enableSorting: false,
       cell: ({ row }) => row.original.brand || '—',
     },
     {
@@ -65,6 +67,7 @@ export function createProductColumns({
       accessorFn: (product) =>
         product.baseUnit.symbol || product.baseUnit.name,
       header: 'Unit',
+      enableSorting: false,
       cell: ({ row }) =>
         row.original.baseUnit.symbol || row.original.baseUnit.name,
     },
@@ -107,6 +110,7 @@ export function createProductColumns({
       id: 'minimumStock',
       accessorFn: (product) => Number(product.minimumStockBaseQty),
       header: 'Min Stock',
+      enableSorting: false,
       meta: { align: 'right' },
       cell: ({ row }) => (
         <span className="product-quantity">
@@ -131,6 +135,7 @@ export function createProductColumns({
       id: 'status',
       accessorFn: (product) => (product.isActive ? 'Active' : 'Inactive'),
       header: 'Status',
+      enableSorting: false,
       cell: ({ row }) => (
         <Badge
           className={

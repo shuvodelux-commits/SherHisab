@@ -8,6 +8,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import { useLanguageMode } from '../../app/language'
 import { BilingualLabel } from '../../components/ui/bilingual-label'
 import { Button } from '../../components/ui/button'
 import {
@@ -19,7 +20,6 @@ import {
   DialogTitle,
 } from '../../components/ui/dialog'
 import { Input } from '../../components/ui/input'
-import { Separator } from '../../components/ui/separator'
 import {
   SearchCombobox,
   type SearchComboboxOption,
@@ -162,6 +162,7 @@ export function ProductFormDialog({
   product,
 }: ProductFormDialogProps) {
   const queryClient = useQueryClient()
+  const { mode: languageMode } = useLanguageMode()
   const [form, setForm] = useState<ProductFormState>(() =>
     initialFormState(mode, product),
   )
@@ -578,8 +579,6 @@ export function ProductFormDialog({
                 </div>
               </div>
 
-              <Separator className="product-form-separator" />
-
               <div className="product-advanced-toggle-wrap">
                 <Button
                   aria-expanded={advancedOpen}
@@ -587,14 +586,15 @@ export function ProductFormDialog({
                   onClick={() =>
                     setAdvancedOpen((current) => !current)
                   }
-                  variant="ghost"
+                  size="sm"
+                  variant="outline"
                 >
                   {advancedOpen ? (
-                    <ChevronUp aria-hidden="true" size={14} />
+                    <ChevronUp aria-hidden="true" data-icon="inline-start" />
                   ) : (
-                    <ChevronDown aria-hidden="true" size={14} />
+                    <ChevronDown aria-hidden="true" data-icon="inline-start" />
                   )}
-                  Advanced
+                  {languageMode === 'bn' ? 'অ্যাডভান্সড' : 'Advanced'}
                 </Button>
               </div>
 
