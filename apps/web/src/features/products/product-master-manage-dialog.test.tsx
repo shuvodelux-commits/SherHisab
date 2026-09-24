@@ -152,9 +152,11 @@ describe('ProductMasterManageDialog', () => {
     expect(screen.getByText('Pipe')).toBeInTheDocument()
     expect(screen.getByText('Inactive')).toBeInTheDocument()
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Archive category Hardware' }),
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Actions for category Hardware' }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
     )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }))
 
     await waitFor(() => {
       expect(
@@ -167,9 +169,11 @@ describe('ProductMasterManageDialog', () => {
       ).toBe(true)
     })
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Activate category Pipe' }),
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Actions for category Pipe' }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
     )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Activate' }))
 
     await waitFor(() => {
       expect(
@@ -339,9 +343,11 @@ describe('ProductMasterManageDialog', () => {
       ).toBe(true)
     })
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Archive unit Piece' }),
+    fireEvent.pointerDown(
+      screen.getByRole('button', { name: 'Actions for unit Piece' }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
     )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }))
 
     await waitFor(() => {
       expect(

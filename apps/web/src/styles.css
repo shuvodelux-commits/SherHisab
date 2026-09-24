@@ -1,16 +1,21 @@
+@import url("https://fonts.maateen.me/solaiman-lipi/font.css");
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
 @import "./typeset.css";
 
 :root {
   --font-inter: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-bangla: "SolaimanLipi", "Noto Sans Bengali", "Nirmala UI", sans-serif;
   --font-geist: 'Geist Variable', sans-serif;
   --font-geist-mono: 'Geist Mono Variable', monospace;
 }
 
 .typeset-docs {
-  --typeset-font-body: var(--font-inter);
-  --typeset-font-heading: var(--font-inter);
+  --typeset-font-body: var(--font-geist);
+  --typeset-font-heading: var(--font-geist);
   --typeset-font-mono: var(--font-geist-mono);
   --typeset-size: 15px;
   --typeset-leading: 1.6;
@@ -19,6 +24,11 @@
 
 * {
   box-sizing: border-box;
+}
+
+:lang(bn),
+[lang="bn"] {
+  font-family: var(--font-bangla);
 }
 
 :root {
@@ -242,7 +252,7 @@ p {
   border-radius: 8px;
   background: var(--sidebar-primary);
   color: var(--sidebar-primary-foreground);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -258,14 +268,14 @@ p {
 
 .app-sidebar-brand-copy strong {
   color: var(--foreground);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .app-sidebar-brand-copy small {
   margin-top: 1px;
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: 15px;
 }
 
 .ui-sidebar[data-state="collapsed"] .app-sidebar-brand-copy,
@@ -289,7 +299,7 @@ p {
   height: 28px;
   padding: 7px 8px 5px;
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
@@ -319,7 +329,7 @@ p {
   background: transparent;
   color: var(--sidebar-foreground);
   font: inherit;
-  font-size: 12px;
+  font-size: 15px;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -427,7 +437,7 @@ p {
   background: var(--foreground);
   color: var(--background);
   box-shadow: var(--floating-shadow);
-  font-size: 11px;
+  font-size: 15px;
   line-height: 1.2;
 }
 
@@ -461,14 +471,14 @@ p {
 }
 
 .topbar-title strong {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .topbar-title span {
   margin-top: 1px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 15px;
 }
 
 .topbar-actions {
@@ -484,7 +494,7 @@ p {
   min-height: 30px;
   padding-block: 4px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .topbar-actions .ui-button {
@@ -497,13 +507,13 @@ p {
 
 .page-heading h1 {
   margin-bottom: 4px;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 
 .page-heading p {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .dashboard-grid {
@@ -528,7 +538,7 @@ p {
 .dashboard-grid span {
   margin-bottom: 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .mobile-drawer {
@@ -550,7 +560,7 @@ p {
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
-  font-size: 13px;
+  font-size: 15px;
   text-align: left;
 }
 
@@ -609,7 +619,21 @@ p {
 .search-combobox-empty {
   margin: 6px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 15px;
+}
+
+.data-table-shell {
+  width: 100%;
+}
+
+.data-table-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.data-table-columns-trigger {
+  gap: 6px;
 }
 
 .data-table-wrap {
@@ -623,7 +647,7 @@ p {
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .data-table th,
@@ -639,7 +663,7 @@ p {
   padding: 0 10px;
   background: var(--surface-muted);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -656,6 +680,29 @@ p {
 .data-table th[data-align='center'],
 .data-table td[data-align='center'] {
   text-align: center;
+}
+
+.data-table-sort-button {
+  width: 100%;
+  min-height: 28px;
+  justify-content: flex-start;
+  padding-inline: 0;
+  color: inherit;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.data-table th[data-align='right'] .data-table-sort-button {
+  justify-content: flex-end;
+}
+
+.data-table th[data-align='center'] .data-table-sort-button {
+  justify-content: center;
+}
+
+.data-table td[data-align='right'] {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .data-table tbody tr:hover {
@@ -684,7 +731,7 @@ p {
   background: transparent;
   color: var(--foreground);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1;
 }
@@ -697,13 +744,13 @@ p {
 .ui-button-xs,
 .ui-button-icon-xs {
   min-height: 26px;
-  font-size: 11px;
+  font-size: 15px;
 }
 
 .ui-button-sm,
 .ui-button-icon-sm {
   min-height: 28px;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .ui-button-lg,
@@ -783,7 +830,7 @@ p {
   padding: 2px 6px;
   border: 1px solid transparent;
   border-radius: var(--radius);
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1.2;
 }
@@ -857,8 +904,8 @@ p {
 .bilingual-label-helper {
   margin-top: 2px;
   color: var(--text-muted);
-  font-family: "Noto Sans Bengali", sans-serif;
-  font-size: 10px;
+  font-family: var(--font-bangla);
+  font-size: 15px;
   font-weight: 400;
 }
 
@@ -899,7 +946,7 @@ p {
 .ui-dialog-description {
   margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .ui-dialog-footer {
@@ -964,7 +1011,7 @@ p {
 .ui-alert-dialog-description {
   margin: 6px 0 0;
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.5;
 }
 
@@ -992,12 +1039,24 @@ p {
   border-radius: 5px;
   color: var(--text);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 15px;
   outline: none;
 }
 
 .ui-dropdown-item[data-highlighted] {
   background: var(--surface-hover);
+}
+
+.ui-dropdown-checkbox-item {
+  position: relative;
+  padding-left: 28px;
+}
+
+.ui-dropdown-item-indicator {
+  position: absolute;
+  left: 8px;
+  display: grid;
+  place-items: center;
 }
 
 .ui-dropdown-item[data-danger="true"] {
@@ -1022,7 +1081,7 @@ p {
   border-radius: var(--radius);
   background: var(--card);
   color: var(--foreground);
-  font-size: 13px;
+  font-size: 15px;
   text-align: left;
 }
 
@@ -1061,7 +1120,7 @@ p {
   padding: 5px 28px 5px 8px;
   border-radius: 5px;
   cursor: default;
-  font-size: 12px;
+  font-size: 15px;
   outline: none;
 }
 
@@ -1139,7 +1198,7 @@ p {
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -1272,7 +1331,7 @@ p {
 .products-page-header h1 {
   margin: 0;
   color: var(--text);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.35;
 }
@@ -1281,7 +1340,7 @@ p {
   margin: 2px 0 0;
   color: var(--text-muted);
   font-family: "Noto Sans Bengali", sans-serif;
-  font-size: 10px;
+  font-size: 15px;
   line-height: 1.4;
 }
 
@@ -1307,7 +1366,7 @@ p {
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .products-table .data-table {
@@ -1323,19 +1382,21 @@ p {
 
 .product-name-cell strong {
   color: var(--text);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
 .product-variant-meta {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 15px;
 }
 
 .product-money,
 .product-quantity {
   display: block;
   text-align: inherit;
+  font-size: 15px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1352,7 +1413,7 @@ p {
   min-height: 40px;
   margin-top: 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .products-pagination-spacer {
@@ -1378,20 +1439,20 @@ p {
   display: block;
   margin-bottom: 4px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .products-state p {
   margin: 0 0 12px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .products-loading {
   padding: 28px 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 15px;
 }
 
 @media (max-width: 1000px) {
@@ -1443,7 +1504,7 @@ p {
   border-top: 1px solid var(--border);
   background: transparent;
   color: var(--primary);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 500;
   text-align: left;
   cursor: pointer;
@@ -1489,7 +1550,7 @@ p {
 .product-field-label {
   display: block;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -1498,7 +1559,7 @@ p {
 .product-settings-muted {
   margin: 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 15px;
   line-height: 1.4;
 }
 
@@ -1510,7 +1571,7 @@ p {
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .product-select:focus {
@@ -1529,13 +1590,13 @@ p {
 }
 
 .product-current-stock strong {
-  font-size: 14px;
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
 
 .product-current-stock small {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 15px;
 }
 
 .product-advanced-toggle-wrap {
@@ -1573,14 +1634,14 @@ p {
 
 .product-advanced-heading strong {
   color: var(--text);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .product-advanced-heading p {
   margin: 2px 0 0;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 15px;
 }
 
 .product-inline-grid {
@@ -1619,13 +1680,13 @@ p {
 
 .product-check-row strong {
   color: var(--text);
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .product-check-row small {
   margin-top: 2px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 15px;
 }
 
 .product-variant-editor {
@@ -1657,13 +1718,13 @@ p {
 }
 
 .product-variant-card-head > strong {
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .product-history-lock {
   color: var(--warning);
-  font-size: 10px;
+  font-size: 15px;
 }
 
 .product-variant-grid {
@@ -1686,7 +1747,7 @@ p {
   border-radius: 6px;
   background: var(--danger-soft);
   color: var(--danger);
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .product-form-error {
@@ -1741,14 +1802,34 @@ p {
   gap: 8px;
 }
 
+.product-settings-row-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.product-settings-edit-fields {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(150px, 1fr) auto auto;
+  gap: 8px;
+}
+
+.product-settings-edit-unit {
+  grid-template-columns: minmax(130px, 1fr) minmax(90px, 0.55fr) auto auto;
+}
+
+.product-settings-actions-trigger {
+  flex: none;
+}
+
 .product-settings-row strong {
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 500;
 }
 
 .product-settings-symbol {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 15px;
 }
 
 .products-inline-error {
@@ -1783,7 +1864,9 @@ p {
   }
 
   .product-settings-create-row,
-  .product-settings-unit-create {
+  .product-settings-unit-create,
+  .product-settings-edit-fields,
+  .product-settings-edit-unit {
     grid-template-columns: 1fr;
   }
 }
@@ -1818,21 +1901,21 @@ p {
 
 .stock-current-strip span {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 500;
 }
 
 .stock-current-strip strong {
   justify-self: end;
   color: var(--text);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .stock-current-strip small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 15px;
 }
 
 .product-lots-variant {
@@ -1845,7 +1928,7 @@ p {
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 15px;
   text-align: center;
 }
 
@@ -1861,7 +1944,7 @@ p {
   min-width: 620px;
   border-collapse: collapse;
   background: var(--surface);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .stock-lots-table th,
@@ -1877,7 +1960,7 @@ p {
   height: 34px;
   background: var(--surface-muted);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -1894,7 +1977,7 @@ p {
   color: var(--text-secondary);
   font-family:
     "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
+  font-size: 15px;
 }
 
 @media (max-width: 640px) {
@@ -1936,7 +2019,7 @@ p {
   border-radius: 8px;
   background: var(--text);
   color: var(--surface);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -1944,7 +2027,7 @@ p {
 .auth-panel-message h1 {
   margin: 0;
   color: var(--text);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -1952,7 +2035,7 @@ p {
 .auth-panel-message p {
   margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.5;
 }
 
@@ -1969,7 +2052,7 @@ p {
 
 .auth-field > span {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -1979,7 +2062,7 @@ p {
   border-radius: 6px;
   background: var(--danger-soft);
   color: var(--danger);
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .auth-submit {
@@ -1989,7 +2072,7 @@ p {
 
 .auth-loading {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .auth-panel-message {

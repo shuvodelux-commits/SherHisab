@@ -5,6 +5,11 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { Plus, Settings2 } from 'lucide-react'
+import type {
+  OnChangeFn,
+  SortingState,
+  VisibilityState,
+} from '@tanstack/react-table'
 import { useLanguageMode } from '../../app/language'
 import { Button } from '../../components/ui/button'
 import { DataTable } from '../../components/ui/data-table'
@@ -31,7 +36,10 @@ import {
   ProductLotsDialog,
   StockAdjustDialog,
 } from './stock-adjust-dialog'
-import type { ProductStatusFilter } from './product-types'
+import type {
+  ProductSortBy,
+  ProductStatusFilter,
+} from './product-types'
 
 const PAGE_SIZE = 50
 
@@ -43,6 +51,9 @@ export function ProductPage() {
   const [brand, setBrand] = useState('')
   const [status, setStatus] = useState<ProductStatusFilter>('active')
   const [offset, setOffset] = useState(0)
+  const [sorting, setSorting] = useState<SortingState>([])
+  const [columnVisibility, setColumnVisibility] =
+    useState<VisibilityState>({})
   const [formOpen, setFormOpen] = useState(false)
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
   const [editProductId, setEditProductId] = useState<string | null>(null)
@@ -56,11 +67,18 @@ export function ProductPage() {
     name: string
   } | null>(null)
 
+  const activeSort = sorting[0]
   const filters = {
     search,
     categoryId,
     brand,
     status,
+    sortBy: activeSort?.id as ProductSortBy | undefined,
+    sortDir: activeSort
+      ? activeSort.desc
+        ? ('desc' as const)
+        : ('asc' as const)
+      : undefined,
     limit: PAGE_SIZE,
     offset,
   }
@@ -143,6 +161,15 @@ export function ProductPage() {
 
   function resetPage() {
     setOffset(0)
+  }
+
+  const handleSortingChange: OnChangeFn<SortingState> = (updater) => {
+    setSorting((current) => {
+      const next =
+        typeof updater === 'function' ? updater(current) : updater
+      return next.slice(0, 1)
+    })
+    resetPage()
   }
 
   return (
@@ -279,7 +306,15 @@ export function ProductPage() {
       ) : (
         <>
           <div className="products-table">
-            <DataTable columns={columns} data={items} />
+            <DataTable
+              columnVisibility={columnVisibility}
+              columns={columns}
+              data={items}
+              manualSorting
+              onColumnVisibilityChange={setColumnVisibility}
+              onSortingChange={handleSortingChange}
+              sorting={sorting}
+            />
           </div>
 
           <div className="products-pagination">
