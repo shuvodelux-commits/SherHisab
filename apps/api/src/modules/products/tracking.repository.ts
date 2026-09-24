@@ -615,17 +615,20 @@ export class TrackingRepository {
       value_snapshot: string
     }>(
       `SELECT
-         id,
-         sales_line_id,
-         definition_id,
-         field_key_snapshot,
-         label_snapshot,
-         field_type_snapshot,
-         value_snapshot
-       FROM sales_line_capture_values
-       WHERE tenant_id = $1
-         AND sales_line_id = $2
-       ORDER BY created_at, id`,
+         snapshot.id,
+         snapshot.sales_line_id,
+         snapshot.definition_id,
+         snapshot.field_key_snapshot,
+         snapshot.label_snapshot,
+         snapshot.field_type_snapshot,
+         snapshot.value_snapshot
+       FROM sales_line_capture_values snapshot
+       LEFT JOIN product_capture_field_definitions definition
+         ON definition.tenant_id = snapshot.tenant_id
+        AND definition.id = snapshot.definition_id
+       WHERE snapshot.tenant_id = $1
+         AND snapshot.sales_line_id = $2
+       ORDER BY definition.sort_order ASC NULLS LAST, snapshot.id`,
       [tenantId, salesLineId],
     )
 
