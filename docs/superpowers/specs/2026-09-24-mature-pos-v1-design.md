@@ -1108,7 +1108,7 @@ Examples:
 
 Avoid an arbitrary expression/formula engine in v1.
 
-### 27.4 Data model
+### 27.5 Data model
 
 Extend `product_units` / dedicated conversion metadata with exact ratio fields.
 
