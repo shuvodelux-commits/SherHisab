@@ -9,6 +9,7 @@ import {
 import { TrackingRepository } from './tracking.repository'
 import type {
   InventorySerialRecord,
+  SellableBatchRecord,
   WarrantyPolicyInput,
   WarrantyPolicyRecord,
   WarrantySnapshotRecord,
@@ -82,6 +83,22 @@ export class TrackingService {
     return this.repository.listSellableSerials(
       this.tenantId,
       variantId.trim(),
+    )
+  }
+
+  listSellableBatches(
+    variantId: string,
+    businessDate: string,
+  ): Promise<SellableBatchRecord[]> {
+    const normalizedVariantId = variantId.trim()
+    if (!normalizedVariantId) {
+      throw new ProductValidationError('Variant is required')
+    }
+
+    return this.repository.listSellableBatches(
+      this.tenantId,
+      normalizedVariantId,
+      validDate(businessDate, 'Business date'),
     )
   }
 

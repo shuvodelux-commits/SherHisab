@@ -71,3 +71,14 @@ export interface ProductCaptureFieldDefinition
   id: string
   sortOrder: number
 }
+
+export interface SellableBatchRecord {
+  id: string
+  variantId: string
+  batchCode: string
+  receivedOn: string
+  expiresOn: string
+  remainingBaseQty: string
+  unitCostPaisa: string
+  sellingPricePaisa: string
+}

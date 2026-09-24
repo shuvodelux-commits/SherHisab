@@ -1,6 +1,7 @@
 import type { DatabaseClient } from '../../db/request-database'
 import type {
   InventorySerialRecord,
+  SellableBatchRecord,
   WarrantyDurationUnit,
   WarrantyPolicyRecord,
   WarrantySnapshotRecord,
@@ -130,6 +131,70 @@ export class TrackingRepository {
     )
 
     return result.rows.map(mapSerial)
+  }
+
+  async listSellableBatches(
+    tenantId: string,
+    variantId: string,
+    businessDate: string,
+  ): Promise<SellableBatchRecord[]> {
+    const result = await this.db.query<{
+      id: string
+      variant_id: string
+      batch_code: string
+      received_on: string
+      expires_on: string
+      remaining_base_qty: string
+      unit_cost_paisa: string
+      default_sell_price_paisa: string
+    }>(
+      `SELECT
+         l.id,
+         l.variant_id,
+         l.batch_code,
+         l.received_on::text,
+         l.expires_on::text,
+         trim_scale(l.remaining_base_qty)::text AS remaining_base_qty,
+         l.unit_cost_paisa::text,
+         l.default_sell_price_paisa::text
+       FROM inventory_lots l
+       JOIN product_variants v
+         ON v.tenant_id = l.tenant_id
+        AND v.id = l.variant_id
+       JOIN products p
+         ON p.tenant_id = v.tenant_id
+        AND p.id = v.product_id
+       WHERE l.tenant_id = $1
+         AND l.variant_id = $2
+         AND v.is_active
+         AND p.is_active
+         AND p.tracking_mode = 'BATCH_EXPIRY'
+         AND l.status = 'ACTIVE'
+         AND l.remaining_base_qty > 0
+         AND l.batch_code IS NOT NULL
+         AND btrim(l.batch_code) <> ''
+         AND l.expires_on IS NOT NULL
+         AND l.expires_on >= $3::date
+       ORDER BY
+         CASE
+           WHEN p.allocation_policy = 'FEFO' THEN l.expires_on
+           ELSE NULL
+         END ASC NULLS LAST,
+         l.received_on ASC,
+         l.id ASC`,
+      [tenantId, variantId, businessDate],
+    )
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      variantId: row.variant_id,
+      batchCode: row.batch_code,
+      receivedOn: row.received_on,
+      expiresOn: row.expires_on,
+      remainingBaseQty: row.remaining_base_qty,
+      unitCostPaisa: row.unit_cost_paisa,
+      sellingPricePaisa: row.default_sell_price_paisa,
+    }))
   }
 
   async productExists(
