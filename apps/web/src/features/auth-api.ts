@@ -1,9 +1,17 @@
 import { apiRequest } from '../lib/api-client'
 
+export type UserRole = 'OWNER' | 'ADMIN' | 'STAFF'
+
+export type PermissionKey =
+  | 'SALES_OVERRIDE_SELLING_PRICE'
+  | 'INVENTORY_EDIT_LOT_SELLING_PRICE'
+
 export interface AuthSession {
   authenticated: true
   userId: string
   tenantId: string
+  role: UserRole
+  permissions: PermissionKey[]
   expiresAt: string
 }
 

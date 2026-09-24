@@ -2034,7 +2034,42 @@ p {
   font-size: 14px;
 }
 
+.stock-in-price-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.stock-in-price-help {
+  grid-column: 1 / -1;
+}
+
+.stock-lot-selling-price {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.stock-lot-price-edit {
+  min-height: 24px;
+  padding-inline: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.lot-selling-price-dialog {
+  width: min(calc(100vw - 24px), 440px);
+}
+
 @media (max-width: 640px) {
+  .stock-in-price-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .stock-in-price-help {
+    grid-column: auto;
+  }
   .stock-current-strip {
     grid-template-columns: auto 1fr auto;
   }

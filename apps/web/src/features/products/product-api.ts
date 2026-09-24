@@ -187,6 +187,20 @@ export function adjustStock(
   )
 }
 
+export function updateLotSellingPrice(
+  productId: string,
+  lotId: string,
+  sellingPricePaisa: string,
+): Promise<ProductLotDto> {
+  return apiRequest<ProductLotDto>(
+    `${API_ROOT}/products/${productId}/lots/${lotId}/selling-price`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ sellingPricePaisa }),
+    },
+  )
+}
+
 export function listProductLots(
   id: string,
   variantId?: string,

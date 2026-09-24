@@ -18,6 +18,7 @@ import {
   ProductLotsDialog,
   StockAdjustDialog,
 } from './stock-adjust-dialog'
+import type { AuthSession } from '../auth-api'
 import type { ProductDetailDto } from './product-types'
 
 function jsonResponse(body: unknown, status = 200) {
@@ -170,7 +171,34 @@ function installFetch(options: { adjustmentError?: string } = {}) {
       return jsonResponse(variantProduct())
     }
 
-    if (url.startsWith('/api/private/products/product-simple/lots')) {
+    if (
+      url ===
+        '/api/private/products/product-simple/lots/lot-old/selling-price' &&
+      init?.method === 'PATCH'
+    ) {
+      const body = JSON.parse(String(init.body)) as {
+        sellingPricePaisa: string
+      }
+
+      return jsonResponse({
+        id: 'lot-old',
+        receivedOn: '2026-09-01',
+        sourceType: 'OPENING',
+        originalBaseQty: '5',
+        remainingBaseQty: '1.5',
+        unitCostPaisa: '1000',
+        defaultSellingPricePaisa: body.sellingPricePaisa,
+        status: 'ACTIVE',
+        lotCode: null,
+        batchCode: null,
+        expiresOn: null,
+      })
+    }
+
+    if (
+      url.startsWith('/api/private/products/product-simple/lots') &&
+      (!init?.method || init.method === 'GET')
+    ) {
       return jsonResponse([
         {
           id: 'lot-old',
@@ -179,6 +207,7 @@ function installFetch(options: { adjustmentError?: string } = {}) {
           originalBaseQty: '5',
           remainingBaseQty: '1.5',
           unitCostPaisa: '1000',
+          defaultSellingPricePaisa: '1400',
           status: 'ACTIVE',
           lotCode: null,
           batchCode: null,
@@ -191,6 +220,7 @@ function installFetch(options: { adjustmentError?: string } = {}) {
           originalBaseQty: '2',
           remainingBaseQty: '2',
           unitCostPaisa: '1250',
+          defaultSellingPricePaisa: '1750',
           status: 'ACTIVE',
           lotCode: null,
           batchCode: null,
@@ -208,6 +238,7 @@ function installFetch(options: { adjustmentError?: string } = {}) {
           originalBaseQty: '4',
           remainingBaseQty: '4',
           unitCostPaisa: '1200',
+          defaultSellingPricePaisa: '1800',
           status: 'ACTIVE',
           lotCode: null,
           batchCode: null,
@@ -238,13 +269,25 @@ async function chooseSelectOption(label: string, option: string) {
   })
 }
 
-function renderWithQueryClient(node: React.ReactNode) {
+type TestAuthSession = AuthSession & {
+  role: 'OWNER' | 'ADMIN' | 'STAFF'
+  permissions: Array<
+    | 'SALES_OVERRIDE_SELLING_PRICE'
+    | 'INVENTORY_EDIT_LOT_SELLING_PRICE'
+  >
+}
+
+function renderWithQueryClient(
+  node: React.ReactNode,
+  session: TestAuthSession | null = null,
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
       mutations: { retry: false },
     },
   })
+  queryClient.setQueryData(['auth', 'session'], session)
   const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
 
   render(
@@ -493,6 +536,20 @@ describe('StockAdjustDialog', () => {
   })
 })
 
+const staffSession: TestAuthSession = {
+  authenticated: true,
+  userId: 'staff-user',
+  tenantId: 'tenant-1',
+  role: 'STAFF',
+  permissions: [],
+  expiresAt: '2026-09-25T00:00:00.000Z',
+}
+
+const lotPriceEditorSession: TestAuthSession = {
+  ...staffSession,
+  permissions: ['INVENTORY_EDIT_LOT_SELLING_PRICE'],
+}
+
 describe('ProductLotsDialog', () => {
   it('shows FIFO lot evidence in API order with date, quantity, cost and status', async () => {
     installFetch()
@@ -517,6 +574,7 @@ describe('ProductLotsDialog', () => {
       'Supplier',
       'Date',
       'Purchase Price',
+      'Selling Price',
       'Original Qty',
       'Remaining Qty',
       'Value',
@@ -539,6 +597,7 @@ describe('ProductLotsDialog', () => {
     expect(within(rows[1]!).getByText('5')).toBeInTheDocument()
     expect(within(rows[1]!).getByText('1.5')).toBeInTheDocument()
     expect(within(rows[1]!).getByText('৳10.00')).toBeInTheDocument()
+    expect(within(rows[1]!).getByText('৳14.00')).toBeInTheDocument()
     expect(within(rows[1]!).getByText('৳15.00')).toBeInTheDocument()
     const activeBadge = within(rows[1]!).getByText('Active')
     expect(activeBadge).toBeInTheDocument()
@@ -549,6 +608,83 @@ describe('ProductLotsDialog', () => {
     expect(within(rows[2]!).getAllByText('2')).toHaveLength(2)
     expect(within(rows[2]!).getByText('৳12.50')).toBeInTheDocument()
     expect(within(rows[2]!).getByText('৳25.00')).toBeInTheDocument()
+  })
+
+  it('does not expose lot price editing to Staff without permission', async () => {
+    installFetch()
+
+    renderWithQueryClient(
+      <ProductLotsDialog
+        onOpenChange={vi.fn()}
+        open
+        product={simpleProduct()}
+      />,
+      staffSession,
+    )
+
+    await screen.findByText('LOT-000001')
+    expect(screen.queryByRole('button', { name: /edit selling price/i }))
+      .not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /edit purchase price/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('lets permitted users edit an active lot selling price for future sales only', async () => {
+    const fetchMock = installFetch()
+    const { invalidateSpy } = renderWithQueryClient(
+      <ProductLotsDialog
+        onOpenChange={vi.fn()}
+        open
+        product={simpleProduct()}
+      />,
+      lotPriceEditorSession,
+    )
+
+    await screen.findByText('LOT-000001')
+    const editButtons = screen.getAllByRole('button', {
+      name: /edit selling price/i,
+    })
+    fireEvent.click(editButtons[0]!)
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Edit Selling Price' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'This changes the selling price for future sales from this lot. Previous invoices will not change.',
+      ),
+    ).toBeInTheDocument()
+
+    const input = screen.getByLabelText('Lot Selling Price')
+    expect(input).toHaveValue('14.00')
+    fireEvent.change(input, { target: { value: '16.25' } })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save Selling Price' }),
+    )
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([inputValue, init]) =>
+          inputValue ===
+            '/api/private/products/product-simple/lots/lot-old/selling-price' &&
+          init?.method === 'PATCH',
+      )
+      expect(call).toBeDefined()
+      expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+        sellingPricePaisa: '1625',
+      })
+    })
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['product-lots', 'product-simple'],
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['product', 'product-simple'],
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['products'],
+    })
   })
 
   it('loads lots for preserved pre-Variant stock when explicitly selected', async () => {

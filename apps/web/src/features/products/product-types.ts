@@ -183,6 +183,7 @@ export interface ProductLotDto {
   originalBaseQty: string
   remainingBaseQty: string
   unitCostPaisa: string
+  defaultSellingPricePaisa: string
   status: 'ACTIVE' | 'DEPLETED'
   lotCode: string | null
   batchCode: string | null
