@@ -329,6 +329,84 @@ export class ProductMasterService {
     }
   }
 
+  async updateCategory(
+    categoryId: string,
+    name: string,
+  ): Promise<CategoryRecord> {
+    const normalizedName = requireName(name, 'Category name')
+
+    try {
+      const category = await withDatabaseTransaction(
+        this.database,
+        async (database) => {
+          return new ProductMasterRepository(database).updateCategory(
+            this.tenantId,
+            categoryId,
+            normalizedName,
+          )
+        },
+      )
+
+      if (!category) {
+        throw new ProductNotFoundError('Category not found.')
+      }
+
+      return category
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ProductConflictError(
+          'A category with this name already exists.',
+        )
+      }
+
+      throw error
+    }
+  }
+
+  async deleteCategory(categoryId: string): Promise<void> {
+    try {
+      await withDatabaseTransaction(this.database, async (database) => {
+        const repository = new ProductMasterRepository(database)
+        const category = await repository.findCategoryById(
+          this.tenantId,
+          categoryId,
+        )
+
+        if (!category) {
+          throw new ProductNotFoundError('Category not found.')
+        }
+
+        if (
+          await repository.categoryIsReferenced(
+            this.tenantId,
+            categoryId,
+          )
+        ) {
+          throw new ProductConflictError(
+            'This category is used by products. Archive it instead.',
+          )
+        }
+
+        if (
+          !(await repository.deleteCategory(
+            this.tenantId,
+            categoryId,
+          ))
+        ) {
+          throw new ProductNotFoundError('Category not found.')
+        }
+      })
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        throw new ProductConflictError(
+          'This category is used by products. Archive it instead.',
+        )
+      }
+
+      throw error
+    }
+  }
+
   async listUnits(includeInactive = false): Promise<UnitRecord[]> {
     return this.repository.listUnits(this.tenantId, includeInactive)
   }
