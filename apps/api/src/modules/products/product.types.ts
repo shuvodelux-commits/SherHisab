@@ -1,3 +1,8 @@
+import type {
+  ConversionProfileInput,
+  ConversionProfileSnapshot,
+} from './conversion.types'
+
 export type TrackingMode = 'SIMPLE' | 'LOT' | 'BATCH'
 export type ConversionMode = 'FIXED' | 'VARIABLE'
 export type ProductStatusFilter = 'active' | 'inactive' | 'all'
@@ -137,6 +142,7 @@ export interface AdvancedProductConfigurationInput {
   alternativeUnits?: AlternativeUnitInput[]
   specifications?: SpecificationInput[]
   variantConfiguration?: ReplaceVariantConfigurationInput
+  conversionProfile?: ConversionProfileInput | null
 }
 
 export interface ProductAlternativeUnitRecord {
@@ -179,4 +185,5 @@ export interface ProductAdvancedConfiguration {
   alternativeUnits: ProductAlternativeUnitRecord[]
   specifications: ProductSpecificationRecord[]
   variants: ProductVariantDetail[]
+  conversionProfile: ConversionProfileSnapshot | null
 }

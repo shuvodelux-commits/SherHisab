@@ -251,81 +251,124 @@ export class ConversionService {
     productId: string,
     rawInput: ConversionProfileInput,
   ): Promise<ConversionProfileSnapshot> {
-    const input = normalizeProfile(rawInput)
-
     return withDatabaseTransaction(
       this.database,
-      async (database) => {
-        const repository = new ConversionRepository(database)
-        const product = await repository.lockProduct(
+      async (database) =>
+        new ConversionService(
           this.tenantId,
+          database,
+        ).replaceActiveProfileInTransaction(
           productId,
-        )
+          rawInput,
+        ),
+    )
+  }
 
-        if (!product) {
-          throw new ProductNotFoundError('Product not found.')
-        }
+  async replaceActiveProfileInTransaction(
+    productId: string,
+    rawInput: ConversionProfileInput,
+  ): Promise<ConversionProfileSnapshot> {
+    const input = normalizeProfile(rawInput)
+    const repository = new ConversionRepository(this.database)
+    const product = await repository.lockProduct(
+      this.tenantId,
+      productId,
+    )
 
-        if (product.baseUnitId !== input.baseUnitId) {
-          throw new ProductValidationError(
-            'Conversion base unit must match Product base unit',
-          )
-        }
+    if (!product) {
+      throw new ProductNotFoundError('Product not found.')
+    }
 
-        const unitIds = new Set([
-          input.baseUnitId,
-          input.pricingUnitId,
-          ...input.components.map((component) => component.unitId),
-        ])
+    if (product.baseUnitId !== input.baseUnitId) {
+      throw new ProductValidationError(
+        'Conversion base unit must match Product base unit',
+      )
+    }
 
-        for (const unitId of unitIds) {
-          if (
-            !(await repository.unitIsActive(
-              this.tenantId,
-              unitId,
-            ))
-          ) {
-            throw new ProductValidationError(
-              'Conversion units must be active for this tenant',
-            )
-          }
-        }
+    const unitIds = new Set([
+      input.baseUnitId,
+      input.pricingUnitId,
+      ...input.components.map((component) => component.unitId),
+    ])
 
-        const version = await repository.nextVersion(
+    for (const unitId of unitIds) {
+      if (
+        !(await repository.unitIsActive(
           this.tenantId,
-          productId,
+          unitId,
+        ))
+      ) {
+        throw new ProductValidationError(
+          'Conversion units must be active for this tenant',
         )
-        await repository.deactivateActiveProfile(
+      }
+    }
+
+    const version = await repository.nextVersion(
+      this.tenantId,
+      productId,
+    )
+    await repository.deactivateActiveProfile(
+      this.tenantId,
+      productId,
+    )
+    const profile = await repository.insertProfile({
+      tenantId: this.tenantId,
+      productId,
+      version,
+      profile: input,
+    })
+
+    for (const component of input.components) {
+      await repository.insertComponent({
+        tenantId: this.tenantId,
+        profileId: profile.id,
+        component,
+      })
+    }
+
+    const snapshot = await repository.findProfileVersion(
+      this.tenantId,
+      productId,
+      version,
+    )
+
+    if (!snapshot) {
+      throw new Error('Created conversion profile disappeared')
+    }
+
+    return snapshot
+  }
+
+  async clearActiveProfile(
+    productId: string,
+  ): Promise<void> {
+    await withDatabaseTransaction(
+      this.database,
+      async (database) =>
+        new ConversionService(
           this.tenantId,
-          productId,
-        )
-        const profile = await repository.insertProfile({
-          tenantId: this.tenantId,
-          productId,
-          version,
-          profile: input,
-        })
+          database,
+        ).clearActiveProfileInTransaction(productId),
+    )
+  }
 
-        for (const component of input.components) {
-          await repository.insertComponent({
-            tenantId: this.tenantId,
-            profileId: profile.id,
-            component,
-          })
-        }
+  async clearActiveProfileInTransaction(
+    productId: string,
+  ): Promise<void> {
+    const repository = new ConversionRepository(this.database)
+    const product = await repository.lockProduct(
+      this.tenantId,
+      productId,
+    )
 
-        const snapshot = await repository.findProfileVersion(
-          this.tenantId,
-          productId,
-          version,
-        )
+    if (!product) {
+      throw new ProductNotFoundError('Product not found.')
+    }
 
-        if (!snapshot) {
-          throw new Error('Created conversion profile disappeared')
-        }
-
-        return snapshot
-      },
+    await repository.deactivateActiveProfile(
+      this.tenantId,
+      productId,
     )
   }
 

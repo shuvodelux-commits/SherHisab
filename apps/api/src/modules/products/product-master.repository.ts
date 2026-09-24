@@ -1359,7 +1359,7 @@ export class ProductMasterRepository {
     tenantId: string,
     productId: string,
     baseUnitId: string,
-  ): Promise<ProductAdvancedConfiguration> {
+  ): Promise<Omit<ProductAdvancedConfiguration, 'conversionProfile'>> {
     const [alternativeUnits, specifications, variants] = await Promise.all([
       this.listAlternativeUnits(tenantId, productId, baseUnitId),
       this.listSpecifications(tenantId, productId),

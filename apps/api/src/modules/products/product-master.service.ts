@@ -7,6 +7,7 @@ import {
   ProductNotFoundError,
   ProductValidationError,
 } from './product.errors'
+import { ConversionService } from './conversion.service'
 import { InventoryService } from './inventory.service'
 import { ProductMasterRepository } from './product-master.repository'
 import type {
@@ -915,11 +916,22 @@ export class ProductMasterService {
     productId: string,
   ): Promise<ProductAdvancedConfiguration> {
     const product = await this.getProduct(productId)
-    return this.repository.getAdvancedConfiguration(
-      this.tenantId,
-      productId,
-      product.baseUnit.id,
-    )
+    const [advanced, conversionProfile] = await Promise.all([
+      this.repository.getAdvancedConfiguration(
+        this.tenantId,
+        productId,
+        product.baseUnit.id,
+      ),
+      new ConversionService(
+        this.tenantId,
+        this.database,
+      ).getActiveProfile(productId),
+    ])
+
+    return {
+      ...advanced,
+      conversionProfile,
+    }
   }
 
   async listStockTargets(
@@ -1015,6 +1027,24 @@ export class ProductMasterService {
         productId,
         advanced.variantConfiguration,
       )
+    }
+
+    if (advanced.conversionProfile !== undefined) {
+      const conversionService = new ConversionService(
+        this.tenantId,
+        database,
+      )
+
+      if (advanced.conversionProfile === null) {
+        await conversionService.clearActiveProfileInTransaction(
+          productId,
+        )
+      } else {
+        await conversionService.replaceActiveProfileInTransaction(
+          productId,
+          advanced.conversionProfile,
+        )
+      }
     }
   }
 
