@@ -16,7 +16,7 @@ export interface CreateInventoryLotInput {
 export interface CreateInventoryMovementInput {
   tenantId: string
   variantId: string
-  movementType: 'OPENING' | 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT'
+  movementType: 'OPENING' | 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT' | 'SALE'
   businessDate: string
   baseQtyDelta: string
   balanceAfterBaseQty: string

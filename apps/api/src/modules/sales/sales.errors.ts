@@ -16,3 +16,10 @@ export class InsufficientStockError extends SalesValidationError {
     this.name = 'InsufficientStockError'
   }
 }
+
+export class SalesPermissionError extends Error {
+  constructor(message = 'Selling price override is not permitted.') {
+    super(message)
+    this.name = 'SalesPermissionError'
+  }
+}
