@@ -100,9 +100,10 @@ export class SalesService {
 
         for (const inputLine of input.lines) {
           const lockedLots =
-            await salesRepository.listAvailableFifoLotsForUpdate(
+            await salesRepository.listAvailableLotsForSaleForUpdate(
               tenantId,
               inputLine.variantId,
+              input.businessDate,
             )
           const quote = buildFifoLineQuote(
             inputLine.variantId,

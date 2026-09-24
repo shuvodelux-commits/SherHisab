@@ -63,10 +63,11 @@ export class SalesRepository {
     return this.listLots(tenantId, variantId, true)
   }
 
-  async listAvailableLotsForSale(
+  private async listConfiguredSaleLots(
     tenantId: string,
     variantId: string,
     businessDate: string,
+    forUpdate: boolean,
   ): Promise<AvailableSalesLot[]> {
     const result = await this.db.query<{
       id: string
@@ -111,7 +112,8 @@ export class SalesRepository {
            ELSE NULL
          END ASC NULLS LAST,
          l.received_on ASC,
-         l.id ASC`,
+         l.id ASC
+       ${forUpdate ? 'FOR UPDATE OF l' : ''}`,
       [tenantId, variantId, businessDate],
     )
 
@@ -122,6 +124,32 @@ export class SalesRepository {
       unitCostPaisa: row.unit_cost_paisa,
       sellingPricePaisa: row.default_sell_price_paisa,
     }))
+  }
+
+  listAvailableLotsForSale(
+    tenantId: string,
+    variantId: string,
+    businessDate: string,
+  ): Promise<AvailableSalesLot[]> {
+    return this.listConfiguredSaleLots(
+      tenantId,
+      variantId,
+      businessDate,
+      false,
+    )
+  }
+
+  listAvailableLotsForSaleForUpdate(
+    tenantId: string,
+    variantId: string,
+    businessDate: string,
+  ): Promise<AvailableSalesLot[]> {
+    return this.listConfiguredSaleLots(
+      tenantId,
+      variantId,
+      businessDate,
+      true,
+    )
   }
 
   async createInvoice(input: {
