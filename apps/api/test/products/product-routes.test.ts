@@ -291,6 +291,7 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
           deltaBaseQty: '0.5',
           note: 'Route recount',
           unitCostPaisa: '1000',
+          sellingPricePaisa: '1500',
         },
       },
     )
@@ -315,6 +316,51 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
     )
     expect(deactivate.status).toBe(200)
     expect(await deactivate.json()).toMatchObject({ isActive: false })
+  })
+
+  it('requires both purchase and selling price for positive stock adjustments', async () => {
+    const fixture = await createAuthenticatedFixture(
+      'Stock Adjustment Price Validation Tenant',
+    )
+    const unitId = await pieceUnitId(fixture.service)
+    const product = await fixture.service.createProduct(
+      createPayload(unitId, 'Adjustment Price Product'),
+      fixture.user.id,
+    )
+
+    const missingPurchase = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/stock-adjustments`,
+      {
+        method: 'POST',
+        body: {
+          deltaBaseQty: '1',
+          note: 'Missing purchase',
+          sellingPricePaisa: '1500',
+        },
+      },
+    )
+    expect(missingPurchase.status).toBe(400)
+    expect(await missingPurchase.json()).toEqual({
+      error: 'Purchase price is required when adding stock',
+    })
+
+    const missingSelling = await privateRequest(
+      fixture.cookie,
+      `/products/${product.id}/stock-adjustments`,
+      {
+        method: 'POST',
+        body: {
+          deltaBaseQty: '1',
+          note: 'Missing selling',
+          unitCostPaisa: '1000',
+        },
+      },
+    )
+    expect(missingSelling.status).toBe(400)
+    expect(await missingSelling.json()).toEqual({
+      error: 'Selling price is required when adding stock',
+    })
   })
 
   it('honors Product filters, status and server-side pagination', async () => {
@@ -425,6 +471,7 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
           deltaBaseQty: '1',
           note: 'Higher-cost restock',
           unitCostPaisa: '2000',
+          sellingPricePaisa: '2600',
           businessDate: '2099-01-02',
         },
       },

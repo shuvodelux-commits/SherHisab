@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { LanguageProvider } from '../../app/language'
 import {
   fireEvent,
   render,
@@ -247,9 +248,11 @@ function renderWithQueryClient(node: React.ReactNode) {
   const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
 
   render(
-    <QueryClientProvider client={queryClient}>
-      {node}
-    </QueryClientProvider>,
+    <LanguageProvider>
+      <QueryClientProvider client={queryClient}>
+        {node}
+      </QueryClientProvider>
+    </LanguageProvider>,
   )
 
   return { queryClient, invalidateSpy }
@@ -309,7 +312,7 @@ describe('StockAdjustDialog', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows optional Cost only for positive adjustments and submits exact paisa', async () => {
+  it('requires Purchase Price and Selling Price for positive stock-in and submits exact paisa', async () => {
     const fetchMock = installFetch()
     const onOpenChange = vi.fn<(open: boolean) => void>()
     const { invalidateSpy } = renderWithQueryClient(
@@ -324,16 +327,22 @@ describe('StockAdjustDialog', () => {
       target: { value: '0.125' },
     })
 
-    expect(screen.getByLabelText('Cost')).toBeInTheDocument()
+    const purchasePrice = screen.getByLabelText('Purchase Price')
+    const sellingPrice = screen.getByLabelText('Selling Price')
+    expect(purchasePrice).toHaveValue('10.00')
+    expect(sellingPrice).toHaveValue('15.00')
     expect(
       screen.getByRole('button', { name: 'Add stock' }),
     ).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Cost'), {
+    fireEvent.change(purchasePrice, {
       target: { value: '12.50' },
     })
+    fireEvent.change(sellingPrice, {
+      target: { value: '18.75' },
+    })
     fireEvent.change(screen.getByLabelText('Reason'), {
-      target: { value: 'Count correction' },
+      target: { value: 'Manual stock-in' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Add stock' }))
 
@@ -348,8 +357,9 @@ describe('StockAdjustDialog', () => {
       const body = JSON.parse(String(call?.[1]?.body))
       expect(body).toEqual({
         deltaBaseQty: '0.125',
-        note: 'Count correction',
+        note: 'Manual stock-in',
         unitCostPaisa: '1250',
+        sellingPricePaisa: '1875',
       })
     })
 
@@ -359,7 +369,7 @@ describe('StockAdjustDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  it('hides Cost for negative adjustments and keeps stock errors in the dialog', async () => {
+  it('hides Purchase Price and Selling Price for negative adjustments and keeps stock errors in the dialog', async () => {
     installFetch({
       adjustmentError:
         'Cannot remove stock because available stock is insufficient',
@@ -378,7 +388,12 @@ describe('StockAdjustDialog', () => {
       target: { value: '-9' },
     })
 
-    expect(screen.queryByLabelText('Cost')).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Purchase Price'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Selling Price'),
+    ).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Remove stock' }),
     ).toBeInTheDocument()

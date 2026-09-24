@@ -16,6 +16,7 @@ export interface AdjustStockInput {
   deltaBaseQty: string
   note: string
   unitCostPaisa?: string
+  sellingPricePaisa?: string
   businessDate?: string
 }
 
@@ -167,10 +168,26 @@ export class InventoryService {
     const balanceAfter = currentBalance.plus(quantity)
 
     if (quantity.gt(0)) {
-      const unitCostPaisa =
-        input.unitCostPaisa === undefined
-          ? variant.defaultPurchasePricePaisa
-          : parseMoneyPaisa(input.unitCostPaisa, 'Purchase price')
+      if (input.unitCostPaisa === undefined) {
+        throw new ProductValidationError(
+          'Purchase price is required when adding stock',
+        )
+      }
+
+      if (input.sellingPricePaisa === undefined) {
+        throw new ProductValidationError(
+          'Selling price is required when adding stock',
+        )
+      }
+
+      const unitCostPaisa = parseMoneyPaisa(
+        input.unitCostPaisa,
+        'Purchase price',
+      )
+      const sellingPricePaisa = parseMoneyPaisa(
+        input.sellingPricePaisa,
+        'Selling price',
+      )
 
       if (BigInt(unitCostPaisa) <= 0n) {
         throw new ProductValidationError(
@@ -184,7 +201,7 @@ export class InventoryService {
         sourceType: 'ADJUSTMENT',
         receivedOn: businessDate,
         unitCostPaisa,
-        defaultSellPricePaisa: variant.defaultSellingPricePaisa,
+        defaultSellPricePaisa: sellingPricePaisa,
         baseQty: quantity.toFixed(),
       })
 

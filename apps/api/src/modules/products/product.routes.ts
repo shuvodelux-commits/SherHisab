@@ -376,6 +376,10 @@ export const productRoutes = new Hono<AppEnv>()
               body.unitCostPaisa === undefined
                 ? undefined
                 : stringValue(body, 'unitCostPaisa'),
+            sellingPricePaisa:
+              body.sellingPricePaisa === undefined
+                ? undefined
+                : stringValue(body, 'sellingPricePaisa'),
             businessDate:
               body.businessDate === undefined
                 ? undefined

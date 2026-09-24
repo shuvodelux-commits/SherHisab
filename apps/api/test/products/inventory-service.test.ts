@@ -61,6 +61,7 @@ describe.skipIf(!hasDatabase)('inventory stock adjustments', () => {
       deltaBaseQty: '0.125',
       note: 'Opening recount',
       unitCostPaisa: '1234',
+      sellingPricePaisa: '1600',
       businessDate: '2026-01-15',
     })
 
@@ -68,12 +69,14 @@ describe.skipIf(!hasDatabase)('inventory stock adjustments', () => {
       qty: string
       remaining: string
       cost: string
+      selling: string
       source: string
       received_on: string
     }>(
       `SELECT trim_scale(original_base_qty)::text AS qty,
               trim_scale(remaining_base_qty)::text AS remaining,
               unit_cost_paisa::text AS cost,
+              default_sell_price_paisa::text AS selling,
               source_type AS source,
               received_on::text
        FROM inventory_lots
@@ -102,6 +105,7 @@ describe.skipIf(!hasDatabase)('inventory stock adjustments', () => {
         qty: '0.125',
         remaining: '0.125',
         cost: '1234',
+        selling: '1600',
         source: 'ADJUSTMENT',
         received_on: '2026-01-15',
       },
@@ -128,6 +132,7 @@ describe.skipIf(!hasDatabase)('inventory stock adjustments', () => {
       deltaBaseQty: '2',
       note: 'Different cost',
       unitCostPaisa: '1775',
+      sellingPricePaisa: '2200',
     })
 
     const row = await getPool().query<{ cost: string }>(
@@ -139,50 +144,37 @@ describe.skipIf(!hasDatabase)('inventory stock adjustments', () => {
     expect(row.rows[0]?.cost).toBe('1775')
   })
 
-  it('falls back to the Variant default purchase price for positive stock', async () => {
+  it('requires an explicit purchase price for positive stock', async () => {
     const { tenant, product } = await createProduct({
-      tenantName: 'Fallback Cost Tenant',
+      tenantName: 'Required Purchase Price Tenant',
       productName: 'Switch',
       purchasePricePaisa: '900',
-    })
-    const service = new InventoryService(getPool())
-
-    await service.adjustStock(tenant.id, null, product.defaultVariantId, {
-      deltaBaseQty: '1',
-      note: 'Use default cost',
-    })
-
-    const row = await getPool().query<{ cost: string }>(
-      `SELECT unit_cost_paisa::text AS cost
-       FROM inventory_lots
-       WHERE tenant_id = $1 AND variant_id = $2`,
-      [tenant.id, product.defaultVariantId],
-    )
-    expect(row.rows[0]?.cost).toBe('900')
-  })
-
-  it('rejects positive stock when explicit and default costs are both zero', async () => {
-    const { tenant, product } = await createProduct({
-      tenantName: 'Missing Cost Tenant',
-      productName: 'Free Config Product',
-      purchasePricePaisa: '0',
     })
     const service = new InventoryService(getPool())
 
     await expect(
       service.adjustStock(tenant.id, null, product.defaultVariantId, {
         deltaBaseQty: '1',
-        note: 'Missing cost',
+        note: 'Missing purchase price',
+        sellingPricePaisa: '1500',
       }),
     ).rejects.toThrow('Purchase price')
+  })
 
-    const movements = await getPool().query<{ count: string }>(
-      `SELECT COUNT(*)::text AS count
-       FROM inventory_movements
-       WHERE tenant_id = $1 AND variant_id = $2`,
-      [tenant.id, product.defaultVariantId],
-    )
-    expect(movements.rows[0]?.count).toBe('0')
+  it('requires an explicit selling price for positive stock', async () => {
+    const { tenant, product } = await createProduct({
+      tenantName: 'Required Selling Price Tenant',
+      productName: 'Free Config Product',
+    })
+    const service = new InventoryService(getPool())
+
+    await expect(
+      service.adjustStock(tenant.id, null, product.defaultVariantId, {
+        deltaBaseQty: '1',
+        note: 'Missing selling price',
+        unitCostPaisa: '1000',
+      }),
+    ).rejects.toThrow('Selling price')
   })
 
   it('consumes FIFO lots exactly across multiple business dates', async () => {
@@ -196,12 +188,14 @@ describe.skipIf(!hasDatabase)('inventory stock adjustments', () => {
       deltaBaseQty: '2',
       note: 'Older stock',
       unitCostPaisa: '100',
+      sellingPricePaisa: '150',
       businessDate: '2026-01-01',
     })
     await service.adjustStock(tenant.id, null, product.defaultVariantId, {
       deltaBaseQty: '2',
       note: 'Newer stock',
       unitCostPaisa: '200',
+      sellingPricePaisa: '250',
       businessDate: '2026-02-01',
     })
     await service.adjustStock(tenant.id, null, product.defaultVariantId, {
@@ -332,12 +326,14 @@ describe.skipIf(!hasDatabase)('inventory stock adjustments', () => {
       deltaBaseQty: '1',
       note: 'Inserted first',
       unitCostPaisa: '200',
+      sellingPricePaisa: '260',
       businessDate: '2026-02-01',
     })
     await service.adjustStock(tenant.id, null, product.defaultVariantId, {
       deltaBaseQty: '1',
       note: 'Backdated older',
       unitCostPaisa: '100',
+      sellingPricePaisa: '160',
       businessDate: '2026-01-01',
     })
     await service.adjustStock(tenant.id, null, product.defaultVariantId, {

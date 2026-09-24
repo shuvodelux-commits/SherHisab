@@ -5,6 +5,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { Badge } from '../../components/ui/badge'
+import { BilingualLabel } from '../../components/ui/bilingual-label'
 import { Button } from '../../components/ui/button'
 import {
   Dialog,
@@ -106,7 +107,12 @@ export function StockAdjustDialog({
   const variants = activeStockTargets(product)
   const [variantId, setVariantId] = useState('')
   const [quantity, setQuantity] = useState('')
-  const [cost, setCost] = useState('')
+  const [purchasePrice, setPurchasePrice] = useState(
+    formatPaisaToTaka(product.defaultPurchasePricePaisa),
+  )
+  const [sellingPrice, setSellingPrice] = useState(
+    formatPaisaToTaka(product.defaultSellingPricePaisa),
+  )
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
 
@@ -137,8 +143,11 @@ export function StockAdjustDialog({
           : {}),
         deltaBaseQty: quantity.trim(),
         note: reason.trim(),
-        ...(isPositive && cost.trim()
-          ? { unitCostPaisa: parseTakaToPaisa(cost) }
+        ...(isPositive
+          ? {
+              unitCostPaisa: parseTakaToPaisa(purchasePrice),
+              sellingPricePaisa: parseTakaToPaisa(sellingPrice),
+            }
           : {}),
       }),
     onSuccess: async () => {
@@ -181,8 +190,18 @@ export function StockAdjustDialog({
     }
 
     try {
-      if (isPositive && cost.trim()) {
-        parseTakaToPaisa(cost)
+      if (isPositive) {
+        if (!purchasePrice.trim()) {
+          setError('Purchase price is required for added stock.')
+          return
+        }
+        if (!sellingPrice.trim()) {
+          setError('Selling price is required for added stock.')
+          return
+        }
+
+        parseTakaToPaisa(purchasePrice)
+        parseTakaToPaisa(sellingPrice)
       }
     } catch (parseError) {
       setError(
@@ -223,7 +242,25 @@ export function StockAdjustDialog({
                 <span className="product-field-label">Variant</span>
                 <Select
                   onValueChange={(value) => {
-                    setVariantId(value === SELECT_NONE ? '' : value)
+                    const nextVariantId =
+                      value === SELECT_NONE ? '' : value
+                    const defaults = product.advanced?.variants.find(
+                      (variant) => variant.id === nextVariantId,
+                    )
+
+                    setVariantId(nextVariantId)
+                    setPurchasePrice(
+                      formatPaisaToTaka(
+                        defaults?.defaultPurchasePricePaisa ??
+                          product.defaultPurchasePricePaisa,
+                      ),
+                    )
+                    setSellingPrice(
+                      formatPaisaToTaka(
+                        defaults?.defaultSellingPricePaisa ??
+                          product.defaultSellingPricePaisa,
+                      ),
+                    )
                     setError('')
                   }}
                   value={variantId || SELECT_NONE}
@@ -268,19 +305,47 @@ export function StockAdjustDialog({
             </label>
 
             {isPositive ? (
-              <label className="product-field">
-                <span className="product-field-label">Cost</span>
-                <Input
-                  aria-label="Cost"
-                  inputMode="decimal"
-                  onChange={(event) => {
-                    setCost(event.target.value)
-                    setError('')
-                  }}
-                  placeholder="Optional — uses default purchase cost"
-                  value={cost}
-                />
-              </label>
+              <div className="stock-in-price-fields">
+                <label className="product-field">
+                  <BilingualLabel
+                    en="Purchase Price"
+                    bn="কেনা দাম"
+                  />
+                  <Input
+                    aria-label="Purchase Price"
+                    inputMode="decimal"
+                    onChange={(event) => {
+                      setPurchasePrice(event.target.value)
+                      setError('')
+                    }}
+                    value={purchasePrice}
+                  />
+                </label>
+
+                <label className="product-field">
+                  <BilingualLabel
+                    en="Selling Price"
+                    bn="বিক্রির দাম"
+                  />
+                  <Input
+                    aria-label="Selling Price"
+                    inputMode="decimal"
+                    onChange={(event) => {
+                      setSellingPrice(event.target.value)
+                      setError('')
+                    }}
+                    value={sellingPrice}
+                  />
+                </label>
+
+                <small className="product-field-help stock-in-price-help">
+                  <BilingualLabel
+                    en="These prices create a new stock lot. Future sales use this lot selling price."
+                    bn="এই দামগুলো দিয়ে নতুন স্টক লট তৈরি হবে। ভবিষ্যৎ বিক্রিতে এই লটের বিক্রির দাম ব্যবহার হবে।"
+                    layout="stacked"
+                  />
+                </small>
+              </div>
             ) : null}
 
             <label className="product-field">
