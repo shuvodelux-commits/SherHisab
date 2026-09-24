@@ -31,8 +31,9 @@ export interface ConversionProfileInput {
 }
 
 export interface ConversionComponentSnapshot
-  extends ConversionComponentInput {
+  extends Omit<ConversionComponentInput, 'maxExclusive'> {
   id: string
+  maxExclusive: string | null
 }
 
 export interface ConversionProfileSnapshot {
