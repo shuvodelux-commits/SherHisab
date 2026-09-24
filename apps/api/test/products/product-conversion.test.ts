@@ -542,4 +542,73 @@ describe.skipIf(!hasDatabase)('product conversion profiles', () => {
     ])
   })
 
+  it('keeps legacy FIXED and VARIABLE alternative units unchanged without a conversion profile', async () => {
+    const tenant = await createProductTestTenant('Legacy Unit Compatibility')
+    const owner = await new AuthService().createUser({
+      tenantId: tenant.id,
+      name: 'Legacy Unit Owner',
+      email: `owner-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    const products = new ProductMasterService(tenant.id, getPool())
+    const piece = await products.createUnit({
+      name: 'Legacy Piece',
+      symbol: 'lpc',
+    })
+    const carton = await products.createUnit({
+      name: 'Legacy Carton',
+      symbol: 'lctn',
+    })
+    const bundle = await products.createUnit({
+      name: 'Legacy Bundle',
+      symbol: 'lbundle',
+    })
+
+    const product = await products.createProduct(
+      {
+        name: 'Legacy Unit Product',
+        baseUnitId: piece.id,
+        defaultPurchasePricePaisa: '100',
+        defaultSellingPricePaisa: '150',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'SIMPLE',
+        advanced: {
+          alternativeUnits: [
+            {
+              unitId: carton.id,
+              conversionMode: 'FIXED',
+              conversionToBase: '12',
+            },
+            {
+              unitId: bundle.id,
+              conversionMode: 'VARIABLE',
+              conversionToBase: null,
+            },
+          ],
+        },
+      },
+      owner.id,
+    )
+
+    const advanced = await products.getAdvancedConfiguration(product.id)
+
+    expect(advanced.conversionProfile).toBeNull()
+    expect(advanced.alternativeUnits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          unit: expect.objectContaining({ id: carton.id }),
+          conversionMode: 'FIXED',
+          conversionToBase: '12',
+        }),
+        expect.objectContaining({
+          unit: expect.objectContaining({ id: bundle.id }),
+          conversionMode: 'VARIABLE',
+          conversionToBase: null,
+        }),
+      ]),
+    )
+  })
+
 })
