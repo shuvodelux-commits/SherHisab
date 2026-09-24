@@ -1339,7 +1339,7 @@ p {
 .products-page-header p {
   margin: 2px 0 0;
   color: var(--text-muted);
-  font-family: "Noto Sans Bengali", sans-serif;
+  font-family: var(--font-bangla);
   font-size: 15px;
   line-height: 1.4;
 }
