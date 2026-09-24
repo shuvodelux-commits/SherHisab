@@ -18,25 +18,44 @@ If any required instruction/skill file cannot be read, stop before implementatio
 
 ## Core Rule
 
-**Do not push generated or modified code to GitHub until it has been verified.**
+**Implementation code and its tests are written on GitHub first, verified by GitHub CI, merged, then pulled locally for final verification and deployment.**
 
-For every feature, bug fix, refactor, runtime configuration change, or other code change:
+## GitHub-First Development Policy
 
-1. Use the relevant **Superpowers** workflow before implementation.
-2. For behavior changes and bug fixes, follow **Superpowers TDD**:
-   - write or update the test first,
-   - confirm the test fails for the expected reason,
-   - make the minimal implementation,
-   - confirm the test passes.
-3. Run the tests for the affected package or module.
-4. Run TypeScript type checking.
-5. When feasible, run the **full repository test suite**, not only the changed package.
-6. Review the final diff and verify there are no unexpected files or regressions.
-7. Only after fresh verification succeeds may the change be committed/pushed to GitHub.
+SherHisab uses a **GitHub-first implementation workflow**.
 
-## Required Verification Before Push
+For every feature, bug fix, refactor, business-rule change, API change, database change, or UI behavior change:
 
-At minimum, for code changes:
+1. Start from the latest `main` on GitHub and create a dedicated feature/fix branch.
+2. Write or update the automated tests **directly on the GitHub branch first**.
+   - Business logic must have unit/service tests.
+   - API and workflow behavior must have functional/integration tests where applicable.
+   - Bug fixes must include a regression test when practical.
+3. Write the software implementation directly on the same GitHub branch.
+4. Let GitHub Actions run the repository verification pipeline:
+   - database migrations,
+   - typecheck,
+   - lint,
+   - tests,
+   - production build.
+5. Do not merge the branch until GitHub CI is green and the final diff has been reviewed.
+6. Merge the approved branch into `main`.
+7. On the local development machine, **pull the merged code from GitHub**. Local editing is not the normal implementation path.
+8. Apply required local database migrations and run the full local verification suite against local PostgreSQL.
+9. Only after local verification passes:
+   - deploy the same `main` commit to Cloudflare,
+   - restart/serve the local LAN development server from that same `main` commit.
+10. Confirm GitHub `main`, local `main`, Cloudflare, and the LAN server are all on the same intended commit/version.
+
+### Source-of-truth rule
+
+> **Write code on GitHub. Pull to local. Verify locally. Then deploy.**
+
+The local workstation is primarily the verification, database, deployment, and runtime environment. Do not create an alternate implementation locally and push it later unless GitHub editing is unavailable or the user explicitly approves an exception.
+
+## Required Verification Before Merge and Deploy
+
+At minimum, GitHub CI must run these checks for code changes, and the same core checks must be repeated locally after merge:
 
 ```bash
 pnpm typecheck
