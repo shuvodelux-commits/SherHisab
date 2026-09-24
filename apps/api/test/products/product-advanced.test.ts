@@ -754,4 +754,138 @@ describe.skipIf(!hasDatabase)('advanced product configuration', () => {
       }),
     ).rejects.toThrow()
   })
+
+  it('persists mature tracking, allocation, warranty and capture settings through Product create and update', async () => {
+    const tenant = await createProductTestTenant('Mature Tracking Product')
+    const service = new ProductMasterService(tenant.id, getPool())
+    const unit = (await service.listUnits()).find(
+      (candidate) => candidate.symbol === 'pcs',
+    )
+    if (!unit) {
+      throw new Error('Default Piece unit not found')
+    }
+
+    const product = await service.createProduct(
+      {
+        name: 'Tracked Medicine',
+        baseUnitId: unit.id,
+        defaultPurchasePricePaisa: '1000',
+        defaultSellingPricePaisa: '1500',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'BATCH_EXPIRY',
+        allocationPolicy: 'FEFO',
+        advanced: {
+          warrantyPolicy: {
+            enabled: true,
+            durationValue: 12,
+            durationUnit: 'MONTH',
+            provider: 'Manufacturer',
+            text: 'Original warranty',
+          },
+          captureFields: [
+            {
+              key: 'prescription_no',
+              label: 'Prescription No',
+              type: 'text',
+              required: true,
+            },
+            {
+              key: 'dosage_form',
+              label: 'Dosage Form',
+              type: 'select',
+              selectOptions: ['Tablet', 'Syrup'],
+              required: false,
+            },
+          ],
+        },
+      },
+      null,
+    )
+
+    expect(product).toMatchObject({
+      trackingMode: 'BATCH_EXPIRY',
+      allocationPolicy: 'FEFO',
+    })
+
+    const createdAdvanced =
+      await service.getAdvancedConfiguration(product.id)
+
+    expect(createdAdvanced.warrantyPolicy).toMatchObject({
+      enabled: true,
+      durationValue: 12,
+      durationUnit: 'MONTH',
+      provider: 'Manufacturer',
+      text: 'Original warranty',
+    })
+    expect(createdAdvanced.captureFields).toEqual([
+      expect.objectContaining({
+        key: 'prescription_no',
+        type: 'text',
+        required: true,
+        sortOrder: 0,
+      }),
+      expect.objectContaining({
+        key: 'dosage_form',
+        type: 'select',
+        selectOptions: ['Tablet', 'Syrup'],
+        sortOrder: 1,
+      }),
+    ])
+
+    const updated = await service.updateProduct(product.id, {
+      name: product.name,
+      brand: product.brand,
+      categoryId: product.category?.id ?? null,
+      baseUnitId: product.baseUnit.id,
+      barcode: product.primaryBarcode ?? '',
+      defaultPurchasePricePaisa:
+        product.defaultPurchasePricePaisa,
+      defaultSellingPricePaisa:
+        product.defaultSellingPricePaisa,
+      minimumStockBaseQty: product.minimumStockBaseQty,
+      trackingMode: 'SERIAL',
+      allocationPolicy: 'FIFO',
+      advanced: {
+        warrantyPolicy: {
+          enabled: true,
+          durationValue: 2,
+          durationUnit: 'YEAR',
+          provider: 'SherHisab Shop',
+          text: 'Updated warranty',
+        },
+        captureFields: [
+          {
+            key: 'imei_note',
+            label: 'IMEI Note',
+            type: 'text',
+            required: false,
+          },
+        ],
+      },
+    })
+
+    expect(updated).toMatchObject({
+      trackingMode: 'SERIAL',
+      allocationPolicy: 'FIFO',
+    })
+
+    const updatedAdvanced =
+      await service.getAdvancedConfiguration(product.id)
+    expect(updatedAdvanced.warrantyPolicy).toMatchObject({
+      durationValue: 2,
+      durationUnit: 'YEAR',
+      provider: 'SherHisab Shop',
+      text: 'Updated warranty',
+    })
+    expect(updatedAdvanced.captureFields).toEqual([
+      expect.objectContaining({
+        key: 'imei_note',
+        label: 'IMEI Note',
+        type: 'text',
+        sortOrder: 0,
+      }),
+    ])
+  })
+
 })
