@@ -297,11 +297,11 @@ export class TrackingRepository {
          expires_on
        )
        VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9::date,
+         $1,$2,$3,$4,$5::integer,$6,$7,$8,$9::date,
          CASE $6
-           WHEN 'DAY' THEN ($9::date + ($5 * INTERVAL '1 day'))::date
-           WHEN 'MONTH' THEN ($9::date + ($5 * INTERVAL '1 month'))::date
-           WHEN 'YEAR' THEN ($9::date + ($5 * INTERVAL '1 year'))::date
+           WHEN 'DAY' THEN ($9::date + ($5::integer * INTERVAL '1 day'))::date
+           WHEN 'MONTH' THEN ($9::date + ($5::integer * INTERVAL '1 month'))::date
+           WHEN 'YEAR' THEN ($9::date + ($5::integer * INTERVAL '1 year'))::date
          END
        )
        RETURNING
