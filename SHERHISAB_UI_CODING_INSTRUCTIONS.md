@@ -792,8 +792,8 @@ Recommended module-tab treatment:
 
 ```text
 height                36–40px
-label                 13px / 500
-Bangla helper         9–10px / 400 when used
+label                 15px / 500
+Bangla helper         15px / 400 when used
 active text           foreground / primary emphasis
 active indicator      thin line
 inactive text         muted foreground
@@ -1509,7 +1509,7 @@ Normal SherHisab desktop Input/InputGroup height should remain aligned with adja
 
 Keep:
 
-- 13px input text;
+- 15px input text;
 - 1px semantic border;
 - shared 6px control radius;
 - semantic focus ring;
@@ -1889,9 +1889,9 @@ Dense row           34–36px
 ## Typography
 
 ```text
-Header              11px / 600
-Body                13px / 400–500
-Meta/helper         10px / 400
+Header              15px / 600
+Body                15px / 400–500
+Meta/helper         15px / 400
 ```
 
 ## Alignment
