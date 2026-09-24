@@ -238,6 +238,36 @@ export class ConversionRepository {
       : null
   }
 
+  async findProfileByIdVersion(
+    tenantId: string,
+    profileId: string,
+    version: number,
+  ): Promise<ConversionProfileSnapshot | null> {
+    const result = await this.db.query<ProfileRow>(
+      `SELECT
+         id,
+         product_id,
+         profile_type,
+         version,
+         base_unit_id,
+         pricing_unit_id,
+         pricing_base_factor_numerator::text,
+         pricing_base_factor_denominator::text,
+         display_precision
+       FROM product_conversion_profiles
+       WHERE tenant_id = $1
+         AND id = $2
+         AND version = $3
+       LIMIT 1`,
+      [tenantId, profileId, version],
+    )
+    const profile = result.rows[0]
+
+    return profile
+      ? this.loadSnapshot(tenantId, profile)
+      : null
+  }
+
   private async findProfileRow(
     tenantId: string,
     productId: string,
