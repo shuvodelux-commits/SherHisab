@@ -32,6 +32,8 @@ export const authContextMiddleware = createMiddleware<AppEnv>(
 
     c.set('userId', session.userId)
     c.set('tenantId', session.tenantId)
+    c.set('role', session.role)
+    c.set('permissions', session.permissions)
 
     await next()
   },

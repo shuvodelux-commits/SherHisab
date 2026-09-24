@@ -29,9 +29,15 @@ describe.skipIf(!hasDatabase)('authentication foundation', () => {
       return
     }
 
+    const ids = tenantIds.splice(0)
+
+    await getPool().query(
+      'DELETE FROM user_permission_grants WHERE tenant_id = ANY($1::uuid[])',
+      [ids],
+    )
     await getPool().query(
       'DELETE FROM tenants WHERE id = ANY($1::uuid[])',
-      [tenantIds.splice(0)],
+      [ids],
     )
   })
 
@@ -53,6 +59,7 @@ describe.skipIf(!hasDatabase)('authentication foundation', () => {
       name: 'Owner',
       email: `owner-${suffix}@example.com`,
       password: 'strong-password-123',
+      role: 'OWNER',
     })
 
     return {
@@ -88,6 +95,57 @@ describe.skipIf(!hasDatabase)('authentication foundation', () => {
     expect(body).toMatchObject({
       userId: fixture.user.id,
       tenantId: fixture.tenant.id,
+      role: 'OWNER',
+      permissions: [
+        'SALES_OVERRIDE_SELLING_PRICE',
+        'INVENTORY_EDIT_LOT_SELLING_PRICE',
+      ],
+    })
+  })
+
+  it('defaults new users to Staff and resolves only explicit grants', async () => {
+    const suffix = randomUUID()
+    const tenant = await TenantService.createTenant({
+      name: 'Staff Auth Tenant',
+      slug: `staff-auth-${suffix}`,
+    })
+    tenantIds.push(tenant.id)
+
+    const authService = new AuthService()
+    const owner = await authService.createUser({
+      tenantId: tenant.id,
+      name: 'Owner',
+      email: `owner-${suffix}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    const staff = await authService.createUser({
+      tenantId: tenant.id,
+      name: 'Cashier',
+      email: `cashier-${suffix}@example.com`,
+      password: 'strong-password-123',
+    })
+
+    expect(staff.role).toBe('STAFF')
+    expect(
+      await authService.getAuthorizationContext(tenant.id, staff.id),
+    ).toEqual({
+      role: 'STAFF',
+      permissions: [],
+    })
+
+    await authService.grantPermission({
+      tenantId: tenant.id,
+      userId: staff.id,
+      permission: 'SALES_OVERRIDE_SELLING_PRICE',
+      grantedByUserId: owner.id,
+    })
+
+    expect(
+      await authService.getAuthorizationContext(tenant.id, staff.id),
+    ).toEqual({
+      role: 'STAFF',
+      permissions: ['SALES_OVERRIDE_SELLING_PRICE'],
     })
   })
 
@@ -134,6 +192,11 @@ describe.skipIf(!hasDatabase)('authentication foundation', () => {
       authenticated: true,
       tenantId: fixture.tenant.id,
       userId: fixture.user.id,
+      role: 'OWNER',
+      permissions: [
+        'SALES_OVERRIDE_SELLING_PRICE',
+        'INVENTORY_EDIT_LOT_SELLING_PRICE',
+      ],
     })
 
     const logout = await app.request('http://localhost/api/auth/logout', {

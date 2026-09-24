@@ -11,6 +11,8 @@ const privateRoutes = new Hono<AppEnv>()
     c.json({
       userId: c.get('userId'),
       tenantId: c.get('tenantId'),
+      role: c.get('role'),
+      permissions: c.get('permissions'),
     }),
   )
   .route('/', productRoutes)

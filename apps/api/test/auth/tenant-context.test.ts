@@ -29,9 +29,15 @@ describe.skipIf(!hasDatabase)('trusted tenant request context', () => {
       return
     }
 
+    const ids = tenantIds.splice(0)
+
+    await getPool().query(
+      'DELETE FROM user_permission_grants WHERE tenant_id = ANY($1::uuid[])',
+      [ids],
+    )
     await getPool().query(
       'DELETE FROM tenants WHERE id = ANY($1::uuid[])',
-      [tenantIds.splice(0)],
+      [ids],
     )
   })
 
@@ -60,6 +66,7 @@ describe.skipIf(!hasDatabase)('trusted tenant request context', () => {
       name: 'Owner A',
       email: `owner-${randomUUID()}@example.com`,
       password,
+      role: 'OWNER',
     })
 
     const login = await app.request('http://localhost/api/auth/login', {
@@ -95,7 +102,41 @@ describe.skipIf(!hasDatabase)('trusted tenant request context', () => {
     expect(await response.json()).toEqual({
       userId: user.id,
       tenantId: tenantA.id,
+      role: 'OWNER',
+      permissions: [
+        'SALES_OVERRIDE_SELLING_PRICE',
+        'INVENTORY_EDIT_LOT_SELLING_PRICE',
+      ],
     })
+  })
+
+  it('rejects permission grants that cross tenant boundaries', async () => {
+    const tenantA = await createTenant('Grant Tenant A', 'grant-a')
+    const tenantB = await createTenant('Grant Tenant B', 'grant-b')
+    const authService = new AuthService()
+
+    const ownerA = await authService.createUser({
+      tenantId: tenantA.id,
+      name: 'Owner A',
+      email: `owner-a-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    const staffB = await authService.createUser({
+      tenantId: tenantB.id,
+      name: 'Staff B',
+      email: `staff-b-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+    })
+
+    await expect(
+      authService.grantPermission({
+        tenantId: tenantA.id,
+        userId: staffB.id,
+        permission: 'SALES_OVERRIDE_SELLING_PRICE',
+        grantedByUserId: ownerA.id,
+      }),
+    ).rejects.toThrow()
   })
 
   it('rejects unauthenticated access to private routes', async () => {

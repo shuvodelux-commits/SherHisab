@@ -1,5 +1,13 @@
-import { AuthRepository, type AuthSession } from './auth.repository'
+import {
+  AuthRepository,
+  type AuthSession,
+  type AuthorizationContext,
+} from './auth.repository'
 import { hashPassword, verifyPassword } from './password'
+import {
+  type PermissionKey,
+  type UserRole,
+} from './permissions'
 import {
   createSessionToken,
   getSessionExpiry,
@@ -26,6 +34,7 @@ export class AuthService {
     name: string
     email: string
     password: string
+    role?: UserRole
   }) {
     const name = input.name.trim()
     const email = input.email.trim().toLowerCase()
@@ -41,7 +50,43 @@ export class AuthService {
       name,
       email,
       passwordHash,
+      role: input.role ?? 'STAFF',
     })
+  }
+
+  async getAuthorizationContext(
+    tenantId: string,
+    userId: string,
+  ): Promise<AuthorizationContext> {
+    const authorization =
+      await this.repository.findAuthorizationContext(
+        tenantId,
+        userId,
+      )
+
+    if (!authorization) {
+      throw new Error('User authorization context not found')
+    }
+
+    return authorization
+  }
+
+  async grantPermission(input: {
+    tenantId: string
+    userId: string
+    permission: PermissionKey
+    grantedByUserId: string
+  }): Promise<void> {
+    const grantor = await this.getAuthorizationContext(
+      input.tenantId,
+      input.grantedByUserId,
+    )
+
+    if (grantor.role !== 'OWNER' && grantor.role !== 'ADMIN') {
+      throw new Error('Only Owner or Admin can grant permissions')
+    }
+
+    await this.repository.grantPermission(input)
   }
 
   async login(input: LoginInput): Promise<LoginResult | null> {
@@ -52,13 +97,18 @@ export class AuthService {
       return null
     }
 
-    const tenantId = await this.repository.findTenantIdBySlug(tenantSlug)
+    const tenantId = await this.repository.findTenantIdBySlug(
+      tenantSlug,
+    )
 
     if (!tenantId) {
       return null
     }
 
-    const user = await this.repository.findUserByEmail(tenantId, email)
+    const user = await this.repository.findUserByEmail(
+      tenantId,
+      email,
+    )
 
     if (!user?.isActive) {
       return null
@@ -84,11 +134,17 @@ export class AuthService {
       expiresAt,
     })
 
+    const authorization = await this.getAuthorizationContext(
+      tenantId,
+      user.id,
+    )
+
     return {
       token,
       tenantId,
       userId: user.id,
       expiresAt,
+      ...authorization,
     }
   }
 
@@ -97,7 +153,9 @@ export class AuthService {
       return null
     }
 
-    return this.repository.findValidSession(await hashSessionToken(token))
+    return this.repository.findValidSession(
+      await hashSessionToken(token),
+    )
   }
 
   async logout(token: string): Promise<void> {
@@ -105,6 +163,8 @@ export class AuthService {
       return
     }
 
-    await this.repository.deleteSession(await hashSessionToken(token))
+    await this.repository.deleteSession(
+      await hashSessionToken(token),
+    )
   }
 }

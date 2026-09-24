@@ -56,6 +56,8 @@ export const authRoutes = new Hono<AppEnv>()
       return c.json({
         userId: login.userId,
         tenantId: login.tenantId,
+        role: login.role,
+        permissions: login.permissions,
         expiresAt: login.expiresAt.toISOString(),
       })
     })
@@ -82,6 +84,8 @@ export const authRoutes = new Hono<AppEnv>()
         authenticated: true,
         userId: session.userId,
         tenantId: session.tenantId,
+        role: session.role,
+        permissions: session.permissions,
         expiresAt: session.expiresAt.toISOString(),
       })
     })
