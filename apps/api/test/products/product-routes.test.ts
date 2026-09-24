@@ -368,6 +368,120 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
     expect(inactivePage.items.map((item) => item.id)).toContain(inactive.id)
   })
 
+  it('sorts the complete Product dataset before server pagination', async () => {
+    const fixture = await createAuthenticatedFixture('Sorted Route Tenant')
+    const unitId = await pieceUnitId(fixture.service)
+
+    await fixture.service.createProduct(
+      {
+        ...createPayload(unitId, 'Cheap Product'),
+        defaultSellingPricePaisa: '1000',
+      },
+      null,
+    )
+    const expensive = await fixture.service.createProduct(
+      {
+        ...createPayload(unitId, 'Expensive Product'),
+        defaultSellingPricePaisa: '9000',
+      },
+      null,
+    )
+
+    const response = await privateRequest(
+      fixture.cookie,
+      '/products?sortBy=sellingPrice&sortDir=desc&limit=1&offset=0',
+    )
+    expect(response.status).toBe(200)
+    const page = (await response.json()) as {
+      items: Array<{ id: string }>
+    }
+    expect(page.items[0]?.id).toBe(expensive.id)
+  })
+
+  it('edits masters and only deletes masters that are not referenced', async () => {
+    const fixture = await createAuthenticatedFixture('Master Edit Delete Tenant')
+    const baseUnitId = await pieceUnitId(fixture.service)
+    const category = await fixture.service.createCategory('Hardware')
+    const spareCategory = await fixture.service.createCategory('Temporary')
+    const spareUnit = await fixture.service.createUnit({
+      name: 'Bundle',
+      symbol: 'bdl',
+    })
+
+    const renameCategory = await privateRequest(
+      fixture.cookie,
+      `/product-categories/${category.id}`,
+      {
+        method: 'PATCH',
+        body: { name: 'Tools' },
+      },
+    )
+    expect(renameCategory.status).toBe(200)
+    expect(await renameCategory.json()).toMatchObject({ name: 'Tools' })
+
+    const renameUnit = await privateRequest(
+      fixture.cookie,
+      `/units/${spareUnit.id}`,
+      {
+        method: 'PATCH',
+        body: { name: 'Bundle Pack', symbol: 'bp' },
+      },
+    )
+    expect(renameUnit.status).toBe(200)
+    expect(await renameUnit.json()).toMatchObject({
+      name: 'Bundle Pack',
+      symbol: 'bp',
+    })
+
+    const deleteCategory = await privateRequest(
+      fixture.cookie,
+      `/product-categories/${spareCategory.id}`,
+      { method: 'DELETE' },
+    )
+    expect(deleteCategory.status).toBe(204)
+
+    const deleteUnit = await privateRequest(
+      fixture.cookie,
+      `/units/${spareUnit.id}`,
+      { method: 'DELETE' },
+    )
+    expect(deleteUnit.status).toBe(204)
+
+    const referencedCategory = await fixture.service.createCategory('Electrical')
+    const referencedUnit = await fixture.service.createUnit({
+      name: 'Meter',
+      symbol: 'm',
+    })
+    await fixture.service.createProduct(
+      {
+        ...createPayload(referencedUnit.id, 'Wire'),
+        categoryId: referencedCategory.id,
+      },
+      null,
+    )
+
+    const blockedCategory = await privateRequest(
+      fixture.cookie,
+      `/product-categories/${referencedCategory.id}`,
+      { method: 'DELETE' },
+    )
+    expect(blockedCategory.status).toBe(409)
+
+    const blockedUnit = await privateRequest(
+      fixture.cookie,
+      `/units/${referencedUnit.id}`,
+      { method: 'DELETE' },
+    )
+    expect(blockedUnit.status).toBe(409)
+
+    const defaultPieceDelete = await privateRequest(
+      fixture.cookie,
+      `/units/${baseUnitId}`,
+      { method: 'DELETE' },
+    )
+    expect(defaultPieceDelete.status).toBe(409)
+  })
+
   it('lists archived masters only when includeInactive=true', async () => {
     const fixture = await createAuthenticatedFixture('Master Route Tenant')
     const category = await fixture.service.createCategory('Archived Category')
