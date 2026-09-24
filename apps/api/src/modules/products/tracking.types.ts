@@ -66,10 +66,24 @@ export interface ProductCaptureFieldDefinitionInput {
   required: boolean
 }
 
-export interface ProductCaptureFieldDefinition
-  extends ProductCaptureFieldDefinitionInput {
+export interface ProductCaptureFieldDefinition {
   id: string
+  key: string
+  label: string
+  type: ProductCaptureFieldType
+  selectOptions: string[]
+  required: boolean
   sortOrder: number
+}
+
+export interface CaptureValueSnapshotRecord {
+  id: string
+  salesLineId: string
+  definitionId: string | null
+  key: string
+  label: string
+  type: ProductCaptureFieldType
+  value: string
 }
 
 export interface SellableBatchRecord {

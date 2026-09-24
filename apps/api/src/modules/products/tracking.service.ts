@@ -8,7 +8,11 @@ import {
 } from './product.errors'
 import { TrackingRepository } from './tracking.repository'
 import type {
+  CaptureValueSnapshotRecord,
   InventorySerialRecord,
+  ProductCaptureFieldDefinition,
+  ProductCaptureFieldDefinitionInput,
+  ProductCaptureFieldType,
   SellableBatchRecord,
   WarrantyPolicyInput,
   WarrantyPolicyRecord,
@@ -57,6 +61,129 @@ function validDate(value: string, label: string): string {
   }
 
   return normalized
+}
+
+const CAPTURE_FIELD_TYPES = new Set<ProductCaptureFieldType>([
+  'text',
+  'number',
+  'date',
+  'select',
+])
+
+function requiredCaptureText(value: string, label: string): string {
+  const normalized = value.trim()
+  if (!normalized) {
+    throw new ProductValidationError(`${label} is required`)
+  }
+  return normalized
+}
+
+function normalizeCaptureDefinitions(
+  definitions: ProductCaptureFieldDefinitionInput[],
+): Array<Omit<ProductCaptureFieldDefinition, 'id'>> {
+  const keys = new Set<string>()
+
+  return definitions.map((definition, sortOrder) => {
+    const key = requiredCaptureText(
+      definition.key,
+      'Capture field key',
+    )
+    if (!/^[A-Za-z0-9_-]+$/.test(key)) {
+      throw new ProductValidationError(
+        'Capture field key can only use letters, numbers, underscore, and hyphen',
+      )
+    }
+
+    const comparableKey = key.toLocaleLowerCase('en-US')
+    if (keys.has(comparableKey)) {
+      throw new ProductValidationError(
+        'Capture field keys must be unique',
+      )
+    }
+    keys.add(comparableKey)
+
+    if (!CAPTURE_FIELD_TYPES.has(definition.type)) {
+      throw new ProductValidationError(
+        'Capture field type is invalid',
+      )
+    }
+
+    const options = (definition.selectOptions ?? [])
+      .map((option) => option.trim())
+      .filter(Boolean)
+    const optionKeys = new Set<string>()
+    for (const option of options) {
+      const comparable = option.toLocaleLowerCase('en-US')
+      if (optionKeys.has(comparable)) {
+        throw new ProductValidationError(
+          'Capture field select options must be unique',
+        )
+      }
+      optionKeys.add(comparable)
+    }
+
+    if (definition.type === 'select' && options.length === 0) {
+      throw new ProductValidationError(
+        'Select capture fields require at least one option',
+      )
+    }
+    if (definition.type !== 'select' && options.length > 0) {
+      throw new ProductValidationError(
+        'Only select capture fields can define select options',
+      )
+    }
+
+    return {
+      key,
+      label: requiredCaptureText(
+        definition.label,
+        'Capture field label',
+      ),
+      type: definition.type,
+      selectOptions: options,
+      required: Boolean(definition.required),
+      sortOrder,
+    }
+  })
+}
+
+function normalizeCaptureValue(
+  definition: ProductCaptureFieldDefinition,
+  rawValue: string,
+): string {
+  const value = rawValue.trim()
+
+  if (definition.type === 'number') {
+    let number: Decimal
+    try {
+      number = new Decimal(value)
+    } catch {
+      throw new ProductValidationError(
+        `${definition.label} must be a valid number`,
+      )
+    }
+    if (!number.isFinite()) {
+      throw new ProductValidationError(
+        `${definition.label} must be a valid number`,
+      )
+    }
+    return number.toFixed()
+  }
+
+  if (definition.type === 'date') {
+    return validDate(value, definition.label)
+  }
+
+  if (
+    definition.type === 'select' &&
+    !definition.selectOptions.includes(value)
+  ) {
+    throw new ProductValidationError(
+      `${definition.label} must use a configured option`,
+    )
+  }
+
+  return value
 }
 
 export class TrackingService {
@@ -152,6 +279,152 @@ export class TrackingService {
       }
       return serial
     })
+  }
+
+  async replaceCaptureFields(
+    productId: string,
+    definitions: ProductCaptureFieldDefinitionInput[],
+  ): Promise<ProductCaptureFieldDefinition[]> {
+    const normalizedProductId = productId.trim()
+    if (!normalizedProductId) {
+      throw new ProductValidationError('Product is required')
+    }
+    const normalized = normalizeCaptureDefinitions(definitions)
+
+    return withDatabaseTransaction(
+      this.database,
+      async (database) => {
+        const repository = new TrackingRepository(database)
+        if (
+          !(await repository.lockProduct(
+            this.tenantId,
+            normalizedProductId,
+          ))
+        ) {
+          throw new ProductNotFoundError('Product not found.')
+        }
+
+        await repository.deactivateCaptureFields(
+          this.tenantId,
+          normalizedProductId,
+        )
+
+        const created: ProductCaptureFieldDefinition[] = []
+        for (const definition of normalized) {
+          created.push(
+            await repository.insertCaptureField({
+              tenantId: this.tenantId,
+              productId: normalizedProductId,
+              ...definition,
+            }),
+          )
+        }
+
+        return created
+      },
+    )
+  }
+
+  listCaptureFields(
+    productId: string,
+  ): Promise<ProductCaptureFieldDefinition[]> {
+    const normalizedProductId = productId.trim()
+    if (!normalizedProductId) {
+      throw new ProductValidationError('Product is required')
+    }
+
+    return this.repository.listCaptureFields(
+      this.tenantId,
+      normalizedProductId,
+    )
+  }
+
+  async snapshotCaptureValues(input: {
+    productId: string
+    salesLineId: string
+    values: Record<string, string>
+  }): Promise<CaptureValueSnapshotRecord[]> {
+    return withDatabaseTransaction(
+      this.database,
+      async (database) => {
+        const repository = new TrackingRepository(database)
+
+        if (
+          !(await repository.salesLineBelongsToProduct(
+            this.tenantId,
+            input.salesLineId,
+            input.productId,
+          ))
+        ) {
+          throw new ProductValidationError(
+            'Sales line does not belong to this Product',
+          )
+        }
+
+        const definitions = await repository.listCaptureFields(
+          this.tenantId,
+          input.productId,
+        )
+        const byKey = new Map(
+          definitions.map((definition) => [
+            definition.key,
+            definition,
+          ]),
+        )
+
+        for (const key of Object.keys(input.values)) {
+          if (!byKey.has(key)) {
+            throw new ProductValidationError(
+              `Unknown capture field: ${key}`,
+            )
+          }
+        }
+
+        const created: CaptureValueSnapshotRecord[] = []
+        for (const definition of definitions) {
+          const rawValue = input.values[definition.key]
+          const hasValue =
+            rawValue !== undefined && rawValue.trim() !== ''
+
+          if (!hasValue) {
+            if (definition.required) {
+              throw new ProductValidationError(
+                `${definition.label} is required`,
+              )
+            }
+            continue
+          }
+
+          created.push(
+            await repository.insertCaptureValueSnapshot({
+              tenantId: this.tenantId,
+              salesLineId: input.salesLineId,
+              definition,
+              value: normalizeCaptureValue(
+                definition,
+                rawValue,
+              ),
+            }),
+          )
+        }
+
+        return created
+      },
+    )
+  }
+
+  listCaptureValueSnapshots(
+    salesLineId: string,
+  ): Promise<CaptureValueSnapshotRecord[]> {
+    const normalizedSalesLineId = salesLineId.trim()
+    if (!normalizedSalesLineId) {
+      throw new ProductValidationError('Sales line is required')
+    }
+
+    return this.repository.listCaptureValueSnapshots(
+      this.tenantId,
+      normalizedSalesLineId,
+    )
   }
 
   async replaceWarrantyPolicy(

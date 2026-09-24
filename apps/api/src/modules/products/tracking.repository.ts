@@ -1,6 +1,9 @@
 import type { DatabaseClient } from '../../db/request-database'
 import type {
+  CaptureValueSnapshotRecord,
   InventorySerialRecord,
+  ProductCaptureFieldDefinition,
+  ProductCaptureFieldType,
   SellableBatchRecord,
   WarrantyDurationUnit,
   WarrantyPolicyRecord,
@@ -83,6 +86,22 @@ function mapWarrantySnapshot(
 
 export class TrackingRepository {
   constructor(private readonly db: DatabaseClient) {}
+
+
+  async lockProduct(
+    tenantId: string,
+    productId: string,
+  ): Promise<boolean> {
+    const result = await this.db.query<{ id: string }>(
+      `SELECT id
+       FROM products
+       WHERE tenant_id = $1 AND id = $2
+       FOR UPDATE`,
+      [tenantId, productId],
+    )
+
+    return Boolean(result.rows[0])
+  }
 
   async listSellableSerials(
     tenantId: string,
@@ -399,6 +418,226 @@ export class TrackingRepository {
     }
 
     return mapWarrantySnapshot(row)
+  }
+
+  async deactivateCaptureFields(
+    tenantId: string,
+    productId: string,
+  ): Promise<void> {
+    await this.db.query(
+      `UPDATE product_capture_field_definitions
+       SET is_active = FALSE,
+           updated_at = NOW()
+       WHERE tenant_id = $1
+         AND product_id = $2
+         AND is_active`,
+      [tenantId, productId],
+    )
+  }
+
+  async insertCaptureField(input: {
+    tenantId: string
+    productId: string
+    key: string
+    label: string
+    type: ProductCaptureFieldType
+    selectOptions: string[]
+    required: boolean
+    sortOrder: number
+  }): Promise<ProductCaptureFieldDefinition> {
+    const result = await this.db.query<{
+      id: string
+      field_key: string
+      label: string
+      field_type: ProductCaptureFieldType
+      select_options: string[]
+      is_required: boolean
+      sort_order: number
+    }>(
+      `INSERT INTO product_capture_field_definitions
+       (
+         tenant_id,
+         product_id,
+         field_key,
+         label,
+         field_type,
+         select_options,
+         is_required,
+         sort_order
+       )
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)
+       RETURNING
+         id,
+         field_key,
+         label,
+         field_type,
+         select_options,
+         is_required,
+         sort_order`,
+      [
+        input.tenantId,
+        input.productId,
+        input.key,
+        input.label,
+        input.type,
+        JSON.stringify(input.selectOptions),
+        input.required,
+        input.sortOrder,
+      ],
+    )
+    const row = result.rows[0]
+    if (!row) {
+      throw new Error('Failed to create capture field')
+    }
+
+    return {
+      id: row.id,
+      key: row.field_key,
+      label: row.label,
+      type: row.field_type,
+      selectOptions: row.select_options,
+      required: row.is_required,
+      sortOrder: row.sort_order,
+    }
+  }
+
+  async listCaptureFields(
+    tenantId: string,
+    productId: string,
+  ): Promise<ProductCaptureFieldDefinition[]> {
+    const result = await this.db.query<{
+      id: string
+      field_key: string
+      label: string
+      field_type: ProductCaptureFieldType
+      select_options: string[]
+      is_required: boolean
+      sort_order: number
+    }>(
+      `SELECT
+         id,
+         field_key,
+         label,
+         field_type,
+         select_options,
+         is_required,
+         sort_order
+       FROM product_capture_field_definitions
+       WHERE tenant_id = $1
+         AND product_id = $2
+         AND is_active
+       ORDER BY sort_order, id`,
+      [tenantId, productId],
+    )
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      key: row.field_key,
+      label: row.label,
+      type: row.field_type,
+      selectOptions: row.select_options,
+      required: row.is_required,
+      sortOrder: row.sort_order,
+    }))
+  }
+
+  async insertCaptureValueSnapshot(input: {
+    tenantId: string
+    salesLineId: string
+    definition: ProductCaptureFieldDefinition
+    value: string
+  }): Promise<CaptureValueSnapshotRecord> {
+    const result = await this.db.query<{
+      id: string
+      sales_line_id: string
+      definition_id: string | null
+      field_key_snapshot: string
+      label_snapshot: string
+      field_type_snapshot: ProductCaptureFieldType
+      value_snapshot: string
+    }>(
+      `INSERT INTO sales_line_capture_values
+       (
+         tenant_id,
+         sales_line_id,
+         definition_id,
+         field_key_snapshot,
+         label_snapshot,
+         field_type_snapshot,
+         value_snapshot
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING
+         id,
+         sales_line_id,
+         definition_id,
+         field_key_snapshot,
+         label_snapshot,
+         field_type_snapshot,
+         value_snapshot`,
+      [
+        input.tenantId,
+        input.salesLineId,
+        input.definition.id,
+        input.definition.key,
+        input.definition.label,
+        input.definition.type,
+        input.value,
+      ],
+    )
+    const row = result.rows[0]
+    if (!row) {
+      throw new Error('Failed to create capture value snapshot')
+    }
+
+    return {
+      id: row.id,
+      salesLineId: row.sales_line_id,
+      definitionId: row.definition_id,
+      key: row.field_key_snapshot,
+      label: row.label_snapshot,
+      type: row.field_type_snapshot,
+      value: row.value_snapshot,
+    }
+  }
+
+  async listCaptureValueSnapshots(
+    tenantId: string,
+    salesLineId: string,
+  ): Promise<CaptureValueSnapshotRecord[]> {
+    const result = await this.db.query<{
+      id: string
+      sales_line_id: string
+      definition_id: string | null
+      field_key_snapshot: string
+      label_snapshot: string
+      field_type_snapshot: ProductCaptureFieldType
+      value_snapshot: string
+    }>(
+      `SELECT
+         id,
+         sales_line_id,
+         definition_id,
+         field_key_snapshot,
+         label_snapshot,
+         field_type_snapshot,
+         value_snapshot
+       FROM sales_line_capture_values
+       WHERE tenant_id = $1
+         AND sales_line_id = $2
+       ORDER BY created_at, id`,
+      [tenantId, salesLineId],
+    )
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      salesLineId: row.sales_line_id,
+      definitionId: row.definition_id,
+      key: row.field_key_snapshot,
+      label: row.label_snapshot,
+      type: row.field_type_snapshot,
+      value: row.value_snapshot,
+    }))
   }
 
   async listWarrantySnapshots(
