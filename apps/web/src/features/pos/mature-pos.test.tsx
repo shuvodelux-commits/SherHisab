@@ -90,6 +90,11 @@ const hiddenCostProduct: PosProductSearchDto = {
   ...product('variant-hidden-cost', 'Hidden Cost Drill', 'HIDE-001'),
 }
 
+const paymentProduct: PosProductSearchDto = {
+  ...product('variant-payment', 'Payment Product', 'PAY-001'),
+  currentSellingPricePaisa: '100000',
+}
+
 const vendor = {
   id: 'vendor-1',
   vendorCode: 'VEN-00001',
@@ -297,6 +302,9 @@ function installFetch() {
         if (search.toLowerCase().includes('hidden cost')) {
           return jsonResponse([hiddenCostProduct])
         }
+        if (search.toLowerCase().includes('payment')) {
+          return jsonResponse([paymentProduct])
+        }
         return jsonResponse(search ? [alpha, beta] : [])
       }
 
@@ -339,6 +347,21 @@ function installFetch() {
             fabricQuote(body.quantity?.components ?? {}),
           )
         }
+        if (body.variantId === 'variant-payment') {
+          return jsonResponse({
+            ...safeQuote(body.variantId),
+            automaticSalesTotalPaisa: '100000',
+            effectiveUnitSellingPricePaisa: '100000',
+            sellingSegments: [
+              {
+                lotId: 'lot-variant-payment',
+                baseQty: '1',
+                unitSellingPricePaisa: '100000',
+                amountPaisa: '100000',
+              },
+            ],
+          })
+        }
         if (
           body.variantId === 'variant-shortage' ||
           body.variantId === 'variant-zero'
@@ -365,10 +388,42 @@ function installFetch() {
             requireCashSession: false,
             invoiceShareEnabled: false,
           },
-          financialAccounts: [],
+          financialAccounts: [
+            {
+              id: 'account-dbbl',
+              type: 'BANK',
+              name: 'DBBL',
+              provider: 'Dutch-Bangla Bank',
+              accountReference: '****1234',
+              isActive: true,
+            },
+            {
+              id: 'account-bkash',
+              type: 'MOBILE_BANKING',
+              name: 'Shop bKash',
+              provider: 'bKash',
+              accountReference: '01700000000',
+              isActive: true,
+            },
+          ],
           activeCashSession: null,
           recent: { drafts: [], templates: [] },
         })
+      }
+
+      if (
+        url === '/api/private/sales' &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse(
+          {
+            id: 'sale-payment',
+            businessDate: '2026-09-25',
+            totalSalesPaisa: '100000',
+            lines: [],
+          },
+          201,
+        )
       }
 
       return jsonResponse(
@@ -1090,6 +1145,160 @@ describe('Mature POS purchase-price reveal', () => {
         name: 'Show purchase price for Costed Drill',
       }),
     ).toBeInTheDocument()
+  })
+})
+
+
+describe('Mature POS multiple payments', () => {
+  async function addPaymentProduct() {
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Search products' }),
+      { target: { value: 'payment' } },
+    )
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Add Payment Product',
+      }),
+    )
+    await screen.findByLabelText('Quantity for Payment Product')
+  }
+
+  function choosePaymentMethod(
+    index: number,
+    method: 'Cash' | 'Bank' | 'Mobile Banking',
+  ) {
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `Payment method ${index}`,
+      }),
+    )
+    fireEvent.click(
+      screen.getByRole('option', { name: method }),
+    )
+  }
+
+  function choosePaymentAccount(index: number, account: string) {
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `Payment account ${index}`,
+      }),
+    )
+    fireEvent.click(
+      screen.getByRole('option', { name: account }),
+    )
+  }
+
+  it('adds Cash, Bank and Mobile Banking rows with conditional accounts and live Paid/Due', async () => {
+    installFetch()
+    renderPos()
+    await addPaymentProduct()
+
+    fireEvent.change(screen.getByLabelText('Payment amount 1'), {
+      target: { value: '500' },
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Payment account 1' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '+ Add Payment' }),
+    )
+    choosePaymentMethod(2, 'Bank')
+    choosePaymentAccount(2, 'DBBL')
+    fireEvent.change(screen.getByLabelText('Payment amount 2'), {
+      target: { value: '300' },
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '+ Add Payment' }),
+    )
+    choosePaymentMethod(3, 'Mobile Banking')
+    choosePaymentAccount(3, 'Shop bKash')
+    fireEvent.change(screen.getByLabelText('Payment amount 3'), {
+      target: { value: '200' },
+    })
+
+    expect(screen.getByText('Paid ৳1000.00')).toBeInTheDocument()
+    expect(screen.getByText('Due ৳0.00')).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remove payment 2' }),
+    )
+    expect(screen.getByText('Paid ৳700.00')).toBeInTheDocument()
+    expect(screen.getByText('Due ৳300.00')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Payment account 2' }),
+    ).not.toHaveTextContent('DBBL')
+  })
+
+  it('preserves every payment row in the checkout request', async () => {
+    const fetchMock = installFetch()
+    renderPos()
+    await addPaymentProduct()
+
+    fireEvent.change(screen.getByLabelText('Payment amount 1'), {
+      target: { value: '500' },
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '+ Add Payment' }),
+    )
+    choosePaymentMethod(2, 'Bank')
+    choosePaymentAccount(2, 'DBBL')
+    fireEvent.change(screen.getByLabelText('Payment amount 2'), {
+      target: { value: '300' },
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '+ Add Payment' }),
+    )
+    choosePaymentMethod(3, 'Mobile Banking')
+    choosePaymentAccount(3, 'Shop bKash')
+    fireEvent.change(screen.getByLabelText('Payment amount 3'), {
+      target: { value: '200' },
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Complete Sale' }),
+    )
+
+    await waitFor(() => {
+      const saleCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          input === '/api/private/sales' &&
+          init?.method === 'POST',
+      )
+      expect(saleCall).toBeDefined()
+
+      const body = JSON.parse(String(saleCall?.[1]?.body)) as {
+        payments: Array<{
+          clientLineId: string
+          method: string
+          accountId?: string
+          amountPaisa: string
+        }>
+      }
+
+      expect(body.payments).toEqual([
+        {
+          clientLineId: expect.any(String),
+          method: 'CASH',
+          amountPaisa: '50000',
+        },
+        {
+          clientLineId: expect.any(String),
+          method: 'BANK',
+          accountId: 'account-dbbl',
+          amountPaisa: '30000',
+        },
+        {
+          clientLineId: expect.any(String),
+          method: 'MOBILE_BANKING',
+          accountId: 'account-bkash',
+          amountPaisa: '20000',
+        },
+      ])
+    })
   })
 })
 
