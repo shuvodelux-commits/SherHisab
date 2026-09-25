@@ -14,6 +14,7 @@ import type {
   SalesPaymentInput,
   SalesPaymentMethod,
 } from './sales.types'
+import type { ShortageResolution } from './stock-source.types'
 
 function objectBody(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -73,6 +74,47 @@ function paymentMethod(raw: string): SalesPaymentMethod {
   return raw
 }
 
+function shortageResolution(
+  value: unknown,
+): ShortageResolution | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  const body = objectBody(value)
+  const type = stringField(body, 'type')
+  const keys = Object.keys(body).sort()
+
+  if (type === 'OWN_STOCK' || type === 'NEGATIVE_STOCK') {
+    if (keys.length !== 1 || keys[0] !== 'type') {
+      throw new SalesValidationError(
+        'One shortage must use one resolution.',
+      )
+    }
+    return { type }
+  }
+
+  if (type === 'VENDOR') {
+    if (
+      keys.length !== 3 ||
+      !keys.includes('type') ||
+      !keys.includes('vendorId') ||
+      !keys.includes('unitCostPaisa')
+    ) {
+      throw new SalesValidationError(
+        'Vendor shortage resolution requires Vendor and unit cost only.',
+      )
+    }
+    return {
+      type: 'VENDOR',
+      vendorId: stringField(body, 'vendorId'),
+      unitCostPaisa: stringField(body, 'unitCostPaisa'),
+    }
+  }
+
+  throw new SalesValidationError('Unsupported shortage resolution.')
+}
+
 function paymentInput(value: unknown): SalesPaymentInput {
   const body = objectBody(value)
   return {
@@ -112,6 +154,13 @@ function commitInput(body: Record<string, unknown>): CommitSaleInput {
         ...(manual === undefined
           ? {}
           : { manualUnitSellingPricePaisa: manual }),
+        ...(line.shortageResolution === undefined
+          ? {}
+          : {
+              shortageResolution: shortageResolution(
+                line.shortageResolution,
+              ),
+            }),
       }
     }),
     ...(body.payments === undefined

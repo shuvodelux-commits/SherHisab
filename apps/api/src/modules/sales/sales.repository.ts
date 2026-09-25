@@ -288,6 +288,8 @@ export class SalesRepository {
     unitSymbol: string
     trackingMode: string
     allocationPolicy: string
+    defaultPurchasePricePaisa: string
+    defaultSellingPricePaisa: string
   }> {
     const result = await this.db.query<{
       product_id: string
@@ -298,6 +300,8 @@ export class SalesRepository {
       unit_symbol: string
       tracking_mode: string
       allocation_policy: string
+      default_purchase_price_paisa: string
+      default_selling_price_paisa: string
     }>(
       `SELECT
          p.id AS product_id,
@@ -307,7 +311,9 @@ export class SalesRepository {
          u.name AS unit_name,
          COALESCE(u.symbol, '') AS unit_symbol,
          p.tracking_mode,
-         p.allocation_policy
+         p.allocation_policy,
+         v.default_purchase_price_paisa::text,
+         v.default_selling_price_paisa::text
        FROM product_variants v
        JOIN products p
          ON p.tenant_id = v.tenant_id
@@ -335,6 +341,10 @@ export class SalesRepository {
       unitSymbol: row.unit_symbol,
       trackingMode: row.tracking_mode,
       allocationPolicy: row.allocation_policy,
+      defaultPurchasePricePaisa:
+        row.default_purchase_price_paisa,
+      defaultSellingPricePaisa:
+        row.default_selling_price_paisa,
     }
   }
 

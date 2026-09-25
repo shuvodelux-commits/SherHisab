@@ -12,6 +12,7 @@ import {
 } from './sales-settlement'
 import {
   buildFifoLineQuote,
+  buildPartialFifoLineQuote,
   normalizeMoneyPaisa,
   roundPaisa,
 } from './sales-allocation'
@@ -20,6 +21,8 @@ import {
   SalesValidationError,
 } from './sales.errors'
 import { SalesNumberingRepository } from './sales-numbering.repository'
+import { ShortfallRepository } from './shortfall.repository'
+import { StockSourceService } from './stock-source.service'
 import { SalesRepository } from './sales.repository'
 import type {
   CommitSaleInput,
@@ -86,6 +89,9 @@ function normalizeLines(lines: CommitSaleLineInput[]): CommitSaleLineInput[] {
               'Manual selling price',
             ),
           }),
+      ...(line.shortageResolution === undefined
+        ? {}
+        : { shortageResolution: line.shortageResolution }),
     }
   })
 }
@@ -106,6 +112,8 @@ interface PlannedLine {
   quote: ReturnType<typeof buildFifoLineQuote>
   grossAmountPaisa: string
   cogsPaisa: string
+  shortfallBaseQty: string
+  provisionalUnitCostPaisa: string | null
   snapshot: Awaited<ReturnType<SalesRepository['getVariantSnapshot']>>
 }
 
@@ -200,32 +208,118 @@ export class SalesService {
                 line.variantId,
                 input.businessDate,
               )
-            const quote = buildFifoLineQuote(
-              line.variantId,
-              line.baseQty,
-              lockedLots,
-            )
-            const manualUnit =
-              line.manualUnitSellingPricePaisa ?? null
-            const grossAmountPaisa = manualUnit
-              ? roundPaisa(
-                  new Decimal(quote.requestedBaseQty).times(manualUnit),
-                )
-              : quote.automaticSalesTotalPaisa
             const variantSnapshot =
               await salesRepository.getVariantSnapshot(
                 tenantId,
                 line.variantId,
               )
+            const partial = buildPartialFifoLineQuote(
+              line.variantId,
+              line.baseQty,
+              lockedLots,
+            )
+            const sourceDecision = new StockSourceService().plan({
+              requestedBaseQty: line.baseQty,
+              ownAllocations: partial.allocations,
+              shortageResolution:
+                line.shortageResolution ?? null,
+            })
+
+            if (sourceDecision.type === 'REMOVE_LINE') {
+              throw new SalesValidationError(
+                'No own stock is available for this sale line.',
+              )
+            }
+            const sourcePlan = sourceDecision.plan
+            if (
+              new Decimal(sourcePlan.shortfallBaseQty).gt(0) &&
+              sourcePlan.shortageResolution === null
+            ) {
+              throw new SalesValidationError(
+                `Insufficient stock. Requested ${line.baseQty}, available ${sourcePlan.ownBaseQty}.`,
+              )
+            }
+            if (
+              sourcePlan.shortageResolution?.type === 'VENDOR'
+            ) {
+              throw new SalesValidationError(
+                'Vendor sourcing is not available yet.',
+              )
+            }
+
+            const effectiveRequested =
+              sourcePlan.requestedBaseQty
+            const ownSalesTotal = partial.allocations.reduce(
+              (sum, allocation) =>
+                sum + BigInt(allocation.automaticSalesAmountPaisa),
+              0n,
+            )
+            const ownCogs = partial.allocations.reduce(
+              (sum, allocation) =>
+                sum + BigInt(allocation.cogsAmountPaisa),
+              0n,
+            )
+            const shortfall = new Decimal(
+              sourcePlan.shortfallBaseQty,
+            )
+            const shortageSales = BigInt(
+              roundPaisa(
+                shortfall.times(
+                  variantSnapshot.defaultSellingPricePaisa,
+                ),
+              ),
+            )
+            const provisionalShortageCogs = BigInt(
+              roundPaisa(
+                shortfall.times(
+                  variantSnapshot.defaultPurchasePricePaisa,
+                ),
+              ),
+            )
+            const automaticSalesTotalPaisa = (
+              ownSalesTotal + shortageSales
+            ).toString()
+            const cogsPaisa = (
+              ownCogs + provisionalShortageCogs
+            ).toString()
+            const quote = {
+              variantId: line.variantId,
+              requestedBaseQty: effectiveRequested,
+              availableBaseQty: partial.availableBaseQty,
+              allocations: sourcePlan.ownAllocations,
+              automaticSalesTotalPaisa,
+              effectiveUnitSellingPricePaisa: roundPaisa(
+                new Decimal(
+                  automaticSalesTotalPaisa,
+                ).div(effectiveRequested),
+              ),
+              cogsPaisa,
+              isSufficient: true as const,
+            }
+            const manualUnit =
+              line.manualUnitSellingPricePaisa ?? null
+            const grossAmountPaisa = manualUnit
+              ? roundPaisa(
+                  new Decimal(effectiveRequested).times(manualUnit),
+                )
+              : automaticSalesTotalPaisa
 
             subtotal += BigInt(grossAmountPaisa)
-            totalCogs += BigInt(quote.cogsPaisa)
+            totalCogs += BigInt(cogsPaisa)
             plannedLines.push({
-              input: line,
+              input: {
+                ...line,
+                baseQty: effectiveRequested,
+              },
               lockedLots,
               quote,
               grossAmountPaisa,
-              cogsPaisa: quote.cogsPaisa,
+              cogsPaisa,
+              shortfallBaseQty: sourcePlan.shortfallBaseQty,
+              provisionalUnitCostPaisa:
+                new Decimal(sourcePlan.shortfallBaseQty).gt(0)
+                  ? variantSnapshot.defaultPurchasePricePaisa
+                  : null,
               snapshot: variantSnapshot,
             })
           }
@@ -321,6 +415,26 @@ export class SalesService {
                 discount.allocatedDiscountPaisa,
               netAmountPaisa: discount.netAmountPaisa,
             })
+
+            if (
+              new Decimal(planned.shortfallBaseQty).gt(0) &&
+              planned.input.shortageResolution?.type ===
+                'NEGATIVE_STOCK'
+            ) {
+              if (planned.provisionalUnitCostPaisa === null) {
+                throw new Error(
+                  'Negative Stock provisional cost is missing',
+                )
+              }
+              await new ShortfallRepository(database).create({
+                tenantId,
+                salesLineId: line.id,
+                variantId: planned.input.variantId,
+                shortfallBaseQty: planned.shortfallBaseQty,
+                provisionalUnitCostPaisa:
+                  planned.provisionalUnitCostPaisa,
+              })
+            }
 
             const lotById = new Map(
               planned.lockedLots.map((lot) => [lot.id, lot]),
