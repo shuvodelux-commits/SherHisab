@@ -232,4 +232,32 @@ describe.skipIf(!hasDatabase)('POS party finance foundation routes', () => {
       opened_by_user_id: a.user.id,
     })
   })
+
+  it('searches active Vendors only inside the authenticated tenant', async () => {
+    const a = await createOwnerFixture('Vendor Search A')
+    const b = await createOwnerFixture('Vendor Search B')
+
+    await new VendorService(a.tenant.id, getPool()).create({
+      name: 'Rahman Local Vendor',
+      phone: '01711111111',
+    })
+    await new VendorService(b.tenant.id, getPool()).create({
+      name: 'Rahman Foreign Vendor',
+      phone: '01722222222',
+    })
+
+    const response = await privateRequest(
+      a.cookie,
+      '/vendors?search=Rahman',
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual([
+      expect.objectContaining({
+        vendorCode: 'VEN-00001',
+        name: 'Rahman Local Vendor',
+      }),
+    ])
+  })
+
 })

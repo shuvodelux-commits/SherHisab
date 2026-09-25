@@ -5,12 +5,51 @@ export interface PosSellingSegmentDto {
   amountPaisa: string
 }
 
+export interface PosConversionComponentDto {
+  id: string
+  key: string
+  label: string
+  unitId: string
+  baseFactorNumerator: string
+  baseFactorDenominator: string
+  sortOrder: number
+  minValue: string
+  maxExclusive: string | null
+  allowFraction: boolean
+  autoNormalizeRemainder: boolean
+}
+
+export interface PosConversionProfileDto {
+  id: string
+  productId: string
+  type: 'SIMPLE' | 'PACK' | 'LENGTH' | 'COMPOUND' | 'CUSTOM_FIXED_RATIO'
+  version: number
+  baseUnitId: string
+  pricingUnitId: string
+  pricingBaseFactorNumerator: string
+  pricingBaseFactorDenominator: string
+  displayPrecision: number
+  components: PosConversionComponentDto[]
+}
+
+export type PosQuantityInputDto =
+  | {
+      kind: 'SIMPLE'
+      baseQty: string
+    }
+  | {
+      kind: 'COMPONENTS'
+      profileId: string
+      profileVersion: number
+      components: Record<string, string>
+    }
+
 export interface PosNormalizedQuantityDto {
   baseQty: string
   pricingQty: string
   displayQty: string
   components: Record<string, string>
-  snapshot: unknown | null
+  snapshot: PosConversionProfileDto | null
 }
 
 export interface PosLineQuoteDto {
@@ -74,6 +113,23 @@ export interface PosBootstrapDto {
   }
 }
 
+export interface PosVendorSearchDto {
+  id: string
+  vendorCode: string
+  name: string
+  phone: string
+  address: string
+  isActive: boolean
+}
+
+export type PosShortageResolutionDto =
+  | { type: 'NEGATIVE_STOCK' }
+  | {
+      type: 'VENDOR'
+      vendorId: string
+      unitCostPaisa: string
+    }
+
 export interface PosCustomerSearchDto {
   id: string
   customerCode: string
@@ -88,17 +144,53 @@ export interface CommitSaleLinePayload {
   variantId: string
   baseQty: string
   manualUnitSellingPricePaisa?: string
+  shortageResolution?: PosShortageResolutionDto
+}
+
+export type PosPaymentMethod =
+  | 'CASH'
+  | 'BANK'
+  | 'MOBILE_BANKING'
+  | 'CUSTOMER_CREDIT'
+
+export interface PosPaymentLineDraft {
+  clientLineId: string
+  method: PosPaymentMethod
+  accountId: string | null
+  amountInput: string
+}
+
+export interface CommitSalePaymentPayload {
+  clientLineId: string
+  method: PosPaymentMethod
+  accountId?: string
+  amountPaisa: string
 }
 
 export interface CommitSalePayload {
+  operationId?: string
   businessDate: string
   lines: CommitSaleLinePayload[]
+  customer?: {
+    selectedCustomerId?: string
+    name: string
+    phone: string
+    guardianName?: string
+    address?: string
+  }
+  payments?: CommitSalePaymentPayload[]
 }
 
 export interface CommittedSaleDto {
   id: string
+  invoiceNumber: string
   businessDate: string
   totalSalesPaisa: string
+  grandTotalPaisa?: string
+  settlementStatus?: 'DUE' | 'PARTIAL' | 'PAID'
+  paidAmountPaisa?: string
+  duePaisa?: string
+  changePaisa?: string
   lines: Array<{
     id: string
     variantId: string

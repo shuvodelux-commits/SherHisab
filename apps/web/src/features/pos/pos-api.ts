@@ -6,6 +6,8 @@ import type {
   PosCustomerSearchDto,
   PosLineQuoteDto,
   PosProductSearchDto,
+  PosQuantityInputDto,
+  PosVendorSearchDto,
 } from './pos-types'
 
 const API_ROOT = '/api/private'
@@ -42,13 +44,43 @@ export function searchPosCustomers(
   )
 }
 
+export function searchPosVendors(
+  search: string,
+  limit = 20,
+): Promise<PosVendorSearchDto[]> {
+  const params = new URLSearchParams({
+    search,
+    limit: String(limit),
+  })
+
+  return apiRequest<PosVendorSearchDto[]>(
+    `${API_ROOT}/vendors?${params.toString()}`,
+  )
+}
+
+export function createPosVendor(input: {
+  name: string
+  phone?: string
+  address?: string
+}): Promise<PosVendorSearchDto> {
+  return apiRequest<PosVendorSearchDto>(`${API_ROOT}/vendors`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
 export function quoteSaleLine(
   variantId: string,
-  baseQty: string,
+  baseQty?: string,
+  quantity?: PosQuantityInputDto,
 ): Promise<PosLineQuoteDto> {
   return apiRequest<PosLineQuoteDto>(`${API_ROOT}/pos/quote-line`, {
     method: 'POST',
-    body: JSON.stringify({ variantId, baseQty }),
+    body: JSON.stringify({
+      variantId,
+      ...(baseQty === undefined ? {} : { baseQty }),
+      ...(quantity === undefined ? {} : { quantity }),
+    }),
   })
 }
 
