@@ -7,7 +7,7 @@ import {
   SalesPermissionError,
   SalesValidationError,
 } from './sales.errors'
-import { SalesDraftVersionConflictError } from './sales-draft.errors'
+import { SalesDraftAccessError, SalesDraftVersionConflictError } from './sales-draft.errors'
 import { SalesDraftService } from './sales-draft.service'
 import type {
   SalesDraftInput,
@@ -467,7 +467,11 @@ export const salesRoutes = new Hono<AppEnv>()
         await new SalesDraftService(
           c.get('tenantId'),
           database,
-        ).listRecent(limit),
+        ).listRecent(
+          c.get('userId'),
+          limit,
+          c.get('permissions').includes('SALES_EDIT'),
+        ),
       ),
     )
   })
@@ -482,10 +486,17 @@ export const salesRoutes = new Hono<AppEnv>()
           await new SalesDraftService(
             c.get('tenantId'),
             database,
-          ).get(c.req.param('draftId')),
+          ).get(
+            c.req.param('draftId'),
+            c.get('userId'),
+            c.get('permissions').includes('SALES_EDIT'),
+          ),
         ),
       )
     } catch (error) {
+      if (error instanceof SalesDraftAccessError) {
+        return c.json({ error: error.message }, 403)
+      }
       if (error instanceof Error) {
         return c.json({ error: error.message }, 404)
       }
@@ -515,10 +526,14 @@ export const salesRoutes = new Hono<AppEnv>()
             c.req.param('draftId'),
             expectedVersion,
             draftInput(state),
+            c.get('permissions').includes('SALES_EDIT'),
           ),
         ),
       )
     } catch (error) {
+      if (error instanceof SalesDraftAccessError) {
+        return c.json({ error: error.message }, 403)
+      }
       if (error instanceof SalesDraftVersionConflictError) {
         return c.json(
           {
@@ -557,10 +572,14 @@ export const salesRoutes = new Hono<AppEnv>()
             c.get('userId'),
             c.req.param('draftId'),
             expectedVersion,
+            c.get('permissions').includes('SALES_EDIT'),
           ),
         ),
       )
     } catch (error) {
+      if (error instanceof SalesDraftAccessError) {
+        return c.json({ error: error.message }, 403)
+      }
       if (error instanceof SalesDraftVersionConflictError) {
         return c.json(
           {
@@ -607,11 +626,15 @@ export const salesRoutes = new Hono<AppEnv>()
               businessDate: stringField(body, 'businessDate'),
               canOverrideSellingPrice: canOverride,
             },
+            c.get('permissions').includes('SALES_EDIT'),
           ),
           201,
         ),
       )
     } catch (error) {
+      if (error instanceof SalesDraftAccessError) {
+        return c.json({ error: error.message }, 403)
+      }
       if (error instanceof SalesDraftVersionConflictError) {
         return c.json(
           {
