@@ -867,13 +867,16 @@ describe('Mature POS shortage resolution', () => {
         name: `Add ${productName}`,
       }),
     )
-    const row = await screen.findByRole('row', {
-      name: new RegExp(productName, 'i'),
-    })
-    fireEvent.change(
-      within(row).getByLabelText(`Quantity for ${productName}`),
-      { target: { value: quantity } },
+    const quantityInput = await screen.findByLabelText(
+      `Quantity for ${productName}`,
     )
+    const row = quantityInput.closest('tr')
+    if (!row) {
+      throw new Error('Cart row not found')
+    }
+    fireEvent.change(quantityInput, {
+      target: { value: quantity },
+    })
     return row
   }
 
