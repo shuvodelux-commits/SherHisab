@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LanguageProvider } from '../../app/language'
 import type { AuthSession } from '../auth-api'
 import { PosPage } from './pos-page'
+import type { PosProductSearchDto } from './pos-types'
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -18,7 +19,7 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
-const product = {
+const product: PosProductSearchDto = {
   productId: 'product-1',
   variantId: 'variant-1',
   productName: '4" SWR Pipe PPL 2.7 mm',
@@ -75,7 +76,9 @@ function safeQuote(baseQty: string, variantId = 'variant-1') {
   }
 }
 
-function installFetch(products = [product]) {
+function installFetch(
+  products: PosProductSearchDto[] = [product],
+) {
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url =
