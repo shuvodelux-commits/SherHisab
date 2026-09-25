@@ -289,4 +289,29 @@ describe.skipIf(!hasDatabase)('POS cost privacy', () => {
     expect(products[0]?.configuredPurchasePricePaisa).toBe('5000')
     expect(quote.configuredPurchasePricePaisa).toBe('5000')
   })
+
+  it('loads a POS-safe Product by Variant id for Draft restoration without leaking cost', async () => {
+    const fixture = await createSecurityFixture('POS Draft Variant Lookup')
+
+    const response = await app.request(
+      `http://localhost/api/private/pos/products/${fixture.product.defaultVariantId}`,
+      { headers: { cookie: fixture.staffCookie } },
+    )
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as Record<string, unknown>
+    expect(body).toMatchObject({
+      productId: fixture.product.id,
+      variantId: fixture.product.defaultVariantId,
+      productName: 'Secure POS Product',
+      currentSellingPricePaisa: '7000',
+    })
+    expectNoKeys([body], [
+      'unitCostPaisa',
+      'cogsPaisa',
+      'defaultPurchasePricePaisa',
+      'configuredPurchasePricePaisa',
+    ])
+  })
+
 })
