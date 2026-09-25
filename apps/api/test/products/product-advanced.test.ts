@@ -888,4 +888,53 @@ describe.skipIf(!hasDatabase)('advanced product configuration', () => {
     ])
   })
 
+
+  it('keeps FEFO exclusive to Batch & Expiry and resets policy when leaving that mode', async () => {
+    const { service, product, baseUnit } = await createSimpleProduct(
+      'Allocation Policy Invariant',
+      'FEFO Medicine',
+      {
+        trackingMode: 'BATCH_EXPIRY',
+        allocationPolicy: 'FEFO',
+      },
+    )
+
+    const updated = await service.updateProduct(product.id, {
+      name: product.name,
+      brand: product.brand,
+      categoryId: product.category?.id ?? null,
+      baseUnitId: product.baseUnit.id,
+      barcode: product.primaryBarcode ?? '',
+      defaultPurchasePricePaisa:
+        product.defaultPurchasePricePaisa,
+      defaultSellingPricePaisa:
+        product.defaultSellingPricePaisa,
+      minimumStockBaseQty: product.minimumStockBaseQty,
+      trackingMode: 'SERIAL',
+    })
+
+    expect(updated).toMatchObject({
+      trackingMode: 'SERIAL',
+      allocationPolicy: 'FIFO',
+    })
+
+    await expect(
+      service.createProduct(
+        {
+          name: 'Invalid FEFO Simple Product',
+          baseUnitId: baseUnit.id,
+          defaultPurchasePricePaisa: '1000',
+          defaultSellingPricePaisa: '1500',
+          openingStockBaseQty: '0',
+          minimumStockBaseQty: '0',
+          trackingMode: 'SIMPLE',
+          allocationPolicy: 'FEFO',
+        },
+        null,
+      ),
+    ).rejects.toThrow(
+      'FEFO allocation is only available for Batch & Expiry Products',
+    )
+  })
+
 })
