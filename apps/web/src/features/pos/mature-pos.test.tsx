@@ -225,7 +225,7 @@ describe('Mature POS Product search keyboard flow', () => {
       await screen.findByRole('row', { name: /Alpha Hammer/i }),
     ).toBeInTheDocument()
 
-    fireEvent.change(search, { target: { value: 'hammer' } })
+    fireEvent.change(search, { target: { value: 'hammer ' } })
     expect(
       await screen.findByRole('button', { name: 'Add Beta Hammer' }),
     ).toBeInTheDocument()
