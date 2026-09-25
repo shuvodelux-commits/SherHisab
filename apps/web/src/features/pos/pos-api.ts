@@ -6,6 +6,7 @@ import type {
   PosCustomerSearchDto,
   PosLineQuoteDto,
   PosProductSearchDto,
+  PosQuantityInputDto,
 } from './pos-types'
 
 const API_ROOT = '/api/private'
@@ -44,11 +45,16 @@ export function searchPosCustomers(
 
 export function quoteSaleLine(
   variantId: string,
-  baseQty: string,
+  baseQty?: string,
+  quantity?: PosQuantityInputDto,
 ): Promise<PosLineQuoteDto> {
   return apiRequest<PosLineQuoteDto>(`${API_ROOT}/pos/quote-line`, {
     method: 'POST',
-    body: JSON.stringify({ variantId, baseQty }),
+    body: JSON.stringify({
+      variantId,
+      ...(baseQty === undefined ? {} : { baseQty }),
+      ...(quantity === undefined ? {} : { quantity }),
+    }),
   })
 }
 

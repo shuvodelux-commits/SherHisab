@@ -5,6 +5,8 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import {
+  ChevronDown,
+  ChevronRight,
   Eye,
   RotateCcw,
   Search,
@@ -35,6 +37,7 @@ import {
   CustomerPanel,
   type PosCustomerDraft,
 } from './components/customer-panel'
+import { ConversionEditor } from './components/conversion-editor'
 
 interface CartLineState {
   product: PosProductSearchDto
@@ -43,6 +46,8 @@ interface CartLineState {
   priceInput: string
   manualUnitSellingPricePaisa: string | null
   showBreakdown: boolean
+  conversionExpanded: boolean
+  conversionComponents: Record<string, string>
   isQuoting: boolean
   error: string
 }
@@ -83,7 +88,7 @@ function sumPaisa(values: string[]): string {
 function lineTotalPaisa(line: CartLineState): string {
   return line.manualUnitSellingPricePaisa
     ? quantityTimesPaisa(
-        line.quantity,
+        line.quote.pricingQty,
         line.manualUnitSellingPricePaisa,
       )
     : line.quote.automaticSalesTotalPaisa
@@ -130,7 +135,7 @@ export function PosPage() {
         businessDate: todayLocalDate(),
         lines: cart.map((line) => ({
           variantId: line.product.variantId,
-          baseQty: line.quantity,
+          baseQty: line.quote.baseQty,
           ...(line.manualUnitSellingPricePaisa
             ? {
                 manualUnitSellingPricePaisa:
@@ -246,13 +251,15 @@ export function PosPage() {
         ...lines,
         {
           product,
-          quantity: '1',
+          quantity: quote.displayQty,
           quote,
           priceInput: formatPaisaToTaka(
             quote.effectiveUnitSellingPricePaisa,
           ),
           manualUnitSellingPricePaisa: null,
           showBreakdown: false,
+          conversionExpanded: false,
+          conversionComponents: quote.conversion.components,
           isQuoting: false,
           error: '',
         },
@@ -264,6 +271,102 @@ export function PosPage() {
           : 'Could not add the Product.',
       )
     }
+  }
+
+  async function updateConversionComponent(
+    variantId: string,
+    key: string,
+    value: string,
+  ) {
+    const target = cart.find(
+      (line) => line.product.variantId === variantId,
+    )
+    const profile = target?.quote.conversion.snapshot
+
+    if (!target || !profile || profile.type !== 'COMPOUND') {
+      return
+    }
+
+    const components = {
+      ...target.conversionComponents,
+      [key]: value,
+    }
+
+    setCart((lines) =>
+      lines.map((line) =>
+        line.product.variantId === variantId
+          ? {
+              ...line,
+              conversionComponents: components,
+              isQuoting: true,
+              error: '',
+            }
+          : line,
+      ),
+    )
+
+    try {
+      const quote = await quoteSaleLine(
+        target.product.variantId,
+        undefined,
+        {
+          kind: 'COMPONENTS',
+          profileId: profile.id,
+          profileVersion: profile.version,
+          components,
+        },
+      )
+
+      setCart((lines) =>
+        lines.map((line) => {
+          if (line.product.variantId !== variantId) {
+            return line
+          }
+
+          return {
+            ...line,
+            quote,
+            quantity: quote.displayQty,
+            conversionComponents: quote.conversion.components,
+            priceInput: line.manualUnitSellingPricePaisa
+              ? line.priceInput
+              : formatPaisaToTaka(
+                  quote.effectiveUnitSellingPricePaisa,
+                ),
+            isQuoting: false,
+            error: '',
+          }
+        }),
+      )
+    } catch (error) {
+      setCart((lines) =>
+        lines.map((line) =>
+          line.product.variantId === variantId
+            ? {
+                ...line,
+                isQuoting: false,
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : 'Could not price this quantity.',
+              }
+            : line,
+        ),
+      )
+    }
+  }
+
+  function toggleConversionEditor(variantId: string) {
+    setCart((lines) =>
+      lines.map((line) =>
+        line.product.variantId === variantId
+          ? {
+              ...line,
+              conversionExpanded: !line.conversionExpanded,
+            }
+          : line,
+      ),
+    )
   }
 
   async function updateQuantity(
@@ -595,18 +698,44 @@ export function PosPage() {
                           {line.product.unitSymbol ?? line.product.unitName}
                         </td>
                         <td className="pos-number-column">
-                          <Input
-                            aria-label={`Quantity for ${line.product.productName}`}
-                            className="pos-cart-input pos-cart-qty"
-                            inputMode="decimal"
-                            onChange={(event) =>
-                              void updateQuantity(
-                                line.product.variantId,
-                                event.target.value,
-                              )
-                            }
-                            value={line.quantity}
-                          />
+                          <div className="pos-qty-cell">
+                            <Input
+                              aria-label={`Quantity for ${line.product.productName}`}
+                              className="pos-cart-input pos-cart-qty"
+                              inputMode="decimal"
+                              onChange={(event) =>
+                                void updateQuantity(
+                                  line.product.variantId,
+                                  event.target.value,
+                                )
+                              }
+                              readOnly={
+                                line.quote.conversion.snapshot?.type ===
+                                'COMPOUND'
+                              }
+                              value={line.quantity}
+                            />
+                            {line.quote.conversion.snapshot?.type ===
+                            'COMPOUND' ? (
+                              <Button
+                                aria-label={`Edit quantity details for ${line.product.productName}`}
+                                onClick={() =>
+                                  toggleConversionEditor(
+                                    line.product.variantId,
+                                  )
+                                }
+                                size="icon-xs"
+                                type="button"
+                                variant="ghost"
+                              >
+                                {line.conversionExpanded ? (
+                                  <ChevronDown aria-hidden="true" />
+                                ) : (
+                                  <ChevronRight aria-hidden="true" />
+                                )}
+                              </Button>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="pos-number-column">
                           <div className="pos-price-cell">
@@ -663,37 +792,68 @@ export function PosPage() {
                       </tr>
                     )
 
-                    if (!line.showBreakdown) {
-                      return [row]
+                    const detailRows = [row]
+                    const conversionProfile =
+                      line.quote.conversion.snapshot
+
+                    if (
+                      line.conversionExpanded &&
+                      conversionProfile?.type === 'COMPOUND'
+                    ) {
+                      detailRows.push(
+                        <tr
+                          aria-label={`Quantity details for ${line.product.productName}`}
+                          className="pos-conversion-row"
+                          key={`${line.product.variantId}-conversion`}
+                        >
+                          <td colSpan={6}>
+                            <ConversionEditor
+                              disabled={line.isQuoting}
+                              onChange={(key, value) =>
+                                void updateConversionComponent(
+                                  line.product.variantId,
+                                  key,
+                                  value,
+                                )
+                              }
+                              productName={line.product.productName}
+                              profile={conversionProfile}
+                              values={line.conversionComponents}
+                            />
+                          </td>
+                        </tr>,
+                      )
                     }
 
-                    const breakdown = (
-                      <tr
-                        className="pos-lot-breakdown-row"
-                        key={`${line.product.variantId}-lots`}
-                      >
-                        <td colSpan={6}>
-                          <div className="pos-lot-breakdown">
-                            {line.quote.sellingSegments.map(
-                              (allocation, index) => (
-                                <span key={allocation.lotId}>
-                                  {index > 0 ? ' + ' : ''}
-                                  {formatNumber(allocation.baseQty, {
-                                    maximumFractionDigits: 8,
-                                  })}{' '}
-                                  × ৳
-                                  {formatPaisaToTaka(
-                                    allocation.unitSellingPricePaisa,
-                                  )}
-                                </span>
-                              ),
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
+                    if (line.showBreakdown) {
+                      detailRows.push(
+                        <tr
+                          className="pos-lot-breakdown-row"
+                          key={`${line.product.variantId}-lots`}
+                        >
+                          <td colSpan={6}>
+                            <div className="pos-lot-breakdown">
+                              {line.quote.sellingSegments.map(
+                                (allocation, index) => (
+                                  <span key={allocation.lotId}>
+                                    {index > 0 ? ' + ' : ''}
+                                    {formatNumber(allocation.baseQty, {
+                                      maximumFractionDigits: 8,
+                                    })}{' '}
+                                    × ৳
+                                    {formatPaisaToTaka(
+                                      allocation.unitSellingPricePaisa,
+                                    )}
+                                  </span>
+                                ),
+                              )}
+                            </div>
+                          </td>
+                        </tr>,
+                      )
+                    }
 
-                    return [row, breakdown]
+                    return detailRows
                   })
                 )}
               </tbody>

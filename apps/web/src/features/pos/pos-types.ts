@@ -5,12 +5,51 @@ export interface PosSellingSegmentDto {
   amountPaisa: string
 }
 
+export interface PosConversionComponentDto {
+  id: string
+  key: string
+  label: string
+  unitId: string
+  baseFactorNumerator: string
+  baseFactorDenominator: string
+  sortOrder: number
+  minValue: string
+  maxExclusive: string | null
+  allowFraction: boolean
+  autoNormalizeRemainder: boolean
+}
+
+export interface PosConversionProfileDto {
+  id: string
+  productId: string
+  type: 'SIMPLE' | 'PACK' | 'LENGTH' | 'COMPOUND' | 'CUSTOM_FIXED_RATIO'
+  version: number
+  baseUnitId: string
+  pricingUnitId: string
+  pricingBaseFactorNumerator: string
+  pricingBaseFactorDenominator: string
+  displayPrecision: number
+  components: PosConversionComponentDto[]
+}
+
+export type PosQuantityInputDto =
+  | {
+      kind: 'SIMPLE'
+      baseQty: string
+    }
+  | {
+      kind: 'COMPONENTS'
+      profileId: string
+      profileVersion: number
+      components: Record<string, string>
+    }
+
 export interface PosNormalizedQuantityDto {
   baseQty: string
   pricingQty: string
   displayQty: string
   components: Record<string, string>
-  snapshot: unknown | null
+  snapshot: PosConversionProfileDto | null
 }
 
 export interface PosLineQuoteDto {
