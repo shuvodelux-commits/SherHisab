@@ -271,7 +271,35 @@ function shortageQuote(
   }
 }
 
-function installFetch() {
+interface SaleTestResponse {
+  status: number
+  body: unknown
+}
+
+function successfulSaleResponse() {
+  return {
+    id: 'sale-payment',
+    invoiceNumber: 'INV-000123',
+    businessDate: '2026-09-25',
+    totalSalesPaisa: '100000',
+    totalCogsPaisa: '70000',
+    grossProfitPaisa: '30000',
+    lines: [],
+    customerId: null,
+    subtotalPaisa: '100000',
+    discountPaisa: '0',
+    grandTotalPaisa: '100000',
+    settlementStatus: 'PAID',
+    paidAmountPaisa: '100000',
+    duePaisa: '0',
+    changePaisa: '0',
+  }
+}
+
+function installFetch(options: {
+  saleResponses?: SaleTestResponse[]
+} = {}) {
+  let saleAttempt = 0
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url =
@@ -415,15 +443,13 @@ function installFetch() {
         url === '/api/private/sales' &&
         init?.method === 'POST'
       ) {
-        return jsonResponse(
-          {
-            id: 'sale-payment',
-            businessDate: '2026-09-25',
-            totalSalesPaisa: '100000',
-            lines: [],
-          },
-          201,
-        )
+        const response =
+          options.saleResponses?.[saleAttempt] ?? {
+            status: 201,
+            body: successfulSaleResponse(),
+          }
+        saleAttempt += 1
+        return jsonResponse(response.body, response.status)
       }
 
       return jsonResponse(
@@ -1295,6 +1321,159 @@ describe('Mature POS multiple payments', () => {
         },
       ])
     })
+  })
+})
+
+
+describe('Mature POS submission intent and invoice result', () => {
+  async function preparePaidCheckout() {
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Search products' }),
+      { target: { value: 'payment' } },
+    )
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Add Payment Product',
+      }),
+    )
+    await screen.findByLabelText('Quantity for Payment Product')
+
+    fireEvent.change(screen.getByLabelText('Customer Name'), {
+      target: { value: 'Karim Buyer' },
+    })
+    fireEvent.change(screen.getByLabelText('Customer Phone'), {
+      target: { value: '01711111111' },
+    })
+    fireEvent.change(screen.getByLabelText('Payment amount 1'), {
+      target: { value: '1000' },
+    })
+  }
+
+  function saleBodies(fetchMock: ReturnType<typeof installFetch>) {
+    return fetchMock.mock.calls
+      .filter(
+        ([input, init]) =>
+          input === '/api/private/sales' &&
+          init?.method === 'POST',
+      )
+      .map(([, init]) =>
+        JSON.parse(String(init?.body)) as {
+          operationId: string
+          payments: Array<{ amountPaisa: string }>
+        },
+      )
+  }
+
+  it('reuses one operation UUID on retry, clears editable state only after success, and shows the invoice result', async () => {
+    const fetchMock = installFetch({
+      saleResponses: [
+        {
+          status: 500,
+          body: { error: 'Temporary sale failure' },
+        },
+        {
+          status: 201,
+          body: successfulSaleResponse(),
+        },
+      ],
+    })
+    renderPos()
+    await preparePaidCheckout()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Complete Sale' }),
+    )
+
+    expect(
+      await screen.findByRole('alert'),
+    ).toHaveTextContent('Temporary sale failure')
+    expect(
+      screen.getByLabelText('Quantity for Payment Product'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Customer Name')).toHaveValue(
+      'Karim Buyer',
+    )
+    expect(screen.getByLabelText('Payment amount 1')).toHaveValue(
+      '1000',
+    )
+
+    await waitFor(() => {
+      expect(saleBodies(fetchMock)).toHaveLength(1)
+    })
+    const firstOperationId = saleBodies(fetchMock)[0]!.operationId
+    expect(firstOperationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Complete Sale' }),
+    )
+
+    await waitFor(() => {
+      expect(saleBodies(fetchMock)).toHaveLength(2)
+    })
+    expect(saleBodies(fetchMock)[1]!.operationId).toBe(
+      firstOperationId,
+    )
+
+    expect(
+      await screen.findByText('Invoice INV-000123'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Total ৳1000.00')).toBeInTheDocument()
+    expect(screen.getByText('Paid ৳1000.00')).toBeInTheDocument()
+    expect(screen.getByText('Due ৳0.00')).toBeInTheDocument()
+
+    expect(
+      screen.queryByLabelText('Quantity for Payment Product'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Customer Name')).toHaveValue('')
+    expect(screen.getByLabelText('Customer Phone')).toHaveValue('')
+    expect(screen.getByLabelText('Payment amount 1')).toHaveValue('')
+  })
+
+  it('creates a new operation UUID when checkout intent changes after a failed attempt', async () => {
+    const fetchMock = installFetch({
+      saleResponses: [
+        {
+          status: 500,
+          body: { error: 'Temporary sale failure' },
+        },
+        {
+          status: 201,
+          body: {
+            ...successfulSaleResponse(),
+            settlementStatus: 'PARTIAL',
+            paidAmountPaisa: '90000',
+            duePaisa: '10000',
+          },
+        },
+      ],
+    })
+    renderPos()
+    await preparePaidCheckout()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Complete Sale' }),
+    )
+    await screen.findByText('Temporary sale failure')
+    await waitFor(() => {
+      expect(saleBodies(fetchMock)).toHaveLength(1)
+    })
+
+    const firstOperationId = saleBodies(fetchMock)[0]!.operationId
+    fireEvent.change(screen.getByLabelText('Payment amount 1'), {
+      target: { value: '900' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Complete Sale' }),
+    )
+
+    await waitFor(() => {
+      expect(saleBodies(fetchMock)).toHaveLength(2)
+    })
+    expect(saleBodies(fetchMock)[1]!.operationId).not.toBe(
+      firstOperationId,
+    )
   })
 })
 
