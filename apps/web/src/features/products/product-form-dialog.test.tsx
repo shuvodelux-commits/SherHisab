@@ -293,6 +293,7 @@ describe('ProductFormDialog', () => {
     expect(screen.getByRole('button', { name: 'Unit' })).toBeInTheDocument()
   })
 
+  // This full form interaction is slower when the Web suite runs files concurrently.
   it('configures a generic exact quantity conversion profile from Advanced', async () => {
     const fetchMock = installFetch()
     renderForm()
@@ -436,7 +437,7 @@ describe('ProductFormDialog', () => {
         ],
       })
     })
-  })
+  }, 15_000)
 
   it('forces generic opening stock to zero when variants are enabled', async () => {
     installFetch()
