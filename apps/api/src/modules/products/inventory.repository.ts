@@ -3,7 +3,7 @@ import type { DatabaseClient } from '../../db/request-database'
 export interface CreateInventoryLotInput {
   tenantId: string
   variantId: string
-  sourceType: 'OPENING' | 'ADJUSTMENT' | 'PURCHASE'
+  sourceType: 'OPENING' | 'ADJUSTMENT' | 'PURCHASE' | 'PURCHASE'
   receivedOn: string
   unitCostPaisa: string
   defaultSellPricePaisa: string
