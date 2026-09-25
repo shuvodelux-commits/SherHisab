@@ -44,6 +44,8 @@ vi.mock('pg', () => {
   return { Client, Pool }
 })
 
+import { PERMISSIONS } from '../src/modules/auth/permissions'
+
 const originalDatabaseUrl = process.env.DATABASE_URL
 
 beforeEach(() => {
@@ -192,10 +194,7 @@ describe('Cloudflare runtime', () => {
       userId: 'user-1',
       tenantId: 'tenant-1',
       role: 'OWNER',
-      permissions: [
-        'SALES_OVERRIDE_SELLING_PRICE',
-        'INVENTORY_EDIT_LOT_SELLING_PRICE',
-      ],
+      permissions: PERMISSIONS,
     })
 
     expect(pgMock.poolQuery).not.toHaveBeenCalled()

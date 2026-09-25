@@ -3,6 +3,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { app } from '../../src/app'
 import { closePool, getPool } from '../../src/db/pool'
 import { AuthService } from '../../src/modules/auth/auth.service'
+import { PERMISSIONS } from '../../src/modules/auth/permissions'
 import { SESSION_COOKIE_NAME } from '../../src/modules/auth/session'
 import { TenantService } from '../../src/modules/tenants/tenant.service'
 
@@ -103,10 +104,7 @@ describe.skipIf(!hasDatabase)('trusted tenant request context', () => {
       userId: user.id,
       tenantId: tenantA.id,
       role: 'OWNER',
-      permissions: [
-        'SALES_OVERRIDE_SELLING_PRICE',
-        'INVENTORY_EDIT_LOT_SELLING_PRICE',
-      ],
+      permissions: PERMISSIONS,
     })
   })
 
@@ -133,7 +131,7 @@ describe.skipIf(!hasDatabase)('trusted tenant request context', () => {
       authService.grantPermission({
         tenantId: tenantA.id,
         userId: staffB.id,
-        permission: 'SALES_OVERRIDE_SELLING_PRICE',
+        permission: 'POS_SELL',
         grantedByUserId: ownerA.id,
       }),
     ).rejects.toThrow()
