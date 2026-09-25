@@ -250,6 +250,7 @@ export interface UpdateProductPayload {
   defaultSellingPricePaisa: string
   minimumStockBaseQty: string
   trackingMode: TrackingMode
+  allocationPolicy: AllocationPolicy
   advanced?: AdvancedProductConfigurationInput
 }
 
