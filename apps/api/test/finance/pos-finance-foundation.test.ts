@@ -279,4 +279,164 @@ describe.skipIf(!hasDatabase)('POS settings foundation', () => {
     await expect(service.getActive()).resolves.toBeNull()
   })
 
+
+  it('preserves Customer and Vendor ledger history by rejecting master hard-delete', async () => {
+    const tenant = await createProductTestTenant('Ledger History Guard')
+    const customer = await getPool().query<{ id: string }>(
+      `INSERT INTO customers
+       (tenant_id, customer_code, name)
+       VALUES ($1, 'CUS-00001', 'Ledger Customer')
+       RETURNING id`,
+      [tenant.id],
+    )
+    const vendor = await new VendorService(
+      tenant.id,
+      getPool(),
+    ).create({ name: 'Ledger Vendor' })
+
+    await getPool().query(
+      `INSERT INTO customer_ledger_entries
+       (
+         tenant_id,
+         customer_id,
+         business_date,
+         entry_type,
+         amount_paisa,
+         source_type
+       )
+       VALUES ($1,$2,'2026-09-25','SALE_DUE',1000,'SALE')`,
+      [tenant.id, customer.rows[0]!.id],
+    )
+    await getPool().query(
+      `INSERT INTO vendor_ledger_entries
+       (
+         tenant_id,
+         vendor_id,
+         business_date,
+         entry_type,
+         amount_paisa,
+         source_type
+       )
+       VALUES ($1,$2,'2026-09-25','VENDOR_DUE',2000,'SALE')`,
+      [tenant.id, vendor.id],
+    )
+
+    await expect(
+      getPool().query(
+        'DELETE FROM customers WHERE tenant_id = $1 AND id = $2',
+        [tenant.id, customer.rows[0]!.id],
+      ),
+    ).rejects.toThrow()
+    await expect(
+      getPool().query(
+        'DELETE FROM vendors WHERE tenant_id = $1 AND id = $2',
+        [tenant.id, vendor.id],
+      ),
+    ).rejects.toThrow()
+
+    const rows = await getPool().query<{
+      customer_entries: string
+      vendor_entries: string
+    }>(
+      `SELECT
+         (SELECT COUNT(*)::text
+          FROM customer_ledger_entries
+          WHERE tenant_id = $1) AS customer_entries,
+         (SELECT COUNT(*)::text
+          FROM vendor_ledger_entries
+          WHERE tenant_id = $1) AS vendor_entries`,
+      [tenant.id],
+    )
+    expect(rows.rows[0]).toEqual({
+      customer_entries: '1',
+      vendor_entries: '1',
+    })
+  })
+
+  it('allows a negative expected drawer projection to be closed and records the variance', async () => {
+    const tenant = await createProductTestTenant('Negative Drawer Projection')
+    const user = await getPool().query<{ id: string }>(
+      `INSERT INTO users
+       (tenant_id, name, email, password_hash, role)
+       VALUES ($1, 'Owner', $2, 'test-hash', 'OWNER')
+       RETURNING id`,
+      [tenant.id, `negative-drawer-${tenant.id}@example.com`],
+    )
+    const service = new CashSessionService(tenant.id, getPool())
+    const opened = await service.open({
+      openingCashPaisa: '1000',
+      actorUserId: user.rows[0]!.id,
+    })
+
+    await getPool().query(
+      `INSERT INTO financial_movements
+       (
+         tenant_id,
+         channel,
+         cash_session_id,
+         business_date,
+         amount_paisa,
+         source_type
+       )
+       VALUES ($1, 'CASH', $2, '2026-09-25', -1500, 'EXPENSE')`,
+      [tenant.id, opened.id],
+    )
+
+    await expect(service.getActive()).resolves.toMatchObject({
+      expectedCashPaisa: '-500',
+    })
+
+    await expect(
+      service.close({
+        countedCashPaisa: '0',
+        actorUserId: user.rows[0]!.id,
+      }),
+    ).resolves.toMatchObject({
+      expectedCashPaisa: '-500',
+      countedCashPaisa: '0',
+      variancePaisa: '500',
+    })
+  })
+
+  it('rejects linking a Bank or Mobile Banking movement to a Cash Session', async () => {
+    const tenant = await createProductTestTenant('Cash Link Integrity')
+    const user = await getPool().query<{ id: string }>(
+      `INSERT INTO users
+       (tenant_id, name, email, password_hash, role)
+       VALUES ($1, 'Owner', $2, 'test-hash', 'OWNER')
+       RETURNING id`,
+      [tenant.id, `cash-link-${tenant.id}@example.com`],
+    )
+    const finance = new FinanceRepository(getPool())
+    const bank = await finance.createAccount({
+      tenantId: tenant.id,
+      type: 'BANK',
+      name: 'Cash Link Bank',
+    })
+    const session = await new CashSessionService(
+      tenant.id,
+      getPool(),
+    ).open({
+      openingCashPaisa: '1000',
+      actorUserId: user.rows[0]!.id,
+    })
+
+    await expect(
+      getPool().query(
+        `INSERT INTO financial_movements
+         (
+           tenant_id,
+           channel,
+           financial_account_id,
+           cash_session_id,
+           business_date,
+           amount_paisa,
+           source_type
+         )
+         VALUES ($1, 'BANK', $2, $3, '2026-09-25', 500, 'PAYMENT')`,
+        [tenant.id, bank.id, session.id],
+      ),
+    ).rejects.toThrow()
+  })
+
 })
