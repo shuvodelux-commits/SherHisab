@@ -2,8 +2,16 @@ import type {
   ConversionProfileInput,
   ConversionProfileSnapshot,
 } from './conversion.types'
+import type {
+  AllocationPolicy,
+  MatureTrackingMode,
+  ProductCaptureFieldDefinition,
+  ProductCaptureFieldDefinitionInput,
+  WarrantyPolicyInput,
+  WarrantyPolicyRecord,
+} from './tracking.types'
 
-export type TrackingMode = 'SIMPLE' | 'LOT' | 'BATCH'
+export type TrackingMode = MatureTrackingMode
 export type ConversionMode = 'FIXED' | 'VARIABLE'
 export type ProductStatusFilter = 'active' | 'inactive' | 'all'
 export type ProductSortBy =
@@ -48,6 +56,7 @@ export interface CreateProductInput {
   openingStockBaseQty: string
   minimumStockBaseQty: string
   trackingMode?: TrackingMode
+  allocationPolicy?: AllocationPolicy
   advanced?: AdvancedProductConfigurationInput
 }
 
@@ -61,6 +70,7 @@ export interface UpdateProductInput {
   defaultSellingPricePaisa: string
   minimumStockBaseQty: string
   trackingMode: TrackingMode
+  allocationPolicy: AllocationPolicy
   advanced?: AdvancedProductConfigurationInput
 }
 
@@ -90,6 +100,7 @@ export interface ProductListItem {
   stockValuePaisa: string
   minimumStockBaseQty: string
   trackingMode: TrackingMode
+  allocationPolicy: AllocationPolicy
   variantsEnabled: boolean
   isActive: boolean
 }
@@ -143,6 +154,8 @@ export interface AdvancedProductConfigurationInput {
   specifications?: SpecificationInput[]
   variantConfiguration?: ReplaceVariantConfigurationInput
   conversionProfile?: ConversionProfileInput | null
+  warrantyPolicy?: WarrantyPolicyInput
+  captureFields?: ProductCaptureFieldDefinitionInput[]
 }
 
 export interface ProductAlternativeUnitRecord {
@@ -186,4 +199,6 @@ export interface ProductAdvancedConfiguration {
   specifications: ProductSpecificationRecord[]
   variants: ProductVariantDetail[]
   conversionProfile: ConversionProfileSnapshot | null
+  warrantyPolicy: WarrantyPolicyRecord | null
+  captureFields: ProductCaptureFieldDefinition[]
 }

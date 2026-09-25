@@ -285,44 +285,52 @@ export class TrackingService {
     productId: string,
     definitions: ProductCaptureFieldDefinitionInput[],
   ): Promise<ProductCaptureFieldDefinition[]> {
+    return withDatabaseTransaction(
+      this.database,
+      async (database) =>
+        new TrackingService(
+          this.tenantId,
+          database,
+        ).replaceCaptureFieldsInTransaction(productId, definitions),
+    )
+  }
+
+  async replaceCaptureFieldsInTransaction(
+    productId: string,
+    definitions: ProductCaptureFieldDefinitionInput[],
+  ): Promise<ProductCaptureFieldDefinition[]> {
     const normalizedProductId = productId.trim()
     if (!normalizedProductId) {
       throw new ProductValidationError('Product is required')
     }
     const normalized = normalizeCaptureDefinitions(definitions)
 
-    return withDatabaseTransaction(
-      this.database,
-      async (database) => {
-        const repository = new TrackingRepository(database)
-        if (
-          !(await repository.lockProduct(
-            this.tenantId,
-            normalizedProductId,
-          ))
-        ) {
-          throw new ProductNotFoundError('Product not found.')
-        }
+    if (
+      !(await this.repository.lockProduct(
+        this.tenantId,
+        normalizedProductId,
+      ))
+    ) {
+      throw new ProductNotFoundError('Product not found.')
+    }
 
-        await repository.deactivateCaptureFields(
-          this.tenantId,
-          normalizedProductId,
-        )
-
-        const created: ProductCaptureFieldDefinition[] = []
-        for (const definition of normalized) {
-          created.push(
-            await repository.insertCaptureField({
-              tenantId: this.tenantId,
-              productId: normalizedProductId,
-              ...definition,
-            }),
-          )
-        }
-
-        return created
-      },
+    await this.repository.deactivateCaptureFields(
+      this.tenantId,
+      normalizedProductId,
     )
+
+    const created: ProductCaptureFieldDefinition[] = []
+    for (const definition of normalized) {
+      created.push(
+        await this.repository.insertCaptureField({
+          tenantId: this.tenantId,
+          productId: normalizedProductId,
+          ...definition,
+        }),
+      )
+    }
+
+    return created
   }
 
   listCaptureFields(
@@ -431,6 +439,20 @@ export class TrackingService {
     productId: string,
     input: WarrantyPolicyInput,
   ): Promise<WarrantyPolicyRecord> {
+    return withDatabaseTransaction(
+      this.database,
+      async (database) =>
+        new TrackingService(
+          this.tenantId,
+          database,
+        ).replaceWarrantyPolicyInTransaction(productId, input),
+    )
+  }
+
+  async replaceWarrantyPolicyInTransaction(
+    productId: string,
+    input: WarrantyPolicyInput,
+  ): Promise<WarrantyPolicyRecord> {
     const normalizedProductId = productId.trim()
     if (!normalizedProductId) {
       throw new ProductValidationError('Product is required')
@@ -488,6 +510,20 @@ export class TrackingService {
       provider: input.provider?.trim() ?? '',
       text: input.text?.trim() ?? '',
     })
+  }
+
+  async getWarrantyPolicy(
+    productId: string,
+  ): Promise<WarrantyPolicyRecord | null> {
+    const normalizedProductId = productId.trim()
+    if (!normalizedProductId) {
+      throw new ProductValidationError('Product is required')
+    }
+
+    return this.repository.findWarrantyPolicy(
+      this.tenantId,
+      normalizedProductId,
+    )
   }
 
   async createWarrantySnapshot(input: {
