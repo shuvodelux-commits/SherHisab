@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Search,
   Trash2,
+  X,
 } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
 import { BilingualLabel } from '../../components/ui/bilingual-label'
@@ -87,6 +88,8 @@ function lineTotalPaisa(line: CartLineState): string {
 export function PosPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [activeResultIndex, setActiveResultIndex] = useState(-1)
   const [cart, setCart] = useState<CartLineState[]>([])
   const [pageError, setPageError] = useState('')
   const [saleMessage, setSaleMessage] = useState('')
@@ -148,6 +151,62 @@ export function PosPage() {
   const cartTotalPaisa = sumPaisa(
     cart.map((line) => lineTotalPaisa(line)),
   )
+
+  function changeProductSearch(value: string) {
+    setSearch(value)
+    setSearchOpen(value.trim().length > 0)
+    setActiveResultIndex(-1)
+  }
+
+  function clearProductSearch() {
+    setSearch('')
+    setSearchOpen(false)
+    setActiveResultIndex(-1)
+  }
+
+  function handleProductSearchKeyDown(
+    event: React.KeyboardEvent<HTMLInputElement>,
+  ) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setSearchOpen(false)
+      setActiveResultIndex(-1)
+      return
+    }
+
+    if (products.length === 0) {
+      return
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setSearchOpen(true)
+      setActiveResultIndex((current) =>
+        current < products.length - 1 ? current + 1 : 0,
+      )
+      return
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setSearchOpen(true)
+      setActiveResultIndex((current) =>
+        current <= 0 ? products.length - 1 : current - 1,
+      )
+      return
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      const target =
+        products[activeResultIndex >= 0 ? activeResultIndex : 0]
+      if (target) {
+        setSearchOpen(false)
+        setActiveResultIndex(-1)
+        void addProduct(target)
+      }
+    }
+  }
 
   async function addProduct(product: PosProductSearchDto) {
     setPageError('')
@@ -372,14 +431,28 @@ export function PosPage() {
             <Search aria-hidden="true" />
             <Input
               aria-label="Search products"
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) =>
+                changeProductSearch(event.target.value)
+              }
+              onKeyDown={handleProductSearchKeyDown}
               placeholder="Search name, barcode, SKU, variant, brand or category"
               value={search}
             />
+            {search ? (
+              <Button
+                aria-label="Clear product search"
+                onClick={clearProductSearch}
+                size="icon-xs"
+                type="button"
+                variant="ghost"
+              >
+                <X aria-hidden="true" />
+              </Button>
+            ) : null}
           </div>
 
           <div className="pos-product-list">
-            {!normalizedSearch ? (
+            {!normalizedSearch || !searchOpen ? (
               <p className="pos-muted">Search to find Products.</p>
             ) : productsQuery.isPending ? (
               <p className="pos-muted">Searching products…</p>
@@ -390,12 +463,19 @@ export function PosPage() {
             ) : products.length === 0 ? (
               <p className="pos-muted">No matching Products.</p>
             ) : (
-              products.map((product) => (
+              products.map((product, index) => (
                 <Button
                   aria-label={`Add ${product.productName}`}
                   className="pos-product-card"
+                  data-active={
+                    activeResultIndex === index ? 'true' : undefined
+                  }
                   key={product.variantId}
-                  onClick={() => addProduct(product)}
+                  onClick={() => {
+                    setSearchOpen(false)
+                    setActiveResultIndex(-1)
+                    void addProduct(product)
+                  }}
                   variant="outline"
                 >
                   <span className="pos-product-card-name">
