@@ -3,7 +3,7 @@ import type { DatabaseClient } from '../../db/request-database'
 export interface CreateInventoryLotInput {
   tenantId: string
   variantId: string
-  sourceType: 'OPENING' | 'ADJUSTMENT'
+  sourceType: 'OPENING' | 'ADJUSTMENT' | 'PURCHASE'
   receivedOn: string
   unitCostPaisa: string
   defaultSellPricePaisa: string
@@ -16,7 +16,13 @@ export interface CreateInventoryLotInput {
 export interface CreateInventoryMovementInput {
   tenantId: string
   variantId: string
-  movementType: 'OPENING' | 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT' | 'SALE'
+  movementType:
+    | 'OPENING'
+    | 'ADJUSTMENT_IN'
+    | 'ADJUSTMENT_OUT'
+    | 'SALE'
+    | 'PURCHASE'
+    | 'RETURN'
   businessDate: string
   baseQtyDelta: string
   balanceAfterBaseQty: string
@@ -262,7 +268,7 @@ export class InventoryRepository {
     const result = await this.db.query<{
       id: string
       received_on: string
-      source_type: 'OPENING' | 'ADJUSTMENT'
+      source_type: 'OPENING' | 'ADJUSTMENT' | 'PURCHASE'
       original_base_qty: string
       remaining_base_qty: string
       unit_cost_paisa: string
@@ -363,7 +369,7 @@ export class InventoryRepository {
     const result = await this.db.query<{
       id: string
       received_on: string
-      source_type: 'OPENING' | 'ADJUSTMENT'
+      source_type: 'OPENING' | 'ADJUSTMENT' | 'PURCHASE'
       original_base_qty: string
       remaining_base_qty: string
       unit_cost_paisa: string
