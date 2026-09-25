@@ -91,6 +91,8 @@ async function createFixture(name: string) {
     tenant,
     user,
     product,
+    products,
+    unit,
     inventory,
     customers: new CustomerService(tenant.id, getPool()),
     cookie: sessionCookie(login.headers.get('set-cookie')),
@@ -430,4 +432,118 @@ describe.skipIf(!hasDatabase)('mature sales checkout customer identity', () => {
     )
     expect(lots[0]?.remainingBaseQty).toBe('10')
   })
+
+  it('allocates invoice discount proportionally with stable-order remainder and exact totals', async () => {
+    const fixture = await createFixture('Checkout Discount Allocation')
+    const secondProduct = await fixture.products.createProduct(
+      {
+        name: 'Discount Product Two',
+        baseUnitId: fixture.unit.id,
+        defaultPurchasePricePaisa: '900',
+        defaultSellingPricePaisa: '2000',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'SIMPLE',
+      },
+      fixture.user.id,
+    )
+    await fixture.inventory.adjustStock(
+      fixture.tenant.id,
+      fixture.user.id,
+      secondProduct.defaultVariantId,
+      {
+        deltaBaseQty: '10',
+        note: 'Discount allocation fixture',
+        unitCostPaisa: '900',
+        sellingPricePaisa: '2000',
+        businessDate: '2026-09-01',
+      },
+    )
+
+    const response = await postSale(fixture.cookie, {
+      operationId: randomUUID(),
+      businessDate: '2026-09-25',
+      customer: {
+        name: 'Discount Buyer',
+        phone: '01777777777',
+      },
+      discountPaisa: '100',
+      lines: [
+        {
+          variantId: fixture.product.defaultVariantId,
+          baseQty: '1',
+        },
+        {
+          variantId: secondProduct.defaultVariantId,
+          baseQty: '1',
+        },
+      ],
+      payments: [
+        {
+          clientLineId: 'cash-discount',
+          method: 'CASH',
+          amountPaisa: '2900',
+        },
+      ],
+    })
+
+    expect(response.status).toBe(201)
+    const sale = (await response.json()) as {
+      subtotalPaisa?: string
+      discountPaisa?: string
+      grandTotalPaisa?: string
+      lines?: Array<Record<string, unknown>>
+    }
+
+    expect(sale).toMatchObject({
+      subtotalPaisa: '3000',
+      discountPaisa: '100',
+      grandTotalPaisa: '2900',
+    })
+    expect(sale.lines).toEqual([
+      expect.objectContaining({
+        grossAmountPaisa: '1000',
+        allocatedDiscountPaisa: '34',
+        netAmountPaisa: '966',
+      }),
+      expect.objectContaining({
+        grossAmountPaisa: '2000',
+        allocatedDiscountPaisa: '66',
+        netAmountPaisa: '1934',
+      }),
+    ])
+
+    const invoice = await invoiceJson(fixture.tenant.id)
+    expect(invoice).toMatchObject({
+      subtotal_paisa: 3000,
+      discount_paisa: 100,
+      grand_total_paisa: 2900,
+    })
+
+    const persistedLines = await getPool().query<{
+      line: Record<string, unknown>
+    }>(
+      `SELECT to_jsonb(line) AS line
+       FROM sales_lines line
+       WHERE line.tenant_id = $1
+       ORDER BY line.created_at, line.id`,
+      [fixture.tenant.id],
+    )
+    expect(
+      persistedLines.rows.reduce(
+        (total, row) =>
+          total +
+          Number(row.line.allocated_discount_paisa ?? 0),
+        0,
+      ),
+    ).toBe(100)
+    expect(
+      persistedLines.rows.reduce(
+        (total, row) =>
+          total + Number(row.line.net_amount_paisa ?? 0),
+        0,
+      ),
+    ).toBe(2900)
+  })
+
 })
