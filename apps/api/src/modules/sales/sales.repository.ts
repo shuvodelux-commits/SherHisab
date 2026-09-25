@@ -491,6 +491,7 @@ export class SalesRepository {
       settlement_status: 'DUE' | 'PARTIAL' | 'PAID'
       paid_amount_paisa: string
       due_paisa: string
+      change_paisa: string
     }>(
       `SELECT
          id,
@@ -504,7 +505,19 @@ export class SalesRepository {
          grand_total_paisa::text,
          settlement_status,
          paid_amount_paisa::text,
-         due_paisa::text
+         due_paisa::text,
+         (
+           SELECT COALESCE(
+             SUM(
+               payment.tendered_amount_paisa
+               - payment.applied_amount_paisa
+             ),
+             0
+           )::text
+           FROM sales_payments payment
+           WHERE payment.tenant_id = sales_invoices.tenant_id
+             AND payment.sale_id = sales_invoices.id
+         ) AS change_paisa
        FROM sales_invoices
        WHERE tenant_id = $1
          AND operation_id = $2
@@ -599,8 +612,10 @@ export class SalesRepository {
     }
 
     const lines: CommittedSaleLine[] = lineResult.rows.map((row) => {
+      const effectiveNet =
+        row.net_amount_paisa ?? row.final_sales_total_paisa
       const grossProfit =
-        BigInt(row.final_sales_total_paisa) - BigInt(row.cogs_paisa)
+        BigInt(effectiveNet) - BigInt(row.cogs_paisa)
       const belowCost = grossProfit < 0n
 
       return {
@@ -646,7 +661,7 @@ export class SalesRepository {
       settlementStatus: invoice.settlement_status,
       paidAmountPaisa: invoice.paid_amount_paisa,
       duePaisa: invoice.due_paisa,
-      changePaisa: '0',
+      changePaisa: invoice.change_paisa,
     }
   }
 

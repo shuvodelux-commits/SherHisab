@@ -151,6 +151,10 @@ export const salesRoutes = new Hono<AppEnv>()
     }
   })
   .post('/sales', async (c) => {
+    if (!c.get('permissions').includes('POS_SELL')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
     try {
       const body = objectBody(await c.req.json())
       const input = commitInput(body)
