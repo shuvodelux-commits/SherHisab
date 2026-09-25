@@ -286,7 +286,7 @@ export class SalesService {
               variantId: line.variantId,
               requestedBaseQty: effectiveRequested,
               availableBaseQty: partial.availableBaseQty,
-              allocations: sourcePlan.ownAllocations,
+              allocations: partial.allocations,
               automaticSalesTotalPaisa,
               effectiveUnitSellingPricePaisa: roundPaisa(
                 new Decimal(
