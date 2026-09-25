@@ -420,8 +420,7 @@ export function PosPage() {
                     {formatNumber(product.availableOwnBaseQty, {
                       maximumFractionDigits: 8,
                     })}{' '}
-                    {product.baseUnit.symbol ??
-                      product.baseUnit.name}{' '}
+                    {product.unitSymbol ?? product.unitName}{' '}
                     in stock
                   </span>
                 </Button>
@@ -500,8 +499,7 @@ export function PosPage() {
                           </div>
                         </td>
                         <td>
-                          {line.product.baseUnit.symbol ??
-                            line.product.baseUnit.name}
+                          {line.product.unitSymbol ?? line.product.unitName}
                         </td>
                         <td className="pos-number-column">
                           <Input
