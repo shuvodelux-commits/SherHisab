@@ -108,7 +108,6 @@ export class SalesDraftRepository {
         input.state.discountPaisa,
         JSON.stringify(input.state.payments),
         input.state.note,
-        input.expectedVersion,
       ],
     )
     const row = result.rows[0]
@@ -373,6 +372,7 @@ export class SalesDraftRepository {
         input.state.discountPaisa,
         JSON.stringify(input.state.payments),
         input.state.note,
+        input.expectedVersion,
       ],
     )
     return result.rows[0] ?? null
