@@ -89,6 +89,14 @@ export interface SalesDraftRecord extends SalesDraftInput {
   status: SalesDraftStatus
   ownerUserId: string
   postedSaleId: string | null
+  postedOperationId: string | null
   createdAt: Date
   updatedAt: Date
+}
+
+
+export interface SalesDraftPostInput {
+  operationId: string
+  businessDate: string
+  canOverrideSellingPrice: boolean
 }

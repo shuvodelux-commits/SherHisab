@@ -13,6 +13,7 @@ interface DraftHeaderRow {
   status: SalesDraftStatus
   owner_user_id: string
   posted_sale_id: string | null
+  posted_operation_id: string | null
   created_at: Date
   updated_at: Date
 }
@@ -218,6 +219,7 @@ export class SalesDraftRepository {
       status: header.status,
       ownerUserId: header.owner_user_id,
       postedSaleId: header.posted_sale_id,
+      postedOperationId: header.posted_operation_id,
       createdAt: header.created_at,
       updatedAt: header.updated_at,
       ...state,
@@ -236,6 +238,7 @@ export class SalesDraftRepository {
          status,
          owner_user_id,
          posted_sale_id,
+         posted_operation_id,
          customer_id,
          customer_name_snapshot,
          customer_phone_snapshot,
@@ -314,6 +317,7 @@ export class SalesDraftRepository {
       status: header.status,
       ownerUserId: header.owner_user_id,
       postedSaleId: header.posted_sale_id,
+      postedOperationId: null,
       createdAt: header.created_at,
       updatedAt: header.updated_at,
       customer: {
@@ -387,6 +391,90 @@ export class SalesDraftRepository {
        WHERE tenant_id = $1 AND draft_id = $2`,
       [tenantId, draftId],
     )
+  }
+
+
+  async claimPost(input: {
+    tenantId: string
+    draftId: string
+    expectedVersion: number
+    operationId: string
+  }): Promise<boolean> {
+    const result = await this.db.query<{ id: string }>(
+      `UPDATE sales_drafts
+       SET posted_operation_id = $4,
+           updated_at = NOW()
+       WHERE tenant_id = $1
+         AND id = $2
+         AND status = 'ACTIVE'
+         AND version = $3
+         AND (
+           posted_operation_id IS NULL
+           OR posted_operation_id = $4
+         )
+       RETURNING id`,
+      [
+        input.tenantId,
+        input.draftId,
+        input.expectedVersion,
+        input.operationId,
+      ],
+    )
+    return result.rowCount === 1
+  }
+
+  async clearPostClaim(input: {
+    tenantId: string
+    draftId: string
+    expectedVersion: number
+    operationId: string
+  }): Promise<void> {
+    await this.db.query(
+      `UPDATE sales_drafts
+       SET posted_operation_id = NULL,
+           updated_at = NOW()
+       WHERE tenant_id = $1
+         AND id = $2
+         AND status = 'ACTIVE'
+         AND version = $3
+         AND posted_operation_id = $4`,
+      [
+        input.tenantId,
+        input.draftId,
+        input.expectedVersion,
+        input.operationId,
+      ],
+    )
+  }
+
+  async markPosted(input: {
+    tenantId: string
+    draftId: string
+    expectedVersion: number
+    operationId: string
+    saleId: string
+  }): Promise<boolean> {
+    const result = await this.db.query<{ id: string }>(
+      `UPDATE sales_drafts
+       SET status = 'POSTED',
+           posted_sale_id = $5,
+           posted_operation_id = $4,
+           updated_at = NOW()
+       WHERE tenant_id = $1
+         AND id = $2
+         AND status = 'ACTIVE'
+         AND version = $3
+         AND posted_operation_id = $4
+       RETURNING id`,
+      [
+        input.tenantId,
+        input.draftId,
+        input.expectedVersion,
+        input.operationId,
+        input.saleId,
+      ],
+    )
+    return result.rowCount === 1
   }
 
 }

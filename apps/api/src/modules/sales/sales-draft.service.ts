@@ -3,8 +3,12 @@ import type { DatabaseClient } from '../../db/request-database'
 import { withDatabaseTransaction } from '../../db/transaction'
 import { SalesDraftVersionConflictError } from './sales-draft.errors'
 import { SalesDraftRepository } from './sales-draft.repository'
+import { SalesRepository } from './sales.repository'
+import { SalesService } from './sales.service'
+import type { CommittedSale, CommitSaleInput } from './sales.types'
 import type {
   SalesDraftInput,
+  SalesDraftPostInput,
   SalesDraftRecord,
 } from './sales-draft.types'
 
@@ -195,6 +199,203 @@ export class SalesDraftService {
         return loaded
       },
     )
+  }
+
+
+  async post(
+    actorUserId: string,
+    draftId: string,
+    expectedVersion: number,
+    input: SalesDraftPostInput,
+  ): Promise<CommittedSale> {
+    const userId = actorUserId.trim()
+    const id = draftId.trim()
+    const operationId = input.operationId.trim().toLowerCase()
+
+    if (!userId) {
+      throw new Error('Actor user is required')
+    }
+    if (!id) {
+      throw new Error('Draft id is required')
+    }
+    if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
+      throw new Error('Expected Draft version must be a positive integer')
+    }
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        operationId,
+      )
+    ) {
+      throw new Error('Operation ID must be a UUID')
+    }
+
+    const repository = new SalesDraftRepository(this.database)
+    let draft = await repository.findById(this.tenantId, id)
+    if (!draft) {
+      throw new Error('Draft not found')
+    }
+
+    if (draft.status === 'POSTED') {
+      if (draft.postedOperationId !== operationId) {
+        throw new Error('Draft has already been posted')
+      }
+      const committed = await new SalesRepository(
+        this.database,
+      ).findCommittedSaleByOperationId(
+        this.tenantId,
+        operationId,
+      )
+      if (!committed) {
+        throw new Error('Posted Draft Invoice was not found')
+      }
+      return committed
+    }
+
+    if (draft.status !== 'ACTIVE') {
+      throw new Error('Draft is not active')
+    }
+    if (draft.version !== expectedVersion) {
+      throw new SalesDraftVersionConflictError(draft.version)
+    }
+
+    const claimed = await repository.claimPost({
+      tenantId: this.tenantId,
+      draftId: id,
+      expectedVersion,
+      operationId,
+    })
+
+    if (!claimed) {
+      draft = await repository.findById(this.tenantId, id)
+      if (!draft) {
+        throw new Error('Draft not found')
+      }
+      if (
+        draft.status === 'POSTED' &&
+        draft.postedOperationId === operationId
+      ) {
+        const committed = await new SalesRepository(
+          this.database,
+        ).findCommittedSaleByOperationId(
+          this.tenantId,
+          operationId,
+        )
+        if (!committed) {
+          throw new Error('Posted Draft Invoice was not found')
+        }
+        return committed
+      }
+      if (draft.version !== expectedVersion) {
+        throw new SalesDraftVersionConflictError(draft.version)
+      }
+      throw new Error(
+        'Draft posting is already in progress with another operation',
+      )
+    }
+
+    const saleInput: CommitSaleInput = {
+      operationId,
+      businessDate: input.businessDate,
+      customer: {
+        ...(draft.customer.selectedCustomerId
+          ? { selectedCustomerId: draft.customer.selectedCustomerId }
+          : {}),
+        name: draft.customer.name,
+        phone: draft.customer.phone,
+        guardianName: draft.customer.guardianName,
+        address: draft.customer.address,
+      },
+      discountPaisa: draft.discountPaisa,
+      payments: draft.payments.map((payment) => ({
+        clientLineId: payment.clientLineId,
+        method: payment.method,
+        ...(payment.accountId
+          ? { accountId: payment.accountId }
+          : {}),
+        amountPaisa: payment.amountPaisa,
+        reference: payment.reference,
+        note: payment.note,
+      })),
+      lines: draft.lines.map((line) => {
+        if (
+          line.pricingMode === 'MANUAL' &&
+          line.manualUnitSellingPricePaisa === null
+        ) {
+          throw new Error(
+            'Manual Draft line is missing its selling price',
+          )
+        }
+
+        return {
+          variantId: line.variantId,
+          baseQty: line.normalizedQuantitySnapshot.baseQty,
+          ...(line.pricingMode === 'MANUAL'
+            ? {
+                manualUnitSellingPricePaisa:
+                  line.manualUnitSellingPricePaisa!,
+              }
+            : {}),
+          ...(line.shortageResolution === null
+            ? {}
+            : {
+                shortageResolution: line.shortageResolution,
+              }),
+        }
+      }),
+      sourceDraft: {
+        id: draft.id,
+        version: draft.version,
+      },
+    }
+
+    let sale: CommittedSale
+    try {
+      sale = await new SalesService(this.database).commitSale(
+        this.tenantId,
+        userId,
+        input.canOverrideSellingPrice,
+        saleInput,
+      )
+    } catch (error) {
+      const committed = await new SalesRepository(
+        this.database,
+      ).findCommittedSaleByOperationId(
+        this.tenantId,
+        operationId,
+      )
+      if (committed) {
+        sale = committed
+      } else {
+        await repository.clearPostClaim({
+          tenantId: this.tenantId,
+          draftId: id,
+          expectedVersion,
+          operationId,
+        })
+        throw error
+      }
+    }
+
+    const marked = await repository.markPosted({
+      tenantId: this.tenantId,
+      draftId: id,
+      expectedVersion,
+      operationId,
+      saleId: sale.id,
+    })
+
+    if (!marked) {
+      const current = await repository.findById(this.tenantId, id)
+      if (
+        current?.status !== 'POSTED' ||
+        current.postedOperationId !== operationId ||
+        current.postedSaleId !== sale.id
+      ) {
+        throw new Error('Draft could not be linked to its posted Invoice')
+      }
+    }
+
+    return sale
   }
 
 }
