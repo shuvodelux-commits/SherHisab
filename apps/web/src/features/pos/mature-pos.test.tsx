@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LanguageProvider } from '../../app/language'
 import type { AuthSession } from '../auth-api'
 import { PosPage } from './pos-page'
-import type { PosProductSearchDto } from './pos-types'
+import type {
+  PosCustomerSearchDto,
+  PosProductSearchDto,
+} from './pos-types'
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -53,6 +56,26 @@ function product(
 const alpha = product('variant-a', 'Alpha Hammer', '111111')
 const beta = product('variant-b', 'Beta Hammer', '222222')
 
+const dueCustomer: PosCustomerSearchDto = {
+  id: 'customer-due',
+  customerCode: 'CUS-00001',
+  name: 'Rahim Customer',
+  phone: '01711111111',
+  guardianName: 'Karim',
+  address: 'Belkuchi',
+  balancePaisa: '5000',
+}
+
+const creditCustomer: PosCustomerSearchDto = {
+  id: 'customer-credit',
+  customerCode: 'CUS-00002',
+  name: 'Salma Customer',
+  phone: '01722222222',
+  guardianName: '',
+  address: 'Sirajganj',
+  balancePaisa: '-3000',
+}
+
 function safeQuote(variantId: string) {
   return {
     variantId,
@@ -98,6 +121,18 @@ function installFetch() {
           return jsonResponse([beta])
         }
         return jsonResponse(search ? [alpha, beta] : [])
+      }
+
+      if (url.startsWith('/api/private/pos/customers?')) {
+        const params = new URLSearchParams(url.split('?')[1])
+        const search = params.get('search') ?? ''
+        if (search.includes('Salma') || search.includes('017222')) {
+          return jsonResponse([creditCustomer])
+        }
+        if (search) {
+          return jsonResponse([dueCustomer])
+        }
+        return jsonResponse([])
       }
 
       if (
@@ -298,5 +333,162 @@ describe('Mature POS Product search keyboard flow', () => {
         ),
       ).toBe(true)
     })
+  })
+})
+
+
+describe('Mature POS Customer panel', () => {
+  it('uses structured Name and Phone searches and shows the selected Customer live balance', async () => {
+    const fetchMock = installFetch()
+    renderPos()
+
+    const name = screen.getByRole('textbox', {
+      name: 'Customer Name',
+    })
+    const phone = screen.getByRole('textbox', {
+      name: 'Customer Phone',
+    })
+
+    fireEvent.change(name, { target: { value: 'Rahim' } })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Select Rahim Customer',
+      }),
+    )
+
+    expect(name).toHaveValue('Rahim Customer')
+    expect(phone).toHaveValue('01711111111')
+    expect(
+      screen.getByText('Selected CUS-00001'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Outstanding Due ৳50.00'),
+    ).toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).startsWith(
+          '/api/private/pos/customers?search=Rahim&limit=20',
+        ),
+      ),
+    ).toBe(true)
+
+    fireEvent.change(name, { target: { value: 'Salma' } })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Select Salma Customer',
+      }),
+    )
+
+    expect(
+      screen.getByText('Customer Credit ৳30.00'),
+    ).toBeInTheDocument()
+
+    fireEvent.change(phone, { target: { value: '017111' } })
+    await screen.findByRole('button', {
+      name: 'Select Rahim Customer',
+    })
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).startsWith(
+          '/api/private/pos/customers?search=017111&limit=20',
+        ),
+      ),
+    ).toBe(true)
+  })
+
+  it('editing selected Name or Phone clears selectedCustomerId while keeping typed snapshot values', async () => {
+    installFetch()
+    renderPos()
+
+    const name = screen.getByRole('textbox', {
+      name: 'Customer Name',
+    })
+    fireEvent.change(name, { target: { value: 'Rahim' } })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Select Rahim Customer',
+      }),
+    )
+    expect(
+      screen.getByText('Selected CUS-00001'),
+    ).toBeInTheDocument()
+
+    fireEvent.change(name, { target: { value: 'Rahim Edited' } })
+    expect(
+      screen.queryByText('Selected CUS-00001'),
+    ).not.toBeInTheDocument()
+    expect(name).toHaveValue('Rahim Edited')
+
+    fireEvent.change(name, { target: { value: 'Rahim' } })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Select Rahim Customer',
+      }),
+    )
+    const phone = screen.getByRole('textbox', {
+      name: 'Customer Phone',
+    })
+    fireEvent.change(phone, { target: { value: '01799999999' } })
+
+    expect(
+      screen.queryByText('Selected CUS-00001'),
+    ).not.toBeInTheDocument()
+    expect(phone).toHaveValue('01799999999')
+  })
+
+  it('keeps Guardian and Address collapsed by default', async () => {
+    installFetch()
+    renderPos()
+
+    expect(
+      screen.queryByRole('textbox', { name: 'Customer Guardian' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('textbox', { name: 'Customer Address' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'More customer details',
+      }),
+    )
+
+    expect(
+      screen.getByRole('textbox', { name: 'Customer Guardian' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: 'Customer Address' }),
+    ).toBeInTheDocument()
+  })
+
+  it('enables Sales History for a selected Customer or a valid Phone', async () => {
+    installFetch()
+    renderPos()
+
+    const history = screen.getByRole('button', {
+      name: 'Sales History',
+    })
+    const phone = screen.getByRole('textbox', {
+      name: 'Customer Phone',
+    })
+
+    expect(history).toBeDisabled()
+
+    fireEvent.change(phone, { target: { value: '01712345678' } })
+    expect(history).not.toBeDisabled()
+
+    fireEvent.change(phone, { target: { value: '123' } })
+    expect(history).toBeDisabled()
+
+    const name = screen.getByRole('textbox', {
+      name: 'Customer Name',
+    })
+    fireEvent.change(name, { target: { value: 'Rahim' } })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Select Rahim Customer',
+      }),
+    )
+    expect(history).not.toBeDisabled()
   })
 })
