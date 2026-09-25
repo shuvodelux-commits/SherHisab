@@ -56,7 +56,7 @@ CREATE TABLE customer_ledger_entries (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (tenant_id, id),
   FOREIGN KEY (tenant_id, customer_id)
-    REFERENCES customers (tenant_id, id) ON DELETE CASCADE
+    REFERENCES customers (tenant_id, id)
 );
 
 CREATE INDEX customer_ledger_customer_idx
@@ -99,7 +99,7 @@ CREATE TABLE vendor_ledger_entries (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (tenant_id, id),
   FOREIGN KEY (tenant_id, vendor_id)
-    REFERENCES vendors (tenant_id, id) ON DELETE CASCADE
+    REFERENCES vendors (tenant_id, id)
 );
 
 CREATE INDEX vendor_ledger_vendor_idx
@@ -136,8 +136,7 @@ CREATE TABLE cash_sessions (
     CHECK (status IN ('OPEN', 'CLOSED')),
   opening_cash_paisa BIGINT NOT NULL
     CHECK (opening_cash_paisa >= 0),
-  expected_cash_paisa BIGINT
-    CHECK (expected_cash_paisa IS NULL OR expected_cash_paisa >= 0),
+  expected_cash_paisa BIGINT,
   counted_cash_paisa BIGINT
     CHECK (counted_cash_paisa IS NULL OR counted_cash_paisa >= 0),
   variance_paisa BIGINT,
@@ -197,10 +196,16 @@ CREATE TABLE financial_movements (
   FOREIGN KEY (tenant_id, reversal_of_movement_id)
     REFERENCES financial_movements (tenant_id, id),
   CHECK (
-    (channel = 'CASH' AND financial_account_id IS NULL)
-    OR
-    (channel IN ('BANK', 'MOBILE_BANKING')
-      AND financial_account_id IS NOT NULL)
+    (
+      (channel = 'CASH' AND financial_account_id IS NULL)
+      OR
+      (channel IN ('BANK', 'MOBILE_BANKING')
+        AND financial_account_id IS NOT NULL)
+    )
+    AND (
+      channel = 'CASH'
+      OR cash_session_id IS NULL
+    )
   )
 );
 
