@@ -5,7 +5,7 @@ import {
   SalesPermissionError,
   SalesValidationError,
 } from './sales.errors'
-import { SalesPricingService } from './sales-pricing.service'
+import { PosService } from '../pos/pos.service'
 import { SalesService } from './sales.service'
 import type { CommitSaleInput } from './sales.types'
 
@@ -80,21 +80,37 @@ function commitInput(body: Record<string, unknown>): CommitSaleInput {
 
 export const salesRoutes = new Hono<AppEnv>()
   .post('/sales/quote-line', async (c) => {
+    if (!c.get('permissions').includes('POS_VIEW')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
     try {
       const body = objectBody(await c.req.json())
 
       return await withRequestDatabase(c.env, async (database) =>
         c.json(
-          await new SalesPricingService(database).quoteFifoLine(
+          await new PosService(
             c.get('tenantId'),
-            stringField(body, 'variantId'),
-            stringField(body, 'baseQty'),
-            optionalStringField(body, 'businessDate'),
+            database,
+          ).quoteLine(
+            {
+              variantId: stringField(body, 'variantId'),
+              baseQty: stringField(body, 'baseQty'),
+              businessDate: optionalStringField(
+                body,
+                'businessDate',
+              ),
+            },
+            c.get('permissions'),
           ),
         ),
       )
     } catch (error) {
       if (error instanceof SalesValidationError) {
+        return c.json({ error: error.message }, 400)
+      }
+
+      if (error instanceof Error) {
         return c.json({ error: error.message }, 400)
       }
 

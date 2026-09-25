@@ -163,11 +163,12 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
       },
     )
     expect(quoteResponse.status).toBe(200)
-    expect(await quoteResponse.json()).toMatchObject({
+    const quote = (await quoteResponse.json()) as Record<string, unknown>
+    expect(quote).toMatchObject({
       automaticSalesTotalPaisa: '4800',
       effectiveUnitSellingPricePaisa: '1600',
-      cogsPaisa: '3200',
     })
+    expect(quote).not.toHaveProperty('cogsPaisa')
 
     const saleResponse = await privatePost(
       fixture.cookie,
@@ -478,10 +479,11 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({
+    const quote = (await response.json()) as Record<string, unknown>
+    expect(quote).toMatchObject({
       automaticSalesTotalPaisa: '1100',
-      cogsPaisa: '700',
     })
+    expect(quote).not.toHaveProperty('cogsPaisa')
   })
 
   it('commits BATCH_EXPIRY FEFO sales from the earliest unexpired batch and leaves expired stock untouched', async () => {

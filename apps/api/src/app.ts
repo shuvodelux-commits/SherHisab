@@ -4,6 +4,7 @@ import { authRoutes } from './modules/auth/auth.routes'
 import { customerRoutes } from './modules/customers/customer.routes'
 import { financeRoutes } from './modules/finance/finance.routes'
 import { productRoutes } from './modules/products/product.routes'
+import { posRoutes } from './modules/pos/pos.routes'
 import { salesRoutes } from './modules/sales/sales.routes'
 import { posSettingsRoutes } from './modules/settings/pos-settings.routes'
 import { vendorRoutes } from './modules/vendors/vendor.routes'
@@ -21,6 +22,7 @@ const privateRoutes = new Hono<AppEnv>()
     }),
   )
   .route('/', productRoutes)
+  .route('/', posRoutes)
   .route('/', salesRoutes)
   .route('/', customerRoutes)
   .route('/', vendorRoutes)

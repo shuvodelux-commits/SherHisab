@@ -1,8 +1,4 @@
-import {
-  useMemo,
-  useState,
-  type ChangeEvent,
-} from 'react'
+import { useState, type ChangeEvent } from 'react'
 import {
   useMutation,
   useQuery,
@@ -25,15 +21,20 @@ import {
   parseTakaToPaisa,
 } from '../../lib/money'
 import { getSession, type AuthSession } from '../auth-api'
-import { listProducts } from '../products/product-api'
-import type { ProductListItemDto } from '../products/product-types'
-import { commitSale, quoteSaleLine } from './pos-api'
-import type { SaleQuoteDto } from './pos-types'
+import {
+  commitSale,
+  quoteSaleLine,
+  searchPosProducts,
+} from './pos-api'
+import type {
+  PosLineQuoteDto,
+  PosProductSearchDto,
+} from './pos-types'
 
 interface CartLineState {
-  product: ProductListItemDto
+  product: PosProductSearchDto
   quantity: string
-  quote: SaleQuoteDto
+  quote: PosLineQuoteDto
   priceInput: string
   manualUnitSellingPricePaisa: string | null
   showBreakdown: boolean
@@ -83,19 +84,6 @@ function lineTotalPaisa(line: CartLineState): string {
     : line.quote.automaticSalesTotalPaisa
 }
 
-function belowCostLossPaisa(line: CartLineState): string {
-  if (!line.manualUnitSellingPricePaisa) {
-    return '0'
-  }
-
-  const finalTotal = BigInt(lineTotalPaisa(line))
-  const cogs = BigInt(line.quote.cogsPaisa)
-
-  return finalTotal < cogs
-    ? (cogs - finalTotal).toString()
-    : '0'
-}
-
 export function PosPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -113,16 +101,11 @@ export function PosPage() {
       'SALES_OVERRIDE_SELLING_PRICE',
     ) ?? false
 
+  const normalizedSearch = search.trim()
   const productsQuery = useQuery({
-    queryKey: ['pos-products'],
-    queryFn: () =>
-      listProducts({
-        status: 'active',
-        sortBy: 'name',
-        sortDir: 'asc',
-        limit: 50,
-        offset: 0,
-      }),
+    queryKey: ['pos-products', normalizedSearch],
+    queryFn: () => searchPosProducts(normalizedSearch, 20),
+    enabled: normalizedSearch.length > 0,
   })
 
   const saleMutation = useMutation({
@@ -130,7 +113,7 @@ export function PosPage() {
       commitSale({
         businessDate: todayLocalDate(),
         lines: cart.map((line) => ({
-          variantId: line.product.defaultVariantId,
+          variantId: line.product.variantId,
           baseQty: line.quantity,
           ...(line.manualUnitSellingPricePaisa
             ? {
@@ -160,54 +143,31 @@ export function PosPage() {
     },
   })
 
-  const products = useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    const items = productsQuery.data?.items ?? []
-
-    if (!needle) {
-      return items
-    }
-
-    return items.filter((product) =>
-      [
-        product.name,
-        product.brand,
-        product.category?.name ?? '',
-        product.baseUnit.symbol ?? product.baseUnit.name,
-      ].some((value) => value.toLowerCase().includes(needle)),
-    )
-  }, [productsQuery.data?.items, search])
+  const products = productsQuery.data ?? []
 
   const cartTotalPaisa = sumPaisa(
     cart.map((line) => lineTotalPaisa(line)),
   )
 
-  async function addProduct(product: ProductListItemDto) {
+  async function addProduct(product: PosProductSearchDto) {
     setPageError('')
     setSaleMessage('')
 
-    if (product.variantsEnabled) {
-      setPageError(
-        'This Product uses Variants. Variant selection will be added to the POS next.',
-      )
-      return
-    }
-
     const existing = cart.find(
-      (line) => line.product.id === product.id,
+      (line) => line.product.variantId === product.variantId,
     )
 
     if (existing) {
       const nextQuantity = (
         Number(existing.quantity) + 1
       ).toString()
-      await updateQuantity(product.id, nextQuantity)
+      await updateQuantity(product.variantId, nextQuantity)
       return
     }
 
     try {
       const quote = await quoteSaleLine(
-        product.defaultVariantId,
+        product.variantId,
         '1',
       )
       setCart((lines) => [
@@ -239,7 +199,7 @@ export function PosPage() {
     quantity: string,
   ) {
     const target = cart.find(
-      (line) => line.product.id === productId,
+      (line) => line.product.variantId === productId,
     )
 
     if (!target) {
@@ -248,7 +208,7 @@ export function PosPage() {
 
     setCart((lines) =>
       lines.map((line) =>
-        line.product.id === productId
+        line.product.variantId === productId
           ? {
               ...line,
               quantity,
@@ -265,7 +225,7 @@ export function PosPage() {
     ) {
       setCart((lines) =>
         lines.map((line) =>
-          line.product.id === productId
+          line.product.variantId === productId
             ? {
                 ...line,
                 isQuoting: false,
@@ -279,13 +239,13 @@ export function PosPage() {
 
     try {
       const quote = await quoteSaleLine(
-        target.product.defaultVariantId,
+        target.product.variantId,
         quantity,
       )
 
       setCart((lines) =>
         lines.map((line) => {
-          if (line.product.id !== productId) {
+          if (line.product.variantId !== productId) {
             return line
           }
 
@@ -306,7 +266,7 @@ export function PosPage() {
     } catch (error) {
       setCart((lines) =>
         lines.map((line) =>
-          line.product.id === productId
+          line.product.variantId === productId
             ? {
                 ...line,
                 isQuoting: false,
@@ -333,7 +293,7 @@ export function PosPage() {
 
     setCart((lines) =>
       lines.map((line) => {
-        if (line.product.id !== productId) {
+        if (line.product.variantId !== productId) {
           return line
         }
 
@@ -362,7 +322,7 @@ export function PosPage() {
   function resetLotPrice(productId: string) {
     setCart((lines) =>
       lines.map((line) =>
-        line.product.id === productId
+        line.product.variantId === productId
           ? {
               ...line,
               manualUnitSellingPricePaisa: null,
@@ -378,7 +338,7 @@ export function PosPage() {
 
   function removeLine(productId: string) {
     setCart((lines) =>
-      lines.filter((line) => line.product.id !== productId),
+      lines.filter((line) => line.product.variantId !== productId),
     )
   }
 
@@ -413,14 +373,16 @@ export function PosPage() {
             <Input
               aria-label="Search products"
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by name, brand or category"
+              placeholder="Search name, barcode, SKU, variant, brand or category"
               value={search}
             />
           </div>
 
           <div className="pos-product-list">
-            {productsQuery.isPending ? (
-              <p className="pos-muted">Loading products…</p>
+            {!normalizedSearch ? (
+              <p className="pos-muted">Search to find Products.</p>
+            ) : productsQuery.isPending ? (
+              <p className="pos-muted">Searching products…</p>
             ) : productsQuery.isError ? (
               <p className="pos-error" role="alert">
                 {productsQuery.error.message}
@@ -430,21 +392,19 @@ export function PosPage() {
             ) : (
               products.map((product) => (
                 <Button
-                  aria-label={`Add ${product.name}`}
+                  aria-label={`Add ${product.productName}`}
                   className="pos-product-card"
-                  disabled={
-                    Number(product.stockBaseQty) <= 0 ||
-                    product.variantsEnabled
-                  }
-                  key={product.id}
+                  key={product.variantId}
                   onClick={() => addProduct(product)}
                   variant="outline"
                 >
                   <span className="pos-product-card-name">
-                    {product.name}
+                    {product.productName}
                   </span>
                   <span className="pos-product-card-meta">
-                    {product.category?.name ?? 'Uncategorized'}
+                    {product.variantName
+                      ? `${product.categoryName ?? 'Uncategorized'} · ${product.variantName}`
+                      : product.categoryName ?? 'Uncategorized'}
                   </span>
                   <span className="pos-product-card-price">
                     ৳
@@ -453,11 +413,10 @@ export function PosPage() {
                     )}
                   </span>
                   <span className="pos-product-card-stock">
-                    {formatNumber(product.stockBaseQty, {
+                    {formatNumber(product.availableOwnBaseQty, {
                       maximumFractionDigits: 8,
                     })}{' '}
-                    {product.baseUnit.symbol ??
-                      product.baseUnit.name}{' '}
+                    {product.unitSymbol ?? product.unitName}{' '}
                     in stock
                   </span>
                 </Button>
@@ -504,22 +463,21 @@ export function PosPage() {
                   </tr>
                 ) : (
                   cart.flatMap((line) => {
-                    const loss = belowCostLossPaisa(line)
                     const row = (
-                      <tr key={line.product.id}>
+                      <tr key={line.product.variantId}>
                         <td>
                           <div className="pos-cart-product">
-                            <span>{line.product.name}</span>
+                            <span>{line.product.productName}</span>
                             <Button
                               aria-label={`${
                                 line.showBreakdown ? 'Hide' : 'Show'
                               } lot price breakdown for ${
-                                line.product.name
+                                line.product.productName
                               }`}
                               onClick={() =>
                                 setCart((lines) =>
                                   lines.map((item) =>
-                                    item.product.id === line.product.id
+                                    item.product.variantId === line.product.variantId
                                       ? {
                                           ...item,
                                           showBreakdown:
@@ -537,17 +495,16 @@ export function PosPage() {
                           </div>
                         </td>
                         <td>
-                          {line.product.baseUnit.symbol ??
-                            line.product.baseUnit.name}
+                          {line.product.unitSymbol ?? line.product.unitName}
                         </td>
                         <td className="pos-number-column">
                           <Input
-                            aria-label={`Quantity for ${line.product.name}`}
+                            aria-label={`Quantity for ${line.product.productName}`}
                             className="pos-cart-input pos-cart-qty"
                             inputMode="decimal"
                             onChange={(event) =>
                               void updateQuantity(
-                                line.product.id,
+                                line.product.variantId,
                                 event.target.value,
                               )
                             }
@@ -557,12 +514,12 @@ export function PosPage() {
                         <td className="pos-number-column">
                           <div className="pos-price-cell">
                             <Input
-                              aria-label={`Selling price for ${line.product.name}`}
+                              aria-label={`Selling price for ${line.product.productName}`}
                               className="pos-cart-input pos-cart-price"
                               inputMode="decimal"
                               onChange={(event) =>
                                 changeSellingPrice(
-                                  line.product.id,
+                                  line.product.variantId,
                                   event,
                                 )
                               }
@@ -574,7 +531,7 @@ export function PosPage() {
                                 <span>Manual selling price</span>
                                 <Button
                                   onClick={() =>
-                                    resetLotPrice(line.product.id)
+                                    resetLotPrice(line.product.variantId)
                                   }
                                   size="xs"
                                   variant="link"
@@ -583,12 +540,6 @@ export function PosPage() {
                                   Reset to Lot Price
                                 </Button>
                               </div>
-                            ) : null}
-                            {loss !== '0' ? (
-                              <span className="pos-below-cost-warning">
-                                Below FIFO cost by ৳
-                                {formatPaisaToTaka(loss)}
-                              </span>
                             ) : null}
                             {line.error ? (
                               <span className="pos-line-error">
@@ -602,9 +553,9 @@ export function PosPage() {
                         </td>
                         <td className="pos-actions-column">
                           <Button
-                            aria-label={`Remove ${line.product.name}`}
+                            aria-label={`Remove ${line.product.productName}`}
                             onClick={() =>
-                              removeLine(line.product.id)
+                              removeLine(line.product.variantId)
                             }
                             size="icon-xs"
                             variant="ghost"
@@ -622,11 +573,11 @@ export function PosPage() {
                     const breakdown = (
                       <tr
                         className="pos-lot-breakdown-row"
-                        key={`${line.product.id}-lots`}
+                        key={`${line.product.variantId}-lots`}
                       >
                         <td colSpan={6}>
                           <div className="pos-lot-breakdown">
-                            {line.quote.allocations.map(
+                            {line.quote.sellingSegments.map(
                               (allocation, index) => (
                                 <span key={allocation.lotId}>
                                   {index > 0 ? ' + ' : ''}
@@ -635,7 +586,7 @@ export function PosPage() {
                                   })}{' '}
                                   × ৳
                                   {formatPaisaToTaka(
-                                    allocation.lotSellingPricePaisa,
+                                    allocation.unitSellingPricePaisa,
                                   )}
                                 </span>
                               ),
