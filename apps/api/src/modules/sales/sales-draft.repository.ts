@@ -108,6 +108,7 @@ export class SalesDraftRepository {
         input.state.discountPaisa,
         JSON.stringify(input.state.payments),
         input.state.note,
+        input.expectedVersion,
       ],
     )
     const row = result.rows[0]
@@ -333,6 +334,7 @@ export class SalesDraftRepository {
   async replaceState(input: {
     tenantId: string
     draftId: string
+    expectedVersion: number
     state: SalesDraftInput
   }): Promise<DraftHeaderRow | null> {
     const result = await this.db.query<DraftHeaderRow>(
@@ -350,6 +352,7 @@ export class SalesDraftRepository {
        WHERE tenant_id = $1
          AND id = $2
          AND status = 'ACTIVE'
+         AND version = $11
        RETURNING
          id,
          draft_number,

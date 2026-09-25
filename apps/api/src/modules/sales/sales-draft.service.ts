@@ -1,6 +1,7 @@
 import { getPool } from '../../db/pool'
 import type { DatabaseClient } from '../../db/request-database'
 import { withDatabaseTransaction } from '../../db/transaction'
+import { SalesDraftVersionConflictError } from './sales-draft.errors'
 import { SalesDraftRepository } from './sales-draft.repository'
 import type {
   SalesDraftInput,
@@ -80,6 +81,9 @@ export class SalesDraftService {
     if (!userId) {
       throw new Error('Actor user is required')
     }
+    if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
+      throw new Error('Expected Draft version must be a positive integer')
+    }
     const state = normalizeState(input)
 
     return withDatabaseTransaction(
@@ -138,7 +142,7 @@ export class SalesDraftService {
   async update(
     actorUserId: string,
     draftId: string,
-    _expectedVersion: number,
+    expectedVersion: number,
     input: SalesDraftInput,
   ): Promise<SalesDraftRecord> {
     const userId = actorUserId.trim()
@@ -158,9 +162,19 @@ export class SalesDraftService {
         const header = await repository.replaceState({
           tenantId: this.tenantId,
           draftId: id,
+          expectedVersion,
           state,
         })
         if (!header) {
+          const current = await repository.findById(
+            this.tenantId,
+            id,
+          )
+          if (current?.status === 'ACTIVE') {
+            throw new SalesDraftVersionConflictError(
+              current.version,
+            )
+          }
           throw new Error('Draft not found or is not active')
         }
 
