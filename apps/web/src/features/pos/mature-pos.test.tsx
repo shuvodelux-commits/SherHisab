@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LanguageProvider } from '../../app/language'
 import type { AuthSession } from '../auth-api'
@@ -56,6 +62,15 @@ function product(
 const alpha = product('variant-a', 'Alpha Hammer', '111111')
 const beta = product('variant-b', 'Beta Hammer', '222222')
 
+const fabric: PosProductSearchDto = {
+  ...product('variant-fabric', 'Muslin Fabric Black', 'FAB-001'),
+  productId: 'product-fabric',
+  unitName: 'Gauge',
+  unitSymbol: 'Gauge',
+  currentSellingPricePaisa: '30000',
+  availableOwnBaseQty: '100',
+}
+
 const dueCustomer: PosCustomerSearchDto = {
   id: 'customer-due',
   customerCode: 'CUS-00001',
@@ -74,6 +89,86 @@ const creditCustomer: PosCustomerSearchDto = {
   guardianName: '',
   address: 'Sirajganj',
   balancePaisa: '-3000',
+}
+
+const fabricSnapshot = {
+  id: 'profile-fabric',
+  productId: 'product-fabric',
+  type: 'COMPOUND' as const,
+  version: 1,
+  baseUnitId: 'unit-gira',
+  pricingUnitId: 'unit-gauge',
+  pricingBaseFactorNumerator: '16',
+  pricingBaseFactorDenominator: '1',
+  displayPrecision: 2,
+  components: [
+    {
+      id: 'component-gauge',
+      key: 'gauge',
+      label: 'Gauge',
+      unitId: 'unit-gauge',
+      baseFactorNumerator: '16',
+      baseFactorDenominator: '1',
+      sortOrder: 0,
+      minValue: '0',
+      maxExclusive: null,
+      allowFraction: false,
+      autoNormalizeRemainder: false,
+    },
+    {
+      id: 'component-gira',
+      key: 'gira',
+      label: 'Gira',
+      unitId: 'unit-gira',
+      baseFactorNumerator: '1',
+      baseFactorDenominator: '1',
+      sortOrder: 1,
+      minValue: '0',
+      maxExclusive: '16',
+      allowFraction: false,
+      autoNormalizeRemainder: true,
+    },
+  ],
+}
+
+function fabricQuote(
+  components: Record<string, string> = {},
+) {
+  const gauge = Number(components.gauge ?? '0')
+  const gira = Number(components.gira ?? '0')
+  const baseQty =
+    Object.keys(components).length === 0
+      ? 1
+      : gauge * 16 + gira
+  const pricingQty = baseQty / 16
+  const displayQty = pricingQty.toFixed(2)
+  const totalPaisa = Math.round(pricingQty * 30000).toString()
+
+  return {
+    variantId: 'variant-fabric',
+    baseQty: String(baseQty),
+    pricingQty: String(pricingQty),
+    displayQty,
+    availableOwnBaseQty: '100',
+    shortfallBaseQty: '0',
+    automaticSalesTotalPaisa: totalPaisa,
+    effectiveUnitSellingPricePaisa: '30000',
+    sellingSegments: [
+      {
+        lotId: 'lot-fabric',
+        baseQty: String(baseQty),
+        unitSellingPricePaisa: '30000',
+        amountPaisa: totalPaisa,
+      },
+    ],
+    conversion: {
+      baseQty: String(baseQty),
+      pricingQty: String(pricingQty),
+      displayQty,
+      components,
+      snapshot: fabricSnapshot,
+    },
+  }
 }
 
 function safeQuote(variantId: string) {
@@ -120,6 +215,9 @@ function installFetch() {
         if (search === '222222') {
           return jsonResponse([beta])
         }
+        if (search.toLowerCase().includes('muslin')) {
+          return jsonResponse([fabric])
+        }
         return jsonResponse(search ? [alpha, beta] : [])
       }
 
@@ -141,6 +239,17 @@ function installFetch() {
       ) {
         const body = JSON.parse(String(init.body)) as {
           variantId: string
+          quantity?: {
+            kind: 'COMPONENTS'
+            profileId: string
+            profileVersion: number
+            components: Record<string, string>
+          }
+        }
+        if (body.variantId === 'variant-fabric') {
+          return jsonResponse(
+            fabricQuote(body.quantity?.components ?? {}),
+          )
         }
         return jsonResponse(safeQuote(body.variantId))
       }
@@ -490,5 +599,173 @@ describe('Mature POS Customer panel', () => {
       }),
     )
     expect(history).not.toBeDisabled()
+  })
+})
+
+
+describe('Mature POS compound conversion row', () => {
+  it('keeps derived compound Qty read-only and expands the generic editor immediately below the same Cart row', async () => {
+    installFetch()
+    renderPos()
+
+    const search = screen.getByRole('textbox', {
+      name: 'Search products',
+    })
+    fireEvent.change(search, { target: { value: 'muslin' } })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Add Muslin Fabric Black',
+      }),
+    )
+
+    const row = await screen.findByRole('row', {
+      name: /Muslin Fabric Black/i,
+    })
+    const qty = within(row).getByLabelText(
+      'Quantity for Muslin Fabric Black',
+    )
+    expect(qty).toHaveAttribute('readonly')
+    expect(qty).toHaveValue('0.06')
+    expect(within(row).getByText('Gauge')).toBeInTheDocument()
+
+    fireEvent.click(
+      within(row).getByRole('button', {
+        name: 'Edit quantity details for Muslin Fabric Black',
+      }),
+    )
+
+    const editorRow = await screen.findByRole('row', {
+      name: 'Quantity details for Muslin Fabric Black',
+    })
+    expect(row.nextElementSibling).toBe(editorRow)
+    expect(
+      within(editorRow).getByLabelText('Gauge for Muslin Fabric Black'),
+    ).toBeInTheDocument()
+    expect(
+      within(editorRow).getByLabelText('Gira for Muslin Fabric Black'),
+    ).toBeInTheDocument()
+  })
+
+  it('sends Gauge/Gira component input, displays rounded 2.31 and keeps exact 2.3125 economics', async () => {
+    const fetchMock = installFetch()
+    renderPos()
+
+    const search = screen.getByRole('textbox', {
+      name: 'Search products',
+    })
+    fireEvent.change(search, { target: { value: 'muslin' } })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Add Muslin Fabric Black',
+      }),
+    )
+
+    const row = await screen.findByRole('row', {
+      name: /Muslin Fabric Black/i,
+    })
+    fireEvent.click(
+      within(row).getByRole('button', {
+        name: 'Edit quantity details for Muslin Fabric Black',
+      }),
+    )
+
+    const editorRow = await screen.findByRole('row', {
+      name: 'Quantity details for Muslin Fabric Black',
+    })
+    fireEvent.change(
+      within(editorRow).getByLabelText(
+        'Gauge for Muslin Fabric Black',
+      ),
+      { target: { value: '2' } },
+    )
+    fireEvent.change(
+      within(editorRow).getByLabelText(
+        'Gira for Muslin Fabric Black',
+      ),
+      { target: { value: '5' } },
+    )
+
+    await waitFor(() => {
+      const componentQuote = fetchMock.mock.calls.find(
+        ([input, init]) => {
+          if (
+            input !== '/api/private/pos/quote-line' ||
+            init?.method !== 'POST'
+          ) {
+            return false
+          }
+          const body = JSON.parse(String(init.body))
+          return (
+            body.variantId === 'variant-fabric' &&
+            body.quantity?.components?.gauge === '2' &&
+            body.quantity?.components?.gira === '5'
+          )
+        },
+      )
+      expect(componentQuote).toBeDefined()
+    })
+
+    const qty = within(row).getByLabelText(
+      'Quantity for Muslin Fabric Black',
+    )
+    await waitFor(() => expect(qty).toHaveValue('2.31'))
+    expect(
+      within(row).getByLabelText(
+        'Selling price for Muslin Fabric Black',
+      ),
+    ).toHaveValue('300.00')
+    expect(within(row).getByText('৳693.75')).toBeInTheDocument()
+  })
+
+  it('re-quotes when a compound component changes instead of trusting client arithmetic', async () => {
+    const fetchMock = installFetch()
+    renderPos()
+
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Search products' }),
+      { target: { value: 'muslin' } },
+    )
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Add Muslin Fabric Black',
+      }),
+    )
+    const row = await screen.findByRole('row', {
+      name: /Muslin Fabric Black/i,
+    })
+    fireEvent.click(
+      within(row).getByRole('button', {
+        name: 'Edit quantity details for Muslin Fabric Black',
+      }),
+    )
+    const editorRow = await screen.findByRole('row', {
+      name: 'Quantity details for Muslin Fabric Black',
+    })
+    const gira = within(editorRow).getByLabelText(
+      'Gira for Muslin Fabric Black',
+    )
+
+    fireEvent.change(gira, { target: { value: '3' } })
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input, init]) => {
+          if (
+            input !== '/api/private/pos/quote-line' ||
+            init?.method !== 'POST'
+          ) {
+            return false
+          }
+          const body = JSON.parse(String(init.body))
+          return (
+            body.variantId === 'variant-fabric' &&
+            body.quantity?.kind === 'COMPONENTS' &&
+            body.quantity?.profileId === 'profile-fabric' &&
+            body.quantity?.profileVersion === 1 &&
+            body.quantity?.components?.gira === '3'
+          )
+        }),
+      ).toBe(true)
+    })
   })
 })
