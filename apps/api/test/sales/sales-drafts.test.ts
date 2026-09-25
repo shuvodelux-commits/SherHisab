@@ -5,6 +5,7 @@ import { AuthService } from '../../src/modules/auth/auth.service'
 import { CustomerService } from '../../src/modules/customers/customer.service'
 import { FinanceRepository } from '../../src/modules/finance/finance.repository'
 import { ConversionService } from '../../src/modules/products/conversion.service'
+import { InventoryService } from '../../src/modules/products/inventory.service'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
 import { SalesDraftService } from '../../src/modules/sales/sales-draft.service'
 import { VendorService } from '../../src/modules/vendors/vendor.service'
@@ -781,6 +782,311 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
       version: 2,
       note: 'Version two',
     })
+  })
+
+
+  it('posts a Draft idempotently through the authoritative SalesService', async () => {
+    const tenant = await createProductTestTenant('Draft Idempotent Post')
+    const owner = await new AuthService().createUser({
+      tenantId: tenant.id,
+      name: 'Draft Post Owner',
+      email: `draft-post-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    const products = new ProductMasterService(tenant.id, getPool())
+    const unit = (await products.listUnits()).find(
+      (candidate) => candidate.symbol === 'pcs',
+    )
+    if (!unit) {
+      throw new Error('Default Piece unit not found')
+    }
+    const product = await products.createProduct(
+      {
+        name: 'Draft Post Product',
+        baseUnitId: unit.id,
+        defaultPurchasePricePaisa: '900',
+        defaultSellingPricePaisa: '1400',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'SIMPLE',
+      },
+      owner.id,
+    )
+    await new InventoryService(getPool()).adjustStock(
+      tenant.id,
+      owner.id,
+      product.defaultVariantId,
+      {
+        deltaBaseQty: '10',
+        note: 'Draft posting stock',
+        unitCostPaisa: '900',
+        sellingPricePaisa: '1400',
+        businessDate: '2026-09-25',
+      },
+    )
+
+    const service = new SalesDraftService(tenant.id, getPool())
+    const created = await service.create(owner.id, {
+      customer: {
+        selectedCustomerId: null,
+        name: 'Posted Draft Buyer',
+        phone: '01770000001',
+        guardianName: '',
+        address: 'Belkuchi',
+      },
+      discountPaisa: '0',
+      payments: [],
+      note: 'Post me once',
+      lines: [
+        {
+          variantId: product.defaultVariantId,
+          quantityInput: {
+            kind: 'SIMPLE',
+            baseQty: '2',
+          },
+          normalizedQuantitySnapshot: {
+            baseQty: '2',
+            pricingQty: '2',
+            displayQty: '2',
+            components: {},
+            snapshot: null,
+          },
+          pricingMode: 'AUTO',
+          manualUnitSellingPricePaisa: null,
+          shortageResolution: null,
+          serialIds: [],
+          batchSelection: null,
+          warrantySnapshot: null,
+          captureValues: {},
+        },
+      ],
+    })
+    const operationId = randomUUID()
+
+    const first = await service.post(
+      owner.id,
+      created.id,
+      created.version,
+      {
+        operationId,
+        businessDate: '2026-09-25',
+        canOverrideSellingPrice: true,
+      },
+    )
+    const afterFirst = await businessMutationCounts(tenant.id)
+
+    const repeated = await service.post(
+      owner.id,
+      created.id,
+      created.version,
+      {
+        operationId,
+        businessDate: '2026-09-25',
+        canOverrideSellingPrice: true,
+      },
+    )
+
+    expect(repeated.id).toBe(first.id)
+    expect(repeated.invoiceNumber).toBe(first.invoiceNumber)
+    expect(await businessMutationCounts(tenant.id)).toEqual(afterFirst)
+
+    const invoices = await getPool().query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM sales_invoices
+       WHERE tenant_id = $1`,
+      [tenant.id],
+    )
+    expect(invoices.rows[0]?.count).toBe('1')
+
+    await expect(service.get(created.id)).resolves.toMatchObject({
+      id: created.id,
+      version: created.version,
+      status: 'POSTED',
+      postedSaleId: first.id,
+    })
+
+    const posted = await getPool().query<{
+      posted_operation_id: string | null
+    }>(
+      `SELECT posted_operation_id::text
+       FROM sales_drafts
+       WHERE tenant_id = $1 AND id = $2`,
+      [tenant.id, created.id],
+    )
+    expect(posted.rows[0]?.posted_operation_id).toBe(operationId)
+  })
+
+  it('posts the saved normalized base quantity after the active conversion profile changes', async () => {
+    const tenant = await createProductTestTenant(
+      'Draft Conversion Post',
+    )
+    const owner = await new AuthService().createUser({
+      tenantId: tenant.id,
+      name: 'Draft Conversion Post Owner',
+      email: `draft-conversion-post-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    const products = new ProductMasterService(tenant.id, getPool())
+    const gira = await products.createUnit({
+      name: 'Post Gira',
+      symbol: 'pgira',
+    })
+    const gauge = await products.createUnit({
+      name: 'Post Gauge',
+      symbol: 'pgauge',
+    })
+    const product = await products.createProduct(
+      {
+        name: 'Draft Conversion Post Fabric',
+        baseUnitId: gira.id,
+        defaultPurchasePricePaisa: '1000',
+        defaultSellingPricePaisa: '2000',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'SIMPLE',
+      },
+      owner.id,
+    )
+    await new InventoryService(getPool()).adjustStock(
+      tenant.id,
+      owner.id,
+      product.defaultVariantId,
+      {
+        deltaBaseQty: '50',
+        note: 'Conversion Draft stock',
+        unitCostPaisa: '1000',
+        sellingPricePaisa: '2000',
+        businessDate: '2026-09-25',
+      },
+    )
+    const conversion = new ConversionService(tenant.id, getPool())
+    const profileV1 = await conversion.replaceActiveProfile(product.id, {
+      type: 'COMPOUND',
+      baseUnitId: gira.id,
+      pricingUnitId: gauge.id,
+      pricingBaseFactorNumerator: '16',
+      pricingBaseFactorDenominator: '1',
+      displayPrecision: 2,
+      components: [
+        {
+          key: 'gauge',
+          label: 'Gauge',
+          unitId: gauge.id,
+          baseFactorNumerator: '16',
+          baseFactorDenominator: '1',
+          sortOrder: 0,
+          minValue: '0',
+          maxExclusive: null,
+          allowFraction: false,
+          autoNormalizeRemainder: false,
+        },
+        {
+          key: 'gira',
+          label: 'Gira',
+          unitId: gira.id,
+          baseFactorNumerator: '1',
+          baseFactorDenominator: '1',
+          sortOrder: 1,
+          minValue: '0',
+          maxExclusive: '16',
+          allowFraction: false,
+          autoNormalizeRemainder: false,
+        },
+      ],
+    })
+    const quantityInput = {
+      kind: 'COMPONENTS' as const,
+      profileId: profileV1.id,
+      profileVersion: profileV1.version,
+      components: { gauge: '2', gira: '5' },
+    }
+    const normalized = await conversion.normalize(quantityInput)
+    expect(normalized.baseQty).toBe('37')
+
+    const service = new SalesDraftService(tenant.id, getPool())
+    const draft = await service.create(owner.id, {
+      customer: {
+        selectedCustomerId: null,
+        name: 'Conversion Draft Buyer',
+        phone: '01770000002',
+        guardianName: '',
+        address: '',
+      },
+      discountPaisa: '0',
+      payments: [],
+      note: '',
+      lines: [
+        {
+          variantId: product.defaultVariantId,
+          quantityInput,
+          normalizedQuantitySnapshot: normalized,
+          pricingMode: 'AUTO',
+          manualUnitSellingPricePaisa: null,
+          shortageResolution: null,
+          serialIds: [],
+          batchSelection: null,
+          warrantySnapshot: null,
+          captureValues: {},
+        },
+      ],
+    })
+
+    const profileV2 = await conversion.replaceActiveProfile(product.id, {
+      type: 'COMPOUND',
+      baseUnitId: gira.id,
+      pricingUnitId: gauge.id,
+      pricingBaseFactorNumerator: '20',
+      pricingBaseFactorDenominator: '1',
+      displayPrecision: 3,
+      components: [
+        {
+          key: 'gauge',
+          label: 'Gauge',
+          unitId: gauge.id,
+          baseFactorNumerator: '20',
+          baseFactorDenominator: '1',
+          sortOrder: 0,
+          minValue: '0',
+          maxExclusive: null,
+          allowFraction: false,
+          autoNormalizeRemainder: false,
+        },
+        {
+          key: 'gira',
+          label: 'Gira',
+          unitId: gira.id,
+          baseFactorNumerator: '1',
+          baseFactorDenominator: '1',
+          sortOrder: 1,
+          minValue: '0',
+          maxExclusive: '20',
+          allowFraction: false,
+          autoNormalizeRemainder: false,
+        },
+      ],
+    })
+    expect(profileV2.version).toBe(2)
+
+    const sale = await service.post(
+      owner.id,
+      draft.id,
+      draft.version,
+      {
+        operationId: randomUUID(),
+        businessDate: '2026-09-25',
+        canOverrideSellingPrice: true,
+      },
+    )
+
+    const line = await getPool().query<{ base_qty: string }>(
+      `SELECT trim_scale(base_qty)::text AS base_qty
+       FROM sales_lines
+       WHERE tenant_id = $1 AND sale_id = $2`,
+      [tenant.id, sale.id],
+    )
+    expect(line.rows).toEqual([{ base_qty: '37' }])
   })
 
 })
