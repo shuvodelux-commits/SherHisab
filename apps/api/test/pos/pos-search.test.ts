@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { closePool, getPool } from '../../src/db/pool'
 import { PosService } from '../../src/modules/pos/pos.service'
