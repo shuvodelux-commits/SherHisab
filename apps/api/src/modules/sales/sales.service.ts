@@ -188,6 +188,10 @@ export class SalesService {
     try {
       const work = async (database: DatabaseClient) => {
           const salesRepository = new SalesRepository(database)
+          // Serialize the absent-key case as well as existing-operation retries.
+          // A waiter performs this lookup only after the winner commits, before
+          // it can take stock locks or report a stock shortage.
+          await salesRepository.lockOperationId(tenantId, input.operationId!)
           const existing =
             await salesRepository.findCommittedSaleByOperationId(
               tenantId,

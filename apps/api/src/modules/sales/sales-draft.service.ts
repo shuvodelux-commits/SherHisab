@@ -403,7 +403,9 @@ export class SalesDraftService {
             !committed || committed.id !== draft.postedSaleId ||
             source?.id !== draft.id || source.version !== draft.version
           ) {
-            throw new Error('Posted Draft Invoice source does not match the Draft')
+            throw new SalesConflictError(
+              'Posted Draft sale identity is missing or ambiguous; retry cannot be verified.',
+            )
           }
           return committed
         }

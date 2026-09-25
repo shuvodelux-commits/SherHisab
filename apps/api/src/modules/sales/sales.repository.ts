@@ -10,6 +10,15 @@ import type {
 export class SalesRepository {
   constructor(private readonly db: DatabaseClient) {}
 
+  async lockOperationId(tenantId: string, operationId: string): Promise<void> {
+    await this.db.query(
+      `SELECT pg_advisory_xact_lock(
+         hashtextextended($1 || ':' || $2, 0)
+       )`,
+      [tenantId, operationId],
+    )
+  }
+
   private async listLots(
     tenantId: string,
     variantId: string,

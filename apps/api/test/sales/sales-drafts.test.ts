@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { Client } from 'pg'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import type { SalesDraftInput } from '../../src/modules/sales/sales-draft.types'
 import { closePool, getPool } from '../../src/db/pool'
@@ -989,6 +992,142 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
       { action: 'POSTED', draft_version: 1, actor_user_id: owner.id },
     ])
   })
+
+  it('backfills an unambiguous pre-012b posted draft before retrying its operation', async () => {
+    const { tenant, owner, state, service } = await postableDraftFixture('Legacy Draft Retry')
+    const draft = await service.create(owner.id, state)
+    const operationId = randomUUID()
+    const postInput = {
+      operationId,
+      businessDate: '2026-09-25',
+      canOverrideSellingPrice: true,
+    }
+    const original = await service.post(owner.id, draft.id, draft.version, postInput)
+
+    await getPool().query(
+      `UPDATE sales_invoices
+       SET source_draft_id = NULL, source_draft_version = NULL
+       WHERE tenant_id = $1 AND id = $2`,
+      [tenant.id, original.id],
+    )
+    const migrationPath = fileURLToPath(
+      new URL('../../../../db/migrations/012b_sales_invoice_draft_source.sql', import.meta.url),
+    )
+    const migrationSql = readFileSync(migrationPath, 'utf8')
+    await getPool().query(migrationSql)
+
+    await expect(
+      service.post(owner.id, draft.id, draft.version, postInput),
+    ).resolves.toMatchObject({ id: original.id })
+  })
+
+  it('refuses a historical retry when multiple drafts claim the same sale', async () => {
+    const { tenant, owner, state, service } = await postableDraftFixture('Ambiguous Draft Retry')
+    const draft = await service.create(owner.id, state)
+    const operationId = randomUUID()
+    const original = await service.post(owner.id, draft.id, draft.version, {
+      operationId,
+      businessDate: '2026-09-25',
+      canOverrideSellingPrice: true,
+    })
+    await getPool().query(
+      `UPDATE sales_invoices
+       SET source_draft_id = NULL, source_draft_version = NULL
+       WHERE tenant_id = $1 AND id = $2`,
+      [tenant.id, original.id],
+    )
+    await getPool().query(
+      `INSERT INTO sales_drafts
+         (tenant_id, draft_number, owner_user_id, status, posted_sale_id, posted_operation_id)
+       VALUES ($1, $2, $3, 'POSTED', $4, $5)`,
+      [tenant.id, `AMB-${randomUUID()}`, owner.id, original.id, operationId],
+    )
+    const migrationPath = fileURLToPath(
+      new URL('../../../../db/migrations/012b_sales_invoice_draft_source.sql', import.meta.url),
+    )
+    await getPool().query(readFileSync(migrationPath, 'utf8'))
+
+    await expect(
+      service.post(owner.id, draft.id, draft.version, {
+        operationId,
+        businessDate: '2026-09-25',
+        canOverrideSellingPrice: true,
+      }),
+    ).rejects.toMatchObject({
+      name: 'SalesConflictError',
+      message: 'Posted Draft sale identity is missing or ambiguous; retry cannot be verified.',
+    })
+  })
+
+  it('serializes concurrent cross-draft operation reuse before stock validation', async () => {
+    const { tenant, owner, state, service } = await postableDraftFixture('Operation Race')
+    state.lines[0]!.quantityInput = { kind: 'SIMPLE', baseQty: '10' }
+    state.lines[0]!.normalizedQuantitySnapshot.baseQty = '10'
+    const firstDraft = await service.create(owner.id, state)
+    const secondDraft = await service.create(owner.id, state)
+    const operationId = randomUUID()
+    const client = new Client({
+      connectionString: process.env.DATABASE_URL,
+      application_name: `draft-op-race-${operationId}`,
+    })
+    await client.connect()
+    const functionName = `test_pause_sale_${operationId.replaceAll('-', '')}`
+    const triggerName = `test_pause_sale_trigger_${operationId.replaceAll('-', '')}`
+    await getPool().query(`
+      CREATE FUNCTION ${functionName}() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.operation_id = '${operationId}'::uuid THEN PERFORM pg_sleep(1); END IF;
+        RETURN NEW;
+      END $$;
+      CREATE TRIGGER ${triggerName} BEFORE INSERT ON sales_invoices
+      FOR EACH ROW EXECUTE FUNCTION ${functionName}();
+    `)
+    const competingService = new SalesDraftService(tenant.id, client)
+    try {
+      const firstAttempt = service.post(
+        owner.id, firstDraft.id, firstDraft.version,
+        { operationId, businessDate: '2026-09-25', canOverrideSellingPrice: true },
+      )
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const active = await getPool().query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count FROM pg_stat_activity
+           WHERE query LIKE '%pg_sleep(1)%' AND state = 'active'`,
+        )
+        if (active.rows[0]?.count !== '0') break
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      const secondAttempt = competingService.post(
+        owner.id, secondDraft.id, secondDraft.version,
+        { operationId, businessDate: '2026-09-25', canOverrideSellingPrice: true },
+      )
+      let waitingCount = '0'
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const waiting = await getPool().query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count FROM pg_stat_activity
+           WHERE application_name = $1 AND wait_event_type = 'Lock'`,
+          [`draft-op-race-${operationId}`],
+        )
+        waitingCount = waiting.rows[0]?.count ?? '0'
+        if (waitingCount === '1') break
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      expect(waitingCount).toBe('1')
+      const firstSale = await firstAttempt
+      expect(firstSale.id).toBeTruthy()
+      await expect(secondAttempt).rejects.toMatchObject({ name: 'SalesConflictError' })
+      const invoices = await getPool().query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM sales_invoices
+         WHERE tenant_id = $1 AND operation_id = $2`,
+        [tenant.id, operationId],
+      )
+      expect(invoices.rows[0]?.count).toBe('1')
+      await expect(service.get(secondDraft.id, owner.id)).resolves.toMatchObject({ status: 'ACTIVE' })
+    } finally {
+      await getPool().query(`DROP TRIGGER IF EXISTS ${triggerName} ON sales_invoices`)
+      await getPool().query(`DROP FUNCTION IF EXISTS ${functionName}()`)
+      await client.end()
+    }
+  }, 10000)
 
   it('rejects posting when the active conversion profile would reinterpret saved components', async () => {
     const tenant = await createProductTestTenant(
