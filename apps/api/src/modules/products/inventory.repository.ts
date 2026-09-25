@@ -3,7 +3,7 @@ import type { DatabaseClient } from '../../db/request-database'
 export interface CreateInventoryLotInput {
   tenantId: string
   variantId: string
-  sourceType: 'OPENING' | 'ADJUSTMENT' | 'PURCHASE' | 'PURCHASE'
+  sourceType: 'OPENING' | 'ADJUSTMENT' | 'PURCHASE'
   receivedOn: string
   unitCostPaisa: string
   defaultSellPricePaisa: string
@@ -47,7 +47,7 @@ export interface FifoInventoryLot {
 }
 
 export interface InventoryLotRecord extends FifoInventoryLot {
-  sourceType: 'OPENING' | 'ADJUSTMENT'
+  sourceType: 'OPENING' | 'ADJUSTMENT' | 'PURCHASE'
   originalBaseQty: string
   lotCode: string | null
   batchCode: string | null
