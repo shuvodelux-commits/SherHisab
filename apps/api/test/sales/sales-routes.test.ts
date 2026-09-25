@@ -893,6 +893,54 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
     expect(managed.status).toBe(200)
     expect(await managed.json()).toMatchObject({ version: 2, note: 'Changed' })
     expect((await privatePost(manager.cookie, `${path}/archive`, { expectedVersion: 2 })).status).toBe(200)
+
+    await addLot(fixture, {
+      qty: '1',
+      cost: '900',
+      selling: '1400',
+      date: '2026-09-25',
+    })
+    const postable = await privatePost(owner.cookie, '/sales/drafts', {
+      ...draftState,
+      lines: [{
+        variantId: fixture.product.defaultVariantId,
+        quantityInput: { kind: 'SIMPLE', baseQty: '1' },
+        normalizedQuantitySnapshot: {
+          baseQty: '1', pricingQty: '1', displayQty: '1',
+          components: {}, snapshot: null,
+        },
+        pricingMode: 'AUTO',
+        manualUnitSellingPricePaisa: null,
+        shortageResolution: null,
+        serialIds: [],
+        batchSelection: null,
+        warrantySnapshot: null,
+        captureValues: {},
+      }],
+    })
+    expect(postable.status).toBe(201)
+    const postableDraft = (await postable.json()) as { id: string }
+    const managedPost = await privatePost(
+      manager.cookie,
+      `/sales/drafts/${postableDraft.id}/post`,
+      { expectedVersion: 1, operationId: randomUUID(), businessDate: '2026-09-25' },
+    )
+    expect(managedPost.status).toBe(201)
+    const audit = await getPool().query<{
+      action: string
+      draft_version: number
+      actor_user_id: string
+    }>(
+      `SELECT action, draft_version, actor_user_id::text
+       FROM sales_draft_audit
+       WHERE tenant_id = $1 AND draft_id = $2
+       ORDER BY created_at, id`,
+      [fixture.tenant.id, postableDraft.id],
+    )
+    expect(audit.rows).toEqual([
+      { action: 'CREATED', draft_version: 1, actor_user_id: owner.user.id },
+      { action: 'POSTED', draft_version: 1, actor_user_id: manager.user.id },
+    ])
   })
 
   it('posts a Draft through the route once, returns stale version metadata, and replays the same sale', async () => {
