@@ -435,5 +435,103 @@ describe.skipIf(!hasDatabase)(
       ])
     })
 
+
+    it('recalculates reconciled shortfall COGS while keeping sale revenue unchanged', async () => {
+      const fixture =
+        await createOutstandingShortfallFixture('60')
+
+      const before = await getPool().query<{
+        sale_id: string
+        line_id: string
+        grand_total_paisa: string
+        total_sales_paisa: string
+        invoice_cogs_paisa: string
+        line_cogs_paisa: string
+      }>(
+        `SELECT
+           invoice.id AS sale_id,
+           line.id AS line_id,
+           invoice.grand_total_paisa::text,
+           invoice.total_sales_paisa::text,
+           invoice.total_cogs_paisa::text AS invoice_cogs_paisa,
+           line.cogs_paisa::text AS line_cogs_paisa
+         FROM sales_invoices invoice
+         JOIN sales_lines line
+           ON line.tenant_id = invoice.tenant_id
+          AND line.sale_id = invoice.id
+         WHERE invoice.tenant_id = $1
+         ORDER BY invoice.created_at DESC, line.created_at, line.id
+         LIMIT 1`,
+        [fixture.tenant.id],
+      )
+      expect(before.rows[0]).toMatchObject({
+        grand_total_paisa: '1000',
+        total_sales_paisa: '1000',
+        invoice_cogs_paisa: '550',
+        line_cogs_paisa: '550',
+      })
+
+      await new InventoryReceiptService(
+        getPool(),
+      ).receivePurchase({
+        tenantId: fixture.tenant.id,
+        actorUserId: fixture.user.id,
+        variantId: fixture.product.defaultVariantId,
+        businessDate: '2026-09-26',
+        sourceReference: 'PUR-COGS-001',
+        receivedBaseQty: '20',
+        unitCostPaisa: '80',
+        sellingPricePaisa: '110',
+      })
+
+      const after = await getPool().query<{
+        grand_total_paisa: string
+        total_sales_paisa: string
+        invoice_cogs_paisa: string
+        line_cogs_paisa: string
+      }>(
+        `SELECT
+           invoice.grand_total_paisa::text,
+           invoice.total_sales_paisa::text,
+           invoice.total_cogs_paisa::text AS invoice_cogs_paisa,
+           line.cogs_paisa::text AS line_cogs_paisa
+         FROM sales_invoices invoice
+         JOIN sales_lines line
+           ON line.tenant_id = invoice.tenant_id
+          AND line.sale_id = invoice.id
+         WHERE invoice.tenant_id = $1
+         ORDER BY invoice.created_at DESC, line.created_at, line.id
+         LIMIT 1`,
+        [fixture.tenant.id],
+      )
+      expect(after.rows[0]).toEqual({
+        grand_total_paisa: '1000',
+        total_sales_paisa: '1000',
+        invoice_cogs_paisa: '650',
+        line_cogs_paisa: '650',
+      })
+
+      const reconciliation = await getPool().query<{
+        provisional_unit_cost_paisa: string
+        actual_unit_cost_paisa: string
+        cogs_adjustment_paisa: string
+      }>(
+        `SELECT
+           provisional_unit_cost_paisa::text,
+           actual_unit_cost_paisa::text,
+           cogs_adjustment_paisa::text
+         FROM inventory_shortfall_reconciliations
+         WHERE tenant_id = $1`,
+        [fixture.tenant.id],
+      )
+      expect(reconciliation.rows).toEqual([
+        {
+          provisional_unit_cost_paisa: '60',
+          actual_unit_cost_paisa: '80',
+          cogs_adjustment_paisa: '100',
+        },
+      ])
+    })
+
   },
 )
