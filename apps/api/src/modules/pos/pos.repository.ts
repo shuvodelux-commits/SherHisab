@@ -20,10 +20,12 @@ interface PosProductSearchRow {
   tracking_mode: TrackingMode
   allocation_policy: AllocationPolicy
   variants_enabled: boolean
+  configured_purchase_price_paisa: string
 }
 
 function mapSearchResult(
   row: PosProductSearchRow,
+  includeConfiguredPurchasePrice: boolean,
 ): PosProductSearchResult {
   return {
     productId: row.product_id,
@@ -42,6 +44,12 @@ function mapSearchResult(
     trackingMode: row.tracking_mode,
     allocationPolicy: row.allocation_policy,
     variantsEnabled: row.variants_enabled,
+    ...(includeConfiguredPurchasePrice
+      ? {
+          configuredPurchasePricePaisa:
+            row.configured_purchase_price_paisa,
+        }
+      : {}),
   }
 }
 
@@ -52,6 +60,7 @@ export class PosRepository {
     tenantId: string,
     query: string,
     limit: number,
+    includeConfiguredPurchasePrice = false,
   ): Promise<PosProductSearchResult[]> {
     const result = await this.db.query<PosProductSearchRow>(
       `WITH candidates AS (
@@ -111,6 +120,8 @@ export class PosRepository {
            p.tracking_mode,
            p.allocation_policy,
            p.variants_enabled,
+           pv.default_purchase_price_paisa::text
+             AS configured_purchase_price_paisa,
            CASE
              WHEN EXISTS (
                SELECT 1
@@ -208,7 +219,8 @@ export class PosRepository {
          available_own_base_qty,
          tracking_mode,
          allocation_policy,
-         variants_enabled
+         variants_enabled,
+         configured_purchase_price_paisa
        FROM candidates
        ORDER BY
          search_rank ASC,
@@ -223,6 +235,50 @@ export class PosRepository {
       [tenantId, query, limit],
     )
 
-    return result.rows.map(mapSearchResult)
+    return result.rows.map((row) =>
+      mapSearchResult(row, includeConfiguredPurchasePrice),
+    )
+  }
+
+  async findVariantContext(
+    tenantId: string,
+    variantId: string,
+  ): Promise<{
+    productId: string
+    configuredPurchasePricePaisa: string
+    configuredSellingPricePaisa: string
+  } | null> {
+    const result = await this.db.query<{
+      product_id: string
+      configured_purchase_price_paisa: string
+      configured_selling_price_paisa: string
+    }>(
+      `SELECT
+         p.id AS product_id,
+         pv.default_purchase_price_paisa::text
+           AS configured_purchase_price_paisa,
+         pv.default_selling_price_paisa::text
+           AS configured_selling_price_paisa
+       FROM product_variants pv
+       JOIN products p
+         ON p.tenant_id = pv.tenant_id
+        AND p.id = pv.product_id
+       WHERE pv.tenant_id = $1
+         AND pv.id = $2
+         AND pv.is_active
+         AND p.is_active`,
+      [tenantId, variantId],
+    )
+
+    const row = result.rows[0]
+    return row
+      ? {
+          productId: row.product_id,
+          configuredPurchasePricePaisa:
+            row.configured_purchase_price_paisa,
+          configuredSellingPricePaisa:
+            row.configured_selling_price_paisa,
+        }
+      : null
   }
 }
