@@ -1250,4 +1250,137 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
     )
     expect([400, 404]).toContain(lots.status)
   })
+
+  it('persists mature tracking settings through Product create and update routes', async () => {
+    const fixture = await createAuthenticatedFixture('Tracking Route Tenant')
+    const unitId = await pieceUnitId(fixture.service)
+
+    const create = await privateRequest(fixture.cookie, '/products', {
+      method: 'POST',
+      body: {
+        ...createPayload(unitId, 'Tracked Route Product'),
+        trackingMode: 'BATCH_EXPIRY',
+        allocationPolicy: 'FEFO',
+        advanced: {
+          warrantyPolicy: {
+            enabled: true,
+            durationValue: 12,
+            durationUnit: 'MONTH',
+            provider: 'Manufacturer',
+            text: 'Route warranty',
+          },
+          captureFields: [
+            {
+              key: 'prescription_no',
+              label: 'Prescription No',
+              type: 'text',
+              required: true,
+            },
+          ],
+        },
+      },
+    })
+
+    expect(create.status).toBe(201)
+    const created = (await create.json()) as {
+      id: string
+      trackingMode: string
+      allocationPolicy: string
+    }
+    expect(created).toMatchObject({
+      trackingMode: 'BATCH_EXPIRY',
+      allocationPolicy: 'FEFO',
+    })
+
+    const detail = await privateRequest(
+      fixture.cookie,
+      `/products/${created.id}`,
+    )
+    expect(detail.status).toBe(200)
+    const detailBody = (await detail.json()) as {
+      advanced: {
+        warrantyPolicy: {
+          durationValue: number
+          durationUnit: string
+          provider: string
+        } | null
+        captureFields: Array<{
+          key: string
+          type: string
+          required: boolean
+        }>
+      }
+    }
+    expect(detailBody.advanced.warrantyPolicy).toMatchObject({
+      durationValue: 12,
+      durationUnit: 'MONTH',
+      provider: 'Manufacturer',
+    })
+    expect(detailBody.advanced.captureFields).toEqual([
+      expect.objectContaining({
+        key: 'prescription_no',
+        type: 'text',
+        required: true,
+      }),
+    ])
+
+    const update = await privateRequest(
+      fixture.cookie,
+      `/products/${created.id}`,
+      {
+        method: 'PATCH',
+        body: {
+          trackingMode: 'SERIAL',
+          allocationPolicy: 'FIFO',
+          advanced: {
+            warrantyPolicy: {
+              enabled: true,
+              durationValue: 2,
+              durationUnit: 'YEAR',
+              provider: 'SherHisab Shop',
+              text: 'Updated route warranty',
+            },
+            captureFields: [
+              {
+                key: 'imei_note',
+                label: 'IMEI Note',
+                type: 'text',
+                required: false,
+              },
+            ],
+          },
+        },
+      },
+    )
+
+    expect(update.status).toBe(200)
+    expect(await update.json()).toMatchObject({
+      trackingMode: 'SERIAL',
+      allocationPolicy: 'FIFO',
+    })
+
+    const updatedDetail = await privateRequest(
+      fixture.cookie,
+      `/products/${created.id}`,
+    )
+    const updatedBody = (await updatedDetail.json()) as {
+      advanced: {
+        warrantyPolicy: {
+          durationValue: number
+          durationUnit: string
+          provider: string
+        } | null
+        captureFields: Array<{ key: string }>
+      }
+    }
+    expect(updatedBody.advanced.warrantyPolicy).toMatchObject({
+      durationValue: 2,
+      durationUnit: 'YEAR',
+      provider: 'SherHisab Shop',
+    })
+    expect(updatedBody.advanced.captureFields).toEqual([
+      expect.objectContaining({ key: 'imei_note' }),
+    ])
+  })
+
 })
