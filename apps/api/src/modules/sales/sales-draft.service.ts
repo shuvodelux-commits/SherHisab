@@ -140,6 +140,99 @@ export class SalesDraftService {
     return draft
   }
 
+  async listRecent(limit = 5): Promise<SalesDraftRecord[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new Error('Recent Draft limit must be between 1 and 20')
+    }
+
+    const repository = new SalesDraftRepository(this.database)
+    const ids = await repository.listRecentActiveIds(
+      this.tenantId,
+      limit,
+    )
+    const drafts: SalesDraftRecord[] = []
+
+    for (const id of ids) {
+      const draft = await repository.findById(this.tenantId, id)
+      if (draft?.status === 'ACTIVE') {
+        drafts.push(draft)
+      }
+    }
+
+    return drafts
+  }
+
+  async archive(
+    actorUserId: string,
+    draftId: string,
+    expectedVersion: number,
+  ): Promise<SalesDraftRecord> {
+    const userId = actorUserId.trim()
+    const id = draftId.trim()
+
+    if (!userId) {
+      throw new Error('Actor user is required')
+    }
+    if (!id) {
+      throw new Error('Draft id is required')
+    }
+    if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
+      throw new Error('Expected Draft version must be a positive integer')
+    }
+
+    return withDatabaseTransaction(
+      this.database,
+      async (database) => {
+        const repository = new SalesDraftRepository(database)
+        const current = await repository.findById(this.tenantId, id)
+
+        if (!current) {
+          throw new Error('Draft not found')
+        }
+        if (current.version !== expectedVersion) {
+          throw new SalesDraftVersionConflictError(current.version)
+        }
+        if (current.status !== 'ACTIVE') {
+          throw new Error('Draft is not active')
+        }
+
+        const archived = await repository.archiveDraft({
+          tenantId: this.tenantId,
+          draftId: id,
+          expectedVersion,
+        })
+        if (!archived) {
+          const latest = await repository.findById(this.tenantId, id)
+          if (latest) {
+            throw new SalesDraftVersionConflictError(latest.version)
+          }
+          throw new Error('Draft not found')
+        }
+
+        await repository.insertAudit({
+          tenantId: this.tenantId,
+          draftId: id,
+          version: archived.version,
+          actorUserId: userId,
+          state: {
+            customer: current.customer,
+            discountPaisa: current.discountPaisa,
+            payments: current.payments,
+            note: current.note,
+            lines: current.lines,
+          },
+          action: 'ARCHIVED',
+        })
+
+        const loaded = await repository.findById(this.tenantId, id)
+        if (!loaded) {
+          throw new Error('Archived Draft disappeared')
+        }
+        return loaded
+      },
+    )
+  }
+
   async update(
     actorUserId: string,
     draftId: string,

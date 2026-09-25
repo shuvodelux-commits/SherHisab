@@ -184,6 +184,7 @@ export class SalesDraftRepository {
     version: number
     actorUserId: string
     state: SalesDraftInput
+    action?: 'CREATED' | 'UPDATED' | 'ARCHIVED' | 'POSTED'
   }): Promise<void> {
     await this.db.query(
       `INSERT INTO sales_draft_audit
@@ -195,13 +196,14 @@ export class SalesDraftRepository {
          state_snapshot,
          actor_user_id
        )
-       VALUES ($1,$2,$3,'CREATED',$4::jsonb,$5)`,
+       VALUES ($1,$2,$3,$6,$4::jsonb,$5)`,
       [
         input.tenantId,
         input.draftId,
         input.version,
         JSON.stringify(input.state),
         input.actorUserId,
+        input.action ?? 'CREATED',
       ],
     )
   }
@@ -332,6 +334,51 @@ export class SalesDraftRepository {
       note: header.note,
       lines,
     }
+  }
+
+  async listRecentActiveIds(
+    tenantId: string,
+    limit: number,
+  ): Promise<string[]> {
+    const result = await this.db.query<{ id: string }>(
+      `SELECT id
+       FROM sales_drafts
+       WHERE tenant_id = $1
+         AND status = 'ACTIVE'
+       ORDER BY updated_at DESC, id DESC
+       LIMIT $2`,
+      [tenantId, limit],
+    )
+    return result.rows.map((row) => row.id)
+  }
+
+  async archiveDraft(input: {
+    tenantId: string
+    draftId: string
+    expectedVersion: number
+  }): Promise<DraftHeaderRow | null> {
+    const result = await this.db.query<DraftHeaderRow>(
+      `UPDATE sales_drafts
+       SET status = 'ARCHIVED',
+           version = version + 1,
+           updated_at = NOW()
+       WHERE tenant_id = $1
+         AND id = $2
+         AND status = 'ACTIVE'
+         AND version = $3
+       RETURNING
+         id,
+         draft_number,
+         version,
+         status,
+         owner_user_id,
+         posted_sale_id,
+         posted_operation_id,
+         created_at,
+         updated_at`,
+      [input.tenantId, input.draftId, input.expectedVersion],
+    )
+    return result.rows[0] ?? null
   }
 
   async replaceState(input: {
