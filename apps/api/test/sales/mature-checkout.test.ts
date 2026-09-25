@@ -8,6 +8,8 @@ import { CustomerService } from '../../src/modules/customers/customer.service'
 import { FinanceRepository } from '../../src/modules/finance/finance.repository'
 import { InventoryService } from '../../src/modules/products/inventory.service'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
+import { SalesService } from '../../src/modules/sales/sales.service'
+import type { CommitSaleInput } from '../../src/modules/sales/sales.types'
 import {
   cleanupProductTestTenants,
   createProductTestTenant,
@@ -983,6 +985,158 @@ describe.skipIf(!hasDatabase)('mature sales checkout customer identity', () => {
     })
     expect((await counts(fixture.tenant.id)).invoices).toBe('0')
     expect(await fixture.customers.balance(customer.id)).toBe('-500')
+  })
+
+
+  it('rolls back invoice, lines, stock, payments, financial movement and Customer ledger after an injected late failure', async () => {
+    const fixture = await createFixture('Checkout Atomic Rollback')
+    const triggerSuffix = randomUUID().replaceAll('-', '')
+    const functionName = `test_fail_sale_due_${triggerSuffix}`
+    const triggerName = `test_fail_sale_due_trigger_${triggerSuffix}`
+
+    const before = await getPool().query<{
+      invoices: string
+      lines: string
+      payments: string
+      sale_movements: string
+      financial_movements: string
+      ledger: string
+      customers: string
+    }>(
+      `SELECT
+         (SELECT COUNT(*) FROM sales_invoices WHERE tenant_id = $1)::text
+           AS invoices,
+         (SELECT COUNT(*) FROM sales_lines WHERE tenant_id = $1)::text
+           AS lines,
+         (SELECT COUNT(*) FROM sales_payments WHERE tenant_id = $1)::text
+           AS payments,
+         (
+           SELECT COUNT(*)
+           FROM inventory_movements
+           WHERE tenant_id = $1 AND movement_type = 'SALE'
+         )::text AS sale_movements,
+         (
+           SELECT COUNT(*)
+           FROM financial_movements
+           WHERE tenant_id = $1 AND source_type = 'SALE'
+         )::text AS financial_movements,
+         (
+           SELECT COUNT(*)
+           FROM customer_ledger_entries
+           WHERE tenant_id = $1
+         )::text AS ledger,
+         (SELECT COUNT(*) FROM customers WHERE tenant_id = $1)::text
+           AS customers`,
+      [fixture.tenant.id],
+    )
+
+    await getPool().query(
+      `CREATE FUNCTION ${functionName}()
+       RETURNS trigger
+       LANGUAGE plpgsql
+       AS $$
+       BEGIN
+         IF NEW.tenant_id = '${fixture.tenant.id}'::uuid
+            AND NEW.source_type = 'SALE'
+            AND NEW.entry_type = 'SALE_DUE' THEN
+           RAISE EXCEPTION 'Injected checkout failure';
+         END IF;
+         RETURN NEW;
+       END;
+       $$`,
+    )
+    await getPool().query(
+      `CREATE TRIGGER ${triggerName}
+       BEFORE INSERT ON customer_ledger_entries
+       FOR EACH ROW
+       EXECUTE FUNCTION ${functionName}()`,
+    )
+
+    const input: CommitSaleInput = {
+      operationId: randomUUID(),
+      businessDate: '2026-09-25',
+      customer: {
+        name: 'Rollback Buyer',
+        phone: '01799990000',
+      },
+      discountPaisa: '0',
+      lines: [
+        {
+          variantId: fixture.product.defaultVariantId,
+          baseQty: '1',
+        },
+      ],
+      payments: [
+        {
+          clientLineId: 'rollback-cash',
+          method: 'CASH',
+          amountPaisa: '400',
+        },
+      ],
+    }
+
+    try {
+      await expect(
+        new SalesService(getPool()).commitSale(
+          fixture.tenant.id,
+          fixture.user.id,
+          true,
+          input,
+        ),
+      ).rejects.toThrow('Injected checkout failure')
+    } finally {
+      await getPool().query(
+        `DROP TRIGGER IF EXISTS ${triggerName}
+         ON customer_ledger_entries`,
+      )
+      await getPool().query(
+        `DROP FUNCTION IF EXISTS ${functionName}()`,
+      )
+    }
+
+    const after = await getPool().query<{
+      invoices: string
+      lines: string
+      payments: string
+      sale_movements: string
+      financial_movements: string
+      ledger: string
+      customers: string
+    }>(
+      `SELECT
+         (SELECT COUNT(*) FROM sales_invoices WHERE tenant_id = $1)::text
+           AS invoices,
+         (SELECT COUNT(*) FROM sales_lines WHERE tenant_id = $1)::text
+           AS lines,
+         (SELECT COUNT(*) FROM sales_payments WHERE tenant_id = $1)::text
+           AS payments,
+         (
+           SELECT COUNT(*)
+           FROM inventory_movements
+           WHERE tenant_id = $1 AND movement_type = 'SALE'
+         )::text AS sale_movements,
+         (
+           SELECT COUNT(*)
+           FROM financial_movements
+           WHERE tenant_id = $1 AND source_type = 'SALE'
+         )::text AS financial_movements,
+         (
+           SELECT COUNT(*)
+           FROM customer_ledger_entries
+           WHERE tenant_id = $1
+         )::text AS ledger,
+         (SELECT COUNT(*) FROM customers WHERE tenant_id = $1)::text
+           AS customers`,
+      [fixture.tenant.id],
+    )
+
+    expect(after.rows[0]).toEqual(before.rows[0])
+
+    const lots = await fixture.inventory.listLots(
+      fixture.tenant.id,
+      fixture.product.defaultVariantId,
+    )
+    expect(lots[0]?.remainingBaseQty).toBe('10')
   })
 
 })
