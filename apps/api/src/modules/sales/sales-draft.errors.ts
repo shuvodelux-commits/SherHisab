@@ -9,3 +9,10 @@ export class SalesDraftVersionConflictError extends Error {
     this.currentVersion = currentVersion
   }
 }
+
+export class SalesDraftAccessError extends Error {
+  constructor() {
+    super('Draft access denied')
+    this.name = 'SalesDraftAccessError'
+  }
+}
