@@ -96,6 +96,41 @@ function conversionProduct(): ProductDetailDto {
   }
 }
 
+function trackingProduct(): ProductDetailDto {
+  return {
+    ...createdProduct(),
+    id: 'product-tracking-edit',
+    name: 'Existing Medicine',
+    trackingMode: 'BATCH_EXPIRY',
+    allocationPolicy: 'FEFO',
+    advanced: {
+      alternativeUnits: [],
+      specifications: [],
+      variants: [],
+      warrantyPolicy: {
+        id: 'warranty-policy-1',
+        productId: 'product-tracking-edit',
+        enabled: true,
+        durationValue: 12,
+        durationUnit: 'MONTH',
+        provider: 'Manufacturer',
+        text: 'Original warranty',
+      },
+      captureFields: [
+        {
+          id: 'capture-field-1',
+          key: 'dosage_form',
+          label: 'Dosage Form',
+          type: 'select',
+          selectOptions: ['Tablet', 'Syrup'],
+          required: true,
+          sortOrder: 0,
+        },
+      ],
+    },
+  }
+}
+
 function archivedProduct(): ProductDetailDto {
   return {
     ...createdProduct(),
@@ -153,6 +188,13 @@ function installFetch(options: { productError?: string } = {}) {
       init?.method === 'PATCH'
     ) {
       return jsonResponse(conversionProduct())
+    }
+
+    if (
+      url === '/api/private/products/product-tracking-edit' &&
+      init?.method === 'PATCH'
+    ) {
+      return jsonResponse(trackingProduct())
     }
 
     if (
@@ -767,6 +809,86 @@ describe('ProductFormDialog', () => {
       )
       expect(createCall).toBeDefined()
       const body = JSON.parse(String(createCall?.[1]?.body))
+
+      expect(body.trackingMode).toBe('BATCH_EXPIRY')
+      expect(body.allocationPolicy).toBe('FEFO')
+      expect(body.advanced.warrantyPolicy).toEqual({
+        enabled: true,
+        durationValue: 12,
+        durationUnit: 'MONTH',
+        provider: 'Manufacturer',
+        text: 'Original warranty',
+      })
+      expect(body.advanced.captureFields).toEqual([
+        {
+          key: 'dosage_form',
+          label: 'Dosage Form',
+          type: 'select',
+          selectOptions: ['Tablet', 'Syrup'],
+          required: true,
+        },
+      ])
+    })
+  })
+
+
+  it('round-trips existing mature tracking settings through Edit Product', async () => {
+    const fetchMock = installFetch()
+    renderForm({ mode: 'edit', product: trackingProduct() })
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Edit Product' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+
+    expect(screen.getByLabelText('Tracking')).toHaveTextContent(
+      'Batch & Expiry',
+    )
+    expect(screen.getByLabelText('Allocation Policy')).toHaveTextContent(
+      'FEFO',
+    )
+    expect(
+      screen.getByRole('checkbox', { name: 'Enable Warranty' }),
+    ).toBeChecked()
+    expect(screen.getByLabelText('Warranty Duration')).toHaveValue('12')
+    expect(
+      screen.getByLabelText('Warranty Duration Unit'),
+    ).toHaveTextContent('Months')
+    expect(screen.getByLabelText('Warranty Provider')).toHaveValue(
+      'Manufacturer',
+    )
+    expect(screen.getByLabelText('Warranty Terms')).toHaveValue(
+      'Original warranty',
+    )
+    expect(screen.getByLabelText('Capture Field Key 1')).toHaveValue(
+      'dosage_form',
+    )
+    expect(screen.getByLabelText('Capture Field Label 1')).toHaveValue(
+      'Dosage Form',
+    )
+    expect(screen.getByLabelText('Capture Field Type 1')).toHaveTextContent(
+      'Select',
+    )
+    expect(screen.getByLabelText('Capture Field Options 1')).toHaveValue(
+      'Tablet, Syrup',
+    )
+    expect(
+      screen.getByRole('checkbox', {
+        name: 'Capture Field Required 1',
+      }),
+    ).toBeChecked()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }))
+
+    await waitFor(() => {
+      const updateCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          input === '/api/private/products/product-tracking-edit' &&
+          init?.method === 'PATCH',
+      )
+      expect(updateCall).toBeDefined()
+      const body = JSON.parse(String(updateCall?.[1]?.body))
 
       expect(body.trackingMode).toBe('BATCH_EXPIRY')
       expect(body.allocationPolicy).toBe('FEFO')
