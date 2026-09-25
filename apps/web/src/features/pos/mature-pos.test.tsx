@@ -1416,12 +1416,21 @@ describe('Mature POS submission intent and invoice result', () => {
       firstOperationId,
     )
 
+    const invoiceResult = await screen.findByLabelText(
+      'Invoice INV-000123',
+    )
     expect(
-      await screen.findByText('Invoice INV-000123'),
+      within(invoiceResult).getByText('Invoice INV-000123'),
     ).toBeInTheDocument()
-    expect(screen.getByText('Total ৳1000.00')).toBeInTheDocument()
-    expect(screen.getByText('Paid ৳1000.00')).toBeInTheDocument()
-    expect(screen.getByText('Due ৳0.00')).toBeInTheDocument()
+    expect(
+      within(invoiceResult).getByText('Total ৳1000.00'),
+    ).toBeInTheDocument()
+    expect(
+      within(invoiceResult).getByText('Paid ৳1000.00'),
+    ).toBeInTheDocument()
+    expect(
+      within(invoiceResult).getByText('Due ৳0.00'),
+    ).toBeInTheDocument()
 
     expect(
       screen.queryByLabelText('Quantity for Payment Product'),
