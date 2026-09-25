@@ -81,6 +81,15 @@ const zeroStockProduct: PosProductSearchDto = {
   availableOwnBaseQty: '0',
 }
 
+const costedProduct: PosProductSearchDto = {
+  ...product('variant-costed', 'Costed Drill', 'COST-001'),
+  configuredPurchasePricePaisa: '7000',
+}
+
+const hiddenCostProduct: PosProductSearchDto = {
+  ...product('variant-hidden-cost', 'Hidden Cost Drill', 'HIDE-001'),
+}
+
 const vendor = {
   id: 'vendor-1',
   vendorCode: 'VEN-00001',
@@ -281,6 +290,12 @@ function installFetch() {
         }
         if (search.toLowerCase().includes('zero')) {
           return jsonResponse([zeroStockProduct])
+        }
+        if (search.toLowerCase().includes('costed')) {
+          return jsonResponse([costedProduct])
+        }
+        if (search.toLowerCase().includes('hidden cost')) {
+          return jsonResponse([hiddenCostProduct])
         }
         return jsonResponse(search ? [alpha, beta] : [])
       }
@@ -1002,6 +1017,79 @@ describe('Mature POS shortage resolution', () => {
         name: 'Negative Stock Sale',
       }),
     ).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+
+describe('Mature POS purchase-price reveal', () => {
+  it('does not render a purchase-price eye when the secure DTO omits configured purchase price', async () => {
+    installFetch()
+    renderPos()
+
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Search products' }),
+      { target: { value: 'hidden cost' } },
+    )
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Add Hidden Cost Drill',
+      }),
+    )
+
+    await screen.findByLabelText('Quantity for Hidden Cost Drill')
+    expect(
+      screen.queryByRole('button', {
+        name: 'Show purchase price for Hidden Cost Drill',
+      }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Purchase Price/i)).not.toBeInTheDocument()
+  })
+
+  it('reveals only configured purchase price and automatically hides it after 500 ms', async () => {
+    installFetch()
+    renderPos()
+
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Search products' }),
+      { target: { value: 'costed' } },
+    )
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Add Costed Drill',
+      }),
+    )
+
+    const rowInput = await screen.findByLabelText(
+      'Quantity for Costed Drill',
+    )
+    const row = rowInput.closest('tr')
+    if (!row) {
+      throw new Error('Costed cart row not found')
+    }
+
+    const reveal = within(row).getByRole('button', {
+      name: 'Show purchase price for Costed Drill',
+    })
+    fireEvent.click(reveal)
+
+    expect(
+      within(row).getByText('Purchase Price ৳70.00'),
+    ).toBeInTheDocument()
+    expect(within(row).queryByText(/COGS/i)).not.toBeInTheDocument()
+    expect(within(row).queryByText(/FIFO cost/i)).not.toBeInTheDocument()
+
+    await new Promise((resolve) => setTimeout(resolve, 550))
+
+    await waitFor(() => {
+      expect(
+        within(row).queryByText('Purchase Price ৳70.00'),
+      ).not.toBeInTheDocument()
+    })
+    expect(
+      within(row).getByRole('button', {
+        name: 'Show purchase price for Costed Drill',
+      }),
+    ).toBeInTheDocument()
   })
 })
 
