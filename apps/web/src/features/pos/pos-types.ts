@@ -147,9 +147,37 @@ export interface CommitSaleLinePayload {
   shortageResolution?: PosShortageResolutionDto
 }
 
+export type PosPaymentMethod =
+  | 'CASH'
+  | 'BANK'
+  | 'MOBILE_BANKING'
+  | 'CUSTOMER_CREDIT'
+
+export interface PosPaymentLineDraft {
+  clientLineId: string
+  method: PosPaymentMethod
+  accountId: string | null
+  amountInput: string
+}
+
+export interface CommitSalePaymentPayload {
+  clientLineId: string
+  method: PosPaymentMethod
+  accountId?: string
+  amountPaisa: string
+}
+
 export interface CommitSalePayload {
   businessDate: string
   lines: CommitSaleLinePayload[]
+  customer?: {
+    selectedCustomerId?: string
+    name: string
+    phone: string
+    guardianName?: string
+    address?: string
+  }
+  payments?: CommitSalePaymentPayload[]
 }
 
 export interface CommittedSaleDto {

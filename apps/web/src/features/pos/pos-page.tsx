@@ -26,11 +26,13 @@ import {
 import { getSession, type AuthSession } from '../auth-api'
 import {
   commitSale,
+  getPosBootstrap,
   quoteSaleLine,
   searchPosProducts,
 } from './pos-api'
 import type {
   PosLineQuoteDto,
+  PosPaymentLineDraft,
   PosProductSearchDto,
   PosVendorSearchDto,
 } from './pos-types'
@@ -38,8 +40,10 @@ import {
   CustomerPanel,
   type PosCustomerDraft,
 } from './components/customer-panel'
+import { CheckoutSummary } from './components/checkout-summary'
 import { ConversionEditor } from './components/conversion-editor'
 import { CostReveal } from './components/cost-reveal'
+import { PaymentLines } from './components/payment-lines'
 import { ShortageResolution } from './components/shortage-resolution'
 
 interface CartLineState {
@@ -101,6 +105,35 @@ function lineTotalPaisa(line: CartLineState): string {
     : line.quote.automaticSalesTotalPaisa
 }
 
+let fallbackPaymentId = 0
+
+function newPaymentLine(): PosPaymentLineDraft {
+  fallbackPaymentId += 1
+  const clientLineId =
+    typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `payment-${fallbackPaymentId}`
+
+  return {
+    clientLineId,
+    method: 'CASH',
+    accountId: null,
+    amountInput: '',
+  }
+}
+
+function paymentAmountPaisa(value: string): string {
+  if (!value.trim()) {
+    return '0'
+  }
+
+  try {
+    return parseTakaToPaisa(value)
+  } catch {
+    return '0'
+  }
+}
+
 export function PosPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -116,6 +149,9 @@ export function PosPage() {
     address: '',
     balancePaisa: null,
   })
+  const [payments, setPayments] = useState<PosPaymentLineDraft[]>(
+    () => [newPaymentLine()],
+  )
   const [pageError, setPageError] = useState('')
   const [saleMessage, setSaleMessage] = useState('')
 
@@ -129,6 +165,11 @@ export function PosPage() {
       'SALES_OVERRIDE_SELLING_PRICE',
     ) ?? false
 
+  const bootstrapQuery = useQuery({
+    queryKey: ['pos-bootstrap'],
+    queryFn: getPosBootstrap,
+  })
+
   const normalizedSearch = search.trim()
   const productsQuery = useQuery({
     queryKey: ['pos-products', normalizedSearch],
@@ -137,9 +178,44 @@ export function PosPage() {
   })
 
   const saleMutation = useMutation({
-    mutationFn: () =>
-      commitSale({
+    mutationFn: () => {
+      const committedPayments = payments.flatMap((payment) => {
+        const amountPaisa = paymentAmountPaisa(payment.amountInput)
+        if (BigInt(amountPaisa) <= 0n) {
+          return []
+        }
+
+        return [
+          {
+            clientLineId: payment.clientLineId,
+            method: payment.method,
+            ...(payment.accountId
+              ? { accountId: payment.accountId }
+              : {}),
+            amountPaisa,
+          },
+        ]
+      })
+
+      return commitSale({
         businessDate: todayLocalDate(),
+        ...(committedPayments.length > 0
+          ? {
+              customer: {
+                ...(customer.selectedCustomerId
+                  ? {
+                      selectedCustomerId:
+                        customer.selectedCustomerId,
+                    }
+                  : {}),
+                name: customer.name,
+                phone: customer.phone,
+                guardianName: customer.guardianName,
+                address: customer.address,
+              },
+              payments: committedPayments,
+            }
+          : {}),
         lines: cart.map((line) => ({
           variantId: line.product.variantId,
           baseQty: line.quote.baseQty,
@@ -169,9 +245,11 @@ export function PosPage() {
                 }
               : {}),
         })),
-      }),
+      })
+    },
     onSuccess: async () => {
       setCart([])
+      setPayments([newPaymentLine()])
       setPageError('')
       setSaleMessage('Sale completed')
       await Promise.all([
@@ -195,6 +273,42 @@ export function PosPage() {
   const cartTotalPaisa = sumPaisa(
     cart.map((line) => lineTotalPaisa(line)),
   )
+
+  const paidPaisa = sumPaisa(
+    payments.map((payment) =>
+      paymentAmountPaisa(payment.amountInput),
+    ),
+  )
+  const duePaisa = (
+    BigInt(cartTotalPaisa) > BigInt(paidPaisa)
+      ? BigInt(cartTotalPaisa) - BigInt(paidPaisa)
+      : 0n
+  ).toString()
+
+  function addPayment() {
+    setPayments((current) => [...current, newPaymentLine()])
+  }
+
+  function changePayment(
+    clientLineId: string,
+    patch: Partial<PosPaymentLineDraft>,
+  ) {
+    setPayments((current) =>
+      current.map((payment) =>
+        payment.clientLineId === clientLineId
+          ? { ...payment, ...patch }
+          : payment,
+      ),
+    )
+  }
+
+  function removePayment(clientLineId: string) {
+    setPayments((current) =>
+      current.filter(
+        (payment) => payment.clientLineId !== clientLineId,
+      ),
+    )
+  }
 
   function changeProductSearch(value: string) {
     setSearch(value)
@@ -1078,10 +1192,18 @@ export function PosPage() {
 
           <div className="pos-cart-footer">
             <Separator />
-            <div className="pos-total-row">
-              <span>Grand Total</span>
-              <strong>৳{formatPaisaToTaka(cartTotalPaisa)}</strong>
-            </div>
+            <PaymentLines
+              accounts={bootstrapQuery.data?.financialAccounts ?? []}
+              lines={payments}
+              onAdd={addPayment}
+              onChange={changePayment}
+              onRemove={removePayment}
+            />
+            <CheckoutSummary
+              duePaisa={duePaisa}
+              grandTotalPaisa={cartTotalPaisa}
+              paidPaisa={paidPaisa}
+            />
             <Button
               disabled={
                 cart.length === 0 ||

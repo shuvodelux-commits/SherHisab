@@ -106,6 +106,25 @@ function installFetch(
         )
       }
 
+      if (url === '/api/private/pos/bootstrap') {
+        return jsonResponse({
+          capabilities: {
+            canSell: true,
+            canOverrideSellingPrice: true,
+            canViewConfiguredPurchasePrice: false,
+            canBackdate: true,
+          },
+          settings: {
+            showPurchasePrice: false,
+            requireCashSession: false,
+            invoiceShareEnabled: false,
+          },
+          financialAccounts: [],
+          activeCashSession: null,
+          recent: { drafts: [], templates: [] },
+        })
+      }
+
       if (
         url === '/api/private/sales' &&
         init?.method === 'POST'

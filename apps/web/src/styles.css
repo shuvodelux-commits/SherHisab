@@ -2607,3 +2607,53 @@ p {
     grid-column: 1;
   }
 }
+
+
+.pos-payment-lines {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.pos-payment-heading,
+.pos-settlement-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.pos-payment-list {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.pos-payment-row {
+  align-items: center;
+  display: grid;
+  gap: 0.375rem;
+  grid-template-columns: minmax(7.5rem, 0.9fr) minmax(0, 1fr) minmax(6rem, 0.7fr) auto;
+}
+
+.pos-payment-row:has(.pos-payment-account) {
+  grid-template-columns: minmax(7.5rem, 0.8fr) minmax(8rem, 1fr) minmax(6rem, 0.7fr) auto;
+}
+
+.pos-payment-amount {
+  text-align: end;
+}
+
+.pos-checkout-summary {
+  display: grid;
+  gap: 0.25rem;
+}
+
+@media (max-width: 720px) {
+  .pos-payment-row,
+  .pos-payment-row:has(.pos-payment-account) {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pos-payment-amount {
+    text-align: start;
+  }
+}

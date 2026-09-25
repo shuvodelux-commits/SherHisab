@@ -1168,9 +1168,7 @@ describe('Mature POS multiple payments', () => {
     method: 'Cash' | 'Bank' | 'Mobile Banking',
   ) {
     fireEvent.click(
-      screen.getByRole('button', {
-        name: `Payment method ${index}`,
-      }),
+      screen.getByLabelText(`Payment method ${index}`),
     )
     fireEvent.click(
       screen.getByRole('option', { name: method }),
@@ -1179,9 +1177,7 @@ describe('Mature POS multiple payments', () => {
 
   function choosePaymentAccount(index: number, account: string) {
     fireEvent.click(
-      screen.getByRole('button', {
-        name: `Payment account ${index}`,
-      }),
+      screen.getByLabelText(`Payment account ${index}`),
     )
     fireEvent.click(
       screen.getByRole('option', { name: account }),
@@ -1197,7 +1193,7 @@ describe('Mature POS multiple payments', () => {
       target: { value: '500' },
     })
     expect(
-      screen.queryByRole('button', { name: 'Payment account 1' }),
+      screen.queryByLabelText('Payment account 1'),
     ).not.toBeInTheDocument()
 
     fireEvent.click(
@@ -1227,7 +1223,7 @@ describe('Mature POS multiple payments', () => {
     expect(screen.getByText('Paid ৳700.00')).toBeInTheDocument()
     expect(screen.getByText('Due ৳300.00')).toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: 'Payment account 2' }),
+      screen.getByLabelText('Payment account 2'),
     ).not.toHaveTextContent('DBBL')
   })
 
