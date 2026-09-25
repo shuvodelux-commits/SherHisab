@@ -861,10 +861,16 @@ export function PosPage() {
       if (!profile || profile.type !== 'COMPOUND' || profile.productId !== target.product.productId) {
         throw new Error('Current conversion profile is unavailable. Reload the Draft.')
       }
+      const components = Object.fromEntries(
+        profile.components.map(({ key }) => [
+          key,
+          target.conversionComponents[key] ?? '0',
+        ]),
+      )
       try {
         const quote = await quoteSaleLine(variantId, undefined, {
           kind: 'COMPONENTS', profileId: profile.id,
-          profileVersion: profile.version, components: target.conversionComponents,
+          profileVersion: profile.version, components,
         })
         setCart((lines) => lines.map((line) => line.product.variantId === variantId
           ? { ...line, quote, quantity: quote.displayQty,
@@ -876,6 +882,7 @@ export function PosPage() {
         // Keep the entered components visible while the cashier corrects them.
         setCart((lines) => lines.map((line) => line.product.variantId === variantId
           ? { ...line, quote: { ...line.quote, conversion: { ...line.quote.conversion, snapshot: profile } },
+              conversionComponents: components,
               currentConversionProfile: undefined, conversionExpanded: true,
               isQuoting: false, error: 'Review quantity details under the current conversion profile.' }
           : line))

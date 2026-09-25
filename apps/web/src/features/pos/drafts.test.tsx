@@ -441,4 +441,98 @@ describe('POS drafts', () => {
       normalizedQuantitySnapshot: { baseQty: '6' },
     })
   })
+
+  it.each([
+    { caseName: 'removed component', newKey: null },
+    { caseName: 'renamed component', newKey: 'coil' },
+  ])('adopts current profile with a $caseName and sends only current keys through post', async ({ newKey }) => {
+    const component = (key: string, sortOrder: number) => ({
+      id: `${key}-1`, key, label: key[0]!.toUpperCase() + key.slice(1),
+      unitId: 'unit-1', baseFactorNumerator: '1', baseFactorDenominator: '1',
+      sortOrder, minValue: '0', maxExclusive: null, allowFraction: false,
+      autoNormalizeRemainder: false,
+    })
+    const oldProfile = {
+      id: 'profile-pipe', productId: 'product-1', type: 'COMPOUND' as const,
+      version: 4, baseUnitId: 'unit-1', pricingUnitId: 'unit-1',
+      pricingBaseFactorNumerator: '1', pricingBaseFactorDenominator: '1',
+      displayPrecision: 0, components: [component('gauge', 0), component('gira', 1)],
+    }
+    const activeProfile = {
+      ...oldProfile, version: 5,
+      components: newKey ? [component('gauge', 0), component(newKey, 1)] : [component('gauge', 0)],
+    }
+    const selectedDraft: SalesDraftDto = {
+      ...draft,
+      lines: [{
+        ...draft.lines[0]!,
+        quantityInput: { kind: 'COMPONENTS', profileId: oldProfile.id, profileVersion: 4, components: { gauge: '2', gira: '3' } },
+        normalizedQuantitySnapshot: { baseQty: '5', pricingQty: '5', displayQty: '5', components: { gauge: '2', gira: '3' }, snapshot: oldProfile },
+      }],
+    }
+    let persistedDraft = selectedDraft
+    const fetchMock = installFetch(selectedDraft)
+    const originalFetch = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/private/pos/quote-line' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as {
+          variantId: string
+          baseQty?: string
+          quantity?: { profileVersion: number; components: Record<string, string> }
+        }
+        if (body.quantity?.profileVersion === 4) return jsonResponse({ error: 'Conversion profile version was not found.' }, 400)
+        const values = body.quantity?.components ?? { gauge: body.baseQty ?? '5', ...(newKey ? { [newKey]: '0' } : {}) }
+        if (Object.keys(values).some((key) => !activeProfile.components.some((item) => item.key === key))) {
+          return jsonResponse({ error: 'Unknown conversion component: gira' }, 400)
+        }
+        const baseQty = body.quantity ? String(Object.values(values).reduce((sum, value) => sum + Number(value), 0)) : body.baseQty ?? '5'
+        return jsonResponse({
+          variantId: body.variantId, baseQty, pricingQty: baseQty, displayQty: baseQty,
+          availableOwnBaseQty: '10', shortfallBaseQty: '0',
+          automaticSalesTotalPaisa: String(Number(baseQty) * 10000),
+          effectiveUnitSellingPricePaisa: '10000', sellingSegments: [],
+          conversion: { baseQty, pricingQty: baseQty, displayQty: baseQty, components: values, snapshot: activeProfile },
+        })
+      }
+      if (url === '/api/private/sales/drafts/draft-1' && init?.method === 'PATCH') {
+        const { expectedVersion, ...state } = JSON.parse(String(init.body)) as { expectedVersion: number } & SalesDraftDto
+        persistedDraft = { ...persistedDraft, ...state, version: expectedVersion + 1 }
+        return jsonResponse(persistedDraft)
+      }
+      if (url === '/api/private/sales/drafts/draft-1') return jsonResponse(persistedDraft)
+      if (url === '/api/private/sales/drafts/draft-1/post' && init?.method === 'POST') {
+        return jsonResponse({ id: 'sale-1', invoiceNumber: 'INV-000001', totalSalesPaisa: '27000', lines: [] })
+      }
+      return originalFetch(input, init)
+    })
+
+    renderPos()
+    fireEvent.click(screen.getByRole('button', { name: /Recent Drafts/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /DRAFT-000001.*Ayesha/i }))
+    expect(await screen.findByRole('textbox', { name: 'Quantity for Draft Pipe' })).toHaveValue('5')
+    expect(await screen.findByText(/Conversion profile version was not found/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Complete Sale' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Use current conversion profile for Draft Pipe/i }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Gauge for Draft Pipe' })).toHaveValue('2'))
+    expect(screen.queryByRole('textbox', { name: 'Gira for Draft Pipe' })).not.toBeInTheDocument()
+    if (newKey) expect(screen.getByRole('textbox', { name: 'Coil for Draft Pipe' })).toHaveValue('0')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Gauge for Draft Pipe' }), { target: { value: '3' } })
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Quantity for Draft Pipe' })).toHaveValue('3'))
+    expect(screen.getByRole('button', { name: 'Complete Sale' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Update Draft' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/private/sales/drafts/draft-1', expect.objectContaining({ method: 'PATCH' })))
+    const patch = fetchMock.mock.calls.find(([url, init]) => url === '/api/private/sales/drafts/draft-1' && init?.method === 'PATCH')?.[1]
+    const savedLine = JSON.parse(String(patch?.body)).lines[0]
+    expect(savedLine.quantityInput.components).toEqual({ gauge: '3', ...(newKey ? { [newKey]: '0' } : {}) })
+    expect(savedLine).toMatchObject({
+      quantityInput: { kind: 'COMPONENTS', profileVersion: 5 },
+      normalizedQuantitySnapshot: { baseQty: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Complete Sale' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/private/sales/drafts/draft-1/post', expect.objectContaining({ method: 'POST' })))
+    expect(await screen.findByText('Sale completed')).toBeInTheDocument()
+  })
 })
