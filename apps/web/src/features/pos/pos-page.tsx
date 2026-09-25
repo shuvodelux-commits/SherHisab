@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 import {
   useMutation,
   useQuery,
@@ -31,6 +31,8 @@ import {
   searchPosProducts,
 } from './pos-api'
 import type {
+  CommittedSaleDto,
+  CommitSalePayload,
   PosLineQuoteDto,
   PosPaymentLineDraft,
   PosProductSearchDto,
@@ -43,6 +45,7 @@ import {
 import { CheckoutSummary } from './components/checkout-summary'
 import { ConversionEditor } from './components/conversion-editor'
 import { CostReveal } from './components/cost-reveal'
+import { InvoiceResult } from './components/invoice-result'
 import { PaymentLines } from './components/payment-lines'
 import { ShortageResolution } from './components/shortage-resolution'
 
@@ -134,13 +137,8 @@ function paymentAmountPaisa(value: string): string {
   }
 }
 
-export function PosPage() {
-  const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [activeResultIndex, setActiveResultIndex] = useState(-1)
-  const [cart, setCart] = useState<CartLineState[]>([])
-  const [customer, setCustomer] = useState<PosCustomerDraft>({
+function emptyCustomerDraft(): PosCustomerDraft {
+  return {
     selectedCustomerId: null,
     selectedCustomerCode: null,
     name: '',
@@ -148,10 +146,35 @@ export function PosPage() {
     guardianName: '',
     address: '',
     balancePaisa: null,
-  })
+  }
+}
+
+function newOperationId(): string {
+  if (typeof globalThis.crypto?.randomUUID !== 'function') {
+    throw new Error('Secure random UUID is unavailable.')
+  }
+
+  return globalThis.crypto.randomUUID()
+}
+
+export function PosPage() {
+  const queryClient = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [activeResultIndex, setActiveResultIndex] = useState(-1)
+  const [cart, setCart] = useState<CartLineState[]>([])
+  const [customer, setCustomer] = useState<PosCustomerDraft>(
+    emptyCustomerDraft,
+  )
   const [payments, setPayments] = useState<PosPaymentLineDraft[]>(
     () => [newPaymentLine()],
   )
+  const [completedSale, setCompletedSale] =
+    useState<CommittedSaleDto | null>(null)
+  const submissionIntentRef = useRef<{
+    fingerprint: string
+    operationId: string
+  } | null>(null)
   const [pageError, setPageError] = useState('')
   const [saleMessage, setSaleMessage] = useState('')
 
@@ -197,7 +220,7 @@ export function PosPage() {
         ]
       })
 
-      return commitSale({
+      const payload: CommitSalePayload = {
         businessDate: todayLocalDate(),
         ...(committedPayments.length > 0
           ? {
@@ -245,11 +268,33 @@ export function PosPage() {
                 }
               : {}),
         })),
+      }
+
+      const fingerprint = JSON.stringify(payload)
+      let intent = submissionIntentRef.current
+
+      if (!intent || intent.fingerprint !== fingerprint) {
+        intent = {
+          fingerprint,
+          operationId: newOperationId(),
+        }
+        submissionIntentRef.current = intent
+      }
+
+      return commitSale({
+        ...payload,
+        operationId: intent.operationId,
       })
     },
-    onSuccess: async () => {
+    onSuccess: async (sale) => {
+      submissionIntentRef.current = null
+      setCompletedSale(sale)
       setCart([])
+      setCustomer(emptyCustomerDraft())
       setPayments([newPaymentLine()])
+      setSearch('')
+      setSearchOpen(false)
+      setActiveResultIndex(-1)
       setPageError('')
       setSaleMessage('Sale completed')
       await Promise.all([
@@ -787,6 +832,7 @@ export function PosPage() {
           {saleMessage}
         </div>
       ) : null}
+      {completedSale ? <InvoiceResult sale={completedSale} /> : null}
 
       <div className="pos-workspace">
         <section className="pos-panel pos-catalog-panel">

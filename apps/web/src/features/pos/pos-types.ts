@@ -168,6 +168,7 @@ export interface CommitSalePaymentPayload {
 }
 
 export interface CommitSalePayload {
+  operationId?: string
   businessDate: string
   lines: CommitSaleLinePayload[]
   customer?: {
@@ -182,8 +183,14 @@ export interface CommitSalePayload {
 
 export interface CommittedSaleDto {
   id: string
+  invoiceNumber: string
   businessDate: string
   totalSalesPaisa: string
+  grandTotalPaisa?: string
+  settlementStatus?: 'DUE' | 'PARTIAL' | 'PAID'
+  paidAmountPaisa?: string
+  duePaisa?: string
+  changePaisa?: string
   lines: Array<{
     id: string
     variantId: string

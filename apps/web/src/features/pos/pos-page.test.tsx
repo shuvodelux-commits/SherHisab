@@ -132,8 +132,14 @@ function installFetch(
         return jsonResponse(
           {
             id: 'sale-1',
+            invoiceNumber: 'INV-000001',
             businessDate: '2026-09-25',
             totalSalesPaisa: '14100',
+            grandTotalPaisa: '14100',
+            settlementStatus: 'PAID',
+            paidAmountPaisa: '14100',
+            duePaisa: '0',
+            changePaisa: '0',
             lines: [],
           },
           201,

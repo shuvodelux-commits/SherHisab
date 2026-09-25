@@ -2657,3 +2657,18 @@ p {
     text-align: start;
   }
 }
+
+
+.pos-invoice-result {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.pos-invoice-result strong {
+  margin-inline-end: auto;
+}
