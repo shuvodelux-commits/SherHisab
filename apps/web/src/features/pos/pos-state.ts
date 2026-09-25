@@ -1,5 +1,6 @@
 import type { SetStateAction } from 'react'
 import type {
+  PosConversionProfileDto,
   PosLineQuoteDto,
   PosProductSearchDto,
   SalesDraftLineDto,
@@ -22,6 +23,7 @@ export interface CartLineState {
   error: string
   savedDraftLine?: SalesDraftLineDto
   draftLineEdited?: boolean
+  currentConversionProfile?: PosConversionProfileDto
 }
 
 export type CartAction =

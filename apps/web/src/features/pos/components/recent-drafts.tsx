@@ -16,9 +16,10 @@ import type { SalesDraftDto } from '../pos-types'
 
 interface RecentDraftsProps {
   onOpen: (draftId: string) => void
+  onArchived: (draftId: string) => void
 }
 
-export function RecentDrafts({ onOpen }: RecentDraftsProps) {
+export function RecentDrafts({ onOpen, onArchived }: RecentDraftsProps) {
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(false)
   const [archiveTarget, setArchiveTarget] = useState<SalesDraftDto | null>(null)
@@ -30,8 +31,9 @@ export function RecentDrafts({ onOpen }: RecentDraftsProps) {
   const archiveMutation = useMutation({
     mutationFn: (draft: SalesDraftDto) =>
       archiveSalesDraft(draft.id, draft.version),
-    onSuccess: async () => {
+    onSuccess: async (_archived, draft) => {
       setArchiveTarget(null)
+      onArchived(draft.id)
       await queryClient.invalidateQueries({ queryKey: ['sales-drafts'] })
     },
   })

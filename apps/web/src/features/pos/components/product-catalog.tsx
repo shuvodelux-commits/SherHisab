@@ -15,6 +15,7 @@ interface ProductCatalogProps {
   isPending: boolean
   onAdd: (product: PosProductSearchDto) => void
   onOpenDraft: (draftId: string) => void
+  onArchiveDraft: (draftId: string) => void
   onClear: () => void
   onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
   onSearchChange: (value: string) => void
@@ -29,6 +30,7 @@ export function ProductCatalog({
   isPending,
   onAdd,
   onOpenDraft,
+  onArchiveDraft,
   onClear,
   onKeyDown,
   onSearchChange,
@@ -43,7 +45,7 @@ export function ProductCatalog({
         <BilingualLabel en="Add Product" bn="পণ্য যোগ করুন" />
       </div>
 
-      <RecentDrafts onOpen={onOpenDraft} />
+      <RecentDrafts onOpen={onOpenDraft} onArchived={onArchiveDraft} />
 
 
       <div className="pos-search-wrap">

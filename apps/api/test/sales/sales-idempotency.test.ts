@@ -6,6 +6,7 @@ import { AuthService } from '../../src/modules/auth/auth.service'
 import { SESSION_COOKIE_NAME } from '../../src/modules/auth/session'
 import { InventoryService } from '../../src/modules/products/inventory.service'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
+import { SalesDraftService } from '../../src/modules/sales/sales-draft.service'
 import {
   cleanupProductTestTenants,
   createProductTestTenant,
@@ -310,6 +311,48 @@ describe.skipIf(!hasDatabase)('mature sales numbering and idempotency', () => {
       movements: '1',
       customerLedger: '0',
     })
+  })
+
+  it('keeps direct and draft operation IDs bound to their original sale source', async () => {
+    const fixture = await createFixture('Operation Source Binding')
+    const drafts = new SalesDraftService(fixture.tenant.id, getPool())
+    const makeDraft = () => drafts.create(fixture.user.id, {
+      customer: { selectedCustomerId: null, name: 'Draft Buyer', phone: '01777777777', guardianName: '', address: '' },
+      discountPaisa: '0', payments: [], note: '',
+      lines: [{
+        variantId: fixture.product.defaultVariantId,
+        quantityInput: { kind: 'SIMPLE' as const, baseQty: '1' },
+        normalizedQuantitySnapshot: { baseQty: '1', pricingQty: '1', displayQty: '1', components: {}, snapshot: null },
+        pricingMode: 'AUTO' as const, manualUnitSellingPricePaisa: null,
+        shortageResolution: null, serialIds: [], batchSelection: null,
+        warrantySnapshot: null, captureValues: {},
+      }],
+    })
+
+    const draftFirst = await makeDraft()
+    const draftOperation = randomUUID()
+    const draftSale = await drafts.post(fixture.user.id, draftFirst.id, draftFirst.version, {
+      operationId: draftOperation, businessDate: '2026-09-25', canOverrideSellingPrice: true,
+    })
+    const directAgainstDraft = await postSale(fixture.cookie, payload(fixture, draftOperation))
+    expect(directAgainstDraft.status).toBe(409)
+    expect(await drafts.post(fixture.user.id, draftFirst.id, draftFirst.version, {
+      operationId: draftOperation, businessDate: '2026-09-25', canOverrideSellingPrice: true,
+    })).toMatchObject({ id: draftSale.id })
+
+    const directOperation = randomUUID()
+    const direct = await postSale(fixture.cookie, payload(fixture, directOperation))
+    expect(direct.status).toBe(201)
+    const directSale = await direct.json() as { id: string }
+    const directRetry = await postSale(fixture.cookie, payload(fixture, directOperation))
+    expect(directRetry.status).toBe(201)
+    expect(await directRetry.json()).toMatchObject({ id: directSale.id })
+    const draftSecond = await makeDraft()
+    await expect(drafts.post(fixture.user.id, draftSecond.id, draftSecond.version, {
+      operationId: directOperation, businessDate: '2026-09-25', canOverrideSellingPrice: true,
+    })).rejects.toThrow(/operation|draft|conflict/i)
+    expect(await drafts.get(draftSecond.id, fixture.user.id)).toMatchObject({ status: 'ACTIVE', postedSaleId: null })
+    expect((await countRows(fixture.tenant.id)).invoices).toBe('2')
   })
 
   it('scopes operationId idempotency to the authenticated tenant', async () => {

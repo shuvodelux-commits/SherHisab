@@ -198,14 +198,17 @@ export class SalesService {
               input.operationId!,
             )
           if (existing) {
-            if (input.sourceDraft) {
+            {
               const source = await salesRepository.findDraftSourceByOperationId(
                 tenantId,
                 input.operationId!,
               )
               if (
-                source?.id !== input.sourceDraft.id ||
-                source.version !== input.sourceDraft.version
+                (input.sourceDraft && (
+                  source?.id !== input.sourceDraft.id ||
+                  source.version !== input.sourceDraft.version
+                )) ||
+                (!input.sourceDraft && source !== null)
               ) {
                 throw new SalesConflictError('Operation ID belongs to a different sale or Draft.')
               }
@@ -696,12 +699,15 @@ export class SalesService {
           input.operationId,
         )
         if (existing) {
-          if (input.sourceDraft) {
+          {
             const source = await new SalesRepository(this.database)
               .findDraftSourceByOperationId(tenantId, input.operationId)
             if (
-              source?.id !== input.sourceDraft.id ||
-              source.version !== input.sourceDraft.version
+              (input.sourceDraft && (
+                source?.id !== input.sourceDraft.id ||
+                source.version !== input.sourceDraft.version
+              )) ||
+              (!input.sourceDraft && source !== null)
             ) {
               throw new SalesConflictError('Operation ID belongs to a different sale or Draft.')
             }

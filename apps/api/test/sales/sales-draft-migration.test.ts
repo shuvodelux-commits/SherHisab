@@ -37,6 +37,16 @@ describe.skipIf(!hasDatabase)('sales draft source migration', () => {
           status TEXT NOT NULL, posted_sale_id UUID, posted_operation_id UUID
         );
       `)
+      // Simulate an installation that already applied the earlier 012b check.
+      await isolated.query(`
+        ALTER TABLE sales_invoices
+          ADD COLUMN source_draft_id UUID,
+          ADD COLUMN source_draft_version INTEGER,
+          ADD CONSTRAINT sales_invoice_draft_source_pair_check CHECK (
+            (source_draft_id IS NULL AND source_draft_version IS NULL)
+            OR (source_draft_id IS NOT NULL AND source_draft_version > 0)
+          )
+      `)
       const tenantId = randomUUID()
       const uniqueSaleId = randomUUID()
       const uniqueDraftId = randomUUID()
@@ -75,6 +85,29 @@ describe.skipIf(!hasDatabase)('sales draft source migration', () => {
         source_draft_id: null,
         source_draft_version: null,
       })
+
+      const accepts = async (sourceDraftId: string | null, sourceDraftVersion: number | null) => {
+        await isolated.query('SAVEPOINT source_pair')
+        try {
+          await isolated.query(
+            `INSERT INTO sales_invoices (id, tenant_id, operation_id, source_draft_id, source_draft_version)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [randomUUID(), tenantId, randomUUID(), sourceDraftId, sourceDraftVersion],
+          )
+          await isolated.query('RELEASE SAVEPOINT source_pair')
+          return true
+        } catch {
+          await isolated.query('ROLLBACK TO SAVEPOINT source_pair')
+          await isolated.query('RELEASE SAVEPOINT source_pair')
+          return false
+        }
+      }
+      await isolated.query('BEGIN')
+      expect(await accepts(null, null)).toBe(true)
+      expect(await accepts(randomUUID(), 1)).toBe(true)
+      expect(await accepts(randomUUID(), null)).toBe(false)
+      expect(await accepts(null, 1)).toBe(false)
+      await isolated.query('ROLLBACK')
     } finally {
       await isolated.end().catch(() => undefined)
       const cleanup = new Client({ connectionString: adminUrl.toString() })

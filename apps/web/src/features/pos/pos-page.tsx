@@ -386,6 +386,7 @@ export function PosPage() {
       setPageError('')
       setSaleMessage('Sale completed')
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['sales-drafts'] }),
         queryClient.invalidateQueries({ queryKey: ['products'] }),
         queryClient.invalidateQueries({ queryKey: ['pos-products'] }),
         queryClient.invalidateQueries({ queryKey: ['product-lots'] }),
@@ -512,6 +513,7 @@ export function PosPage() {
       const restoredLines = await Promise.all(draft.lines.map(async (savedLine) => {
         const product = await getPosProductByVariant(savedLine.variantId)
         let conversionError = ''
+        let currentConversionProfile: CartLineState['currentConversionProfile']
         let quote: PosLineQuoteDto
         try {
           // Validate the stored components against the current Product profile.
@@ -550,6 +552,7 @@ export function PosPage() {
             if (!activeProfile || activeProfile.productId !== product.productId) {
               throw new Error('Draft conversion profile is no longer compatible with this Product.')
             }
+            currentConversionProfile = activeProfile
             const currentQuote = await quoteSaleLine(
               savedLine.variantId,
               undefined,
@@ -566,6 +569,7 @@ export function PosPage() {
             )) {
               throw new Error('Draft conversion changed; reload the Draft and review its quantity before posting.')
             }
+            if (!conversionError) currentConversionProfile = undefined
           } catch (error) {
             conversionError ||= error instanceof Error
               ? error.message
@@ -592,6 +596,7 @@ export function PosPage() {
           vendorUnitCostInput: vendor ? formatPaisaToTaka(vendor.unitCostPaisa) : '',
           isQuoting: false,
           error: conversionError,
+          currentConversionProfile,
           savedDraftLine: savedLine,
         }
       }))
@@ -841,6 +846,44 @@ export function PosPage() {
             : line,
         ),
       )
+    }
+  }
+
+  async function adoptCurrentConversionProfile(variantId: string) {
+    const target = cart.find((line) => line.product.variantId === variantId)
+    if (!target?.currentConversionProfile) return
+    setCart((lines) => lines.map((line) => line.product.variantId === variantId
+      ? { ...line, isQuoting: true }
+      : line))
+    try {
+      const active = await quoteSaleLine(variantId, target.quote.baseQty)
+      const profile = active.conversion.snapshot
+      if (!profile || profile.type !== 'COMPOUND' || profile.productId !== target.product.productId) {
+        throw new Error('Current conversion profile is unavailable. Reload the Draft.')
+      }
+      try {
+        const quote = await quoteSaleLine(variantId, undefined, {
+          kind: 'COMPONENTS', profileId: profile.id,
+          profileVersion: profile.version, components: target.conversionComponents,
+        })
+        setCart((lines) => lines.map((line) => line.product.variantId === variantId
+          ? { ...line, quote, quantity: quote.displayQty,
+              conversionComponents: quote.conversion.components,
+              currentConversionProfile: undefined, draftLineEdited: true,
+              conversionExpanded: true, isQuoting: false, error: '' }
+          : line))
+      } catch {
+        // Keep the entered components visible while the cashier corrects them.
+        setCart((lines) => lines.map((line) => line.product.variantId === variantId
+          ? { ...line, quote: { ...line.quote, conversion: { ...line.quote.conversion, snapshot: profile } },
+              currentConversionProfile: undefined, conversionExpanded: true,
+              isQuoting: false, error: 'Review quantity details under the current conversion profile.' }
+          : line))
+      }
+    } catch (error) {
+      setCart((lines) => lines.map((line) => line.product.variantId === variantId
+        ? { ...line, isQuoting: false, error: error instanceof Error ? error.message : 'Could not load current conversion profile.' }
+        : line))
     }
   }
 
@@ -1148,9 +1191,15 @@ export function PosPage() {
             void addProduct(product)
         }}
         onOpenDraft={(draftId) => void openDraft(draftId)}
-          onClear={clearProductSearch}
-          onKeyDown={handleProductSearchKeyDown}
-          onSearchChange={changeProductSearch}
+        onArchiveDraft={(draftId) => {
+          if (activeDraft?.id === draftId) {
+            setActiveDraft(null)
+            submissionIntentRef.current = null
+          }
+        }}
+        onClear={clearProductSearch}
+        onKeyDown={handleProductSearchKeyDown}
+        onSearchChange={changeProductSearch}
           products={products}
           search={search}
         />
@@ -1311,6 +1360,18 @@ export function PosPage() {
                               <span className="pos-line-error">
                                 {line.error}
                               </span>
+                            ) : null}
+                            {line.currentConversionProfile ? (
+                              <Button
+                                aria-label={`Use current conversion profile for ${line.product.productName}`}
+                                disabled={line.isQuoting}
+                                onClick={() => void adoptCurrentConversionProfile(line.product.variantId)}
+                                size="xs"
+                                type="button"
+                                variant="link"
+                              >
+                                Use current conversion profile
+                              </Button>
                             ) : null}
                           </div>
                         </td>

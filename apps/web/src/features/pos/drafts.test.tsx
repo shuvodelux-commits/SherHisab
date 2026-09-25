@@ -107,6 +107,7 @@ function renderPos() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   queryClient.setQueryData(['auth', 'session'], { authenticated: true, userId: 'user-1', tenantId: 'tenant-1', role: 'STAFF', permissions: ['POS_VIEW', 'POS_SELL'], expiresAt: '2026-09-25T00:00:00Z' })
   render(<LanguageProvider><QueryClientProvider client={queryClient}><PosPage /></QueryClientProvider></LanguageProvider>)
+  return queryClient
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -139,6 +140,64 @@ describe('POS drafts', () => {
     expect(fetchMock).not.toHaveBeenCalledWith('/api/private/sales/drafts/draft-1/archive', expect.anything())
     fireEvent.click(screen.getByRole('button', { name: 'Archive Draft' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/private/sales/drafts/draft-1/archive', expect.objectContaining({ method: 'POST' })))
+  })
+
+  it('detaches an archived open draft but keeps the cart; archiving another draft keeps the active one', async () => {
+    const other = { ...draft, id: 'draft-other', draftNumber: 'DRAFT-000002' }
+    const fetchMock = installFetch()
+    const originalFetch = fetchMock.getMockImplementation()!
+    let listed = [draft, other]
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.startsWith('/api/private/sales/drafts?')) return jsonResponse(listed)
+      if (url.endsWith('/archive') && init?.method === 'POST') {
+        const id = url.split('/').at(-2)
+        listed = listed.filter((item) => item.id !== id)
+        return jsonResponse({ ...draft, id, status: 'ARCHIVED' })
+      }
+      return originalFetch(input, init)
+    })
+    renderPos()
+    fireEvent.click(screen.getByRole('button', { name: /Recent Drafts/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /DRAFT-000001.*Ayesha/i }))
+    await screen.findByRole('textbox', { name: 'Quantity for Draft Pipe' })
+    fireEvent.click(screen.getByRole('button', { name: 'Archive DRAFT-000002' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Draft' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Archive DRAFT-000002' })).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Update Draft' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive DRAFT-000001' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Draft' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save Draft' })).toBeInTheDocument())
+    expect(screen.getByRole('textbox', { name: 'Quantity for Draft Pipe' })).toHaveValue('2')
+    fireEvent.click(screen.getByRole('button', { name: 'Complete Sale' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/private/sales', expect.objectContaining({ method: 'POST' })))
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/private/sales/drafts/draft-1/post')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/private/sales/drafts', expect.objectContaining({ method: 'POST' })))
+    expect(fetchMock.mock.calls.filter(([url, init]) => url === '/api/private/sales/drafts/draft-1' && init?.method === 'PATCH')).toHaveLength(0)
+  })
+
+  it('refreshes Recent Drafts after a successful draft post', async () => {
+    const fetchMock = installFetch()
+    const originalFetch = fetchMock.getMockImplementation()!
+    let posted = false
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.startsWith('/api/private/sales/drafts?')) return jsonResponse(posted ? [] : [draft])
+      if (url === '/api/private/sales/drafts/draft-1/post' && init?.method === 'POST') {
+        posted = true
+        return jsonResponse({ id: 'sale-1', invoiceNumber: 'INV-000001', totalSalesPaisa: '20000', lines: [] })
+      }
+      return originalFetch(input, init)
+    })
+    renderPos()
+    fireEvent.click(screen.getByRole('button', { name: /Recent Drafts/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /DRAFT-000001.*Ayesha/i }))
+    await screen.findByRole('textbox', { name: 'Quantity for Draft Pipe' })
+    fireEvent.click(screen.getByRole('button', { name: 'Complete Sale' }))
+    await screen.findByText('Sale completed')
+    await waitFor(() => expect(screen.getByText('No saved drafts.')).toBeInTheDocument())
   })
 
   it('updates a loaded draft with its exact saved line snapshot and current version', async () => {
@@ -324,20 +383,22 @@ describe('POS drafts', () => {
     fetchMock.mockImplementation(async (input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url === '/api/private/pos/quote-line' && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body)) as { baseQty?: string; quantity?: { profileVersion: number } }
+        const body = JSON.parse(String(init.body)) as { baseQty?: string; quantity?: { profileVersion: number; components: { length: string } } }
         const activeProfile = {
           ...oldProfile,
           version: 5,
           components: [{ ...oldProfile.components[0]!, baseFactorNumerator: '2' }],
         }
-        const baseQty = body.quantity?.profileVersion === 5 ? '4' : '2'
+        const baseQty = body.quantity?.profileVersion === 5
+          ? String(Number(body.quantity.components.length) * 2)
+          : body.baseQty ?? '2'
         const snapshot = body.quantity?.profileVersion === 4 ? oldProfile : activeProfile
         return jsonResponse({
           variantId: 'variant-1', baseQty, pricingQty: baseQty, displayQty: baseQty,
           availableOwnBaseQty: '10', shortfallBaseQty: '0',
           automaticSalesTotalPaisa: String(Number(baseQty) * 10000),
           effectiveUnitSellingPricePaisa: '10000', sellingSegments: [],
-          conversion: { baseQty, pricingQty: baseQty, displayQty: baseQty, components: { length: '2' }, snapshot },
+          conversion: { baseQty, pricingQty: baseQty, displayQty: baseQty, components: body.quantity?.components ?? { length: '2' }, snapshot },
         })
       }
       return originalFetch(input, init)
@@ -358,5 +419,26 @@ describe('POS drafts', () => {
         },
       }) }),
     )
+    expect(screen.getByRole('button', { name: /Use current conversion profile for Draft Pipe/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Use current conversion profile for Draft Pipe/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Complete Sale' })).toBeEnabled())
+    fireEvent.change(screen.getByRole('textbox', { name: 'Length for Draft Pipe' }), { target: { value: '3' } })
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/private/pos/quote-line',
+      expect.objectContaining({ body: JSON.stringify({
+        variantId: 'variant-1', quantity: {
+          kind: 'COMPONENTS', profileId: 'profile-pipe', profileVersion: 5,
+          components: { length: '3' },
+        },
+      }) }),
+    ))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Quantity for Draft Pipe' })).toHaveValue('6'))
+    fireEvent.click(screen.getByRole('button', { name: 'Update Draft' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/private/sales/drafts/draft-1', expect.objectContaining({ method: 'PATCH' })))
+    const patch = fetchMock.mock.calls.find(([url, init]) => url === '/api/private/sales/drafts/draft-1' && init?.method === 'PATCH')?.[1]
+    expect(JSON.parse(String(patch?.body)).lines[0]).toMatchObject({
+      quantityInput: { kind: 'COMPONENTS', profileVersion: 5, components: { length: '3' } },
+      normalizedQuantitySnapshot: { baseQty: '6' },
+    })
   })
 })
