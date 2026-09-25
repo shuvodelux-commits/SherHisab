@@ -20,13 +20,13 @@ export class PosService {
     this.repository = new PosRepository(database)
   }
 
-  searchProducts(
+  async searchProducts(
     rawQuery: string,
     options: PosProductSearchOptions = {},
   ): Promise<PosProductSearchResult[]> {
     const query = rawQuery.trim()
     if (!query) {
-      return Promise.resolve([])
+      return []
     }
 
     const limit = options.limit ?? 20
@@ -34,7 +34,7 @@ export class PosService {
       throw new Error('POS search limit must be between 1 and 50')
     }
 
-    return this.repository.searchProducts(
+    return await this.repository.searchProducts(
       this.tenantId,
       query,
       limit,
