@@ -275,7 +275,7 @@ export class SalesService {
           const invoice = await salesRepository.createInvoice({
             tenantId,
             invoiceNumber,
-            operationId: input.operationId,
+            operationId: input.operationId ?? null,
             businessDate: input.businessDate,
             createdByUserId: actorUserId,
           })
