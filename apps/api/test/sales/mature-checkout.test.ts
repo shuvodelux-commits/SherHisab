@@ -5,6 +5,7 @@ import { closePool, getPool } from '../../src/db/pool'
 import { AuthService } from '../../src/modules/auth/auth.service'
 import { SESSION_COOKIE_NAME } from '../../src/modules/auth/session'
 import { CustomerService } from '../../src/modules/customers/customer.service'
+import { FinanceRepository } from '../../src/modules/finance/finance.repository'
 import { InventoryService } from '../../src/modules/products/inventory.service'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
 import {
@@ -186,6 +187,55 @@ async function counts(tenantId: string) {
   )
 
   return result.rows[0]!
+}
+
+
+async function paymentRows(tenantId: string) {
+  const result = await getPool().query<{
+    method: string
+    financial_account_id: string | null
+    tendered_amount_paisa: string
+    applied_amount_paisa: string
+  }>(
+    `SELECT
+       method,
+       financial_account_id,
+       tendered_amount_paisa::text,
+       applied_amount_paisa::text
+     FROM sales_payments
+     WHERE tenant_id = $1
+     ORDER BY created_at, id`,
+    [tenantId],
+  )
+
+  return result.rows
+}
+
+async function createPaymentAccounts(tenantId: string) {
+  const finance = new FinanceRepository(getPool())
+  const bankOne = await finance.createAccount({
+    tenantId,
+    type: 'BANK',
+    name: 'DBBL Main',
+    provider: 'DBBL',
+    accountReference: '001',
+  })
+  const bankTwo = await finance.createAccount({
+    tenantId,
+    type: 'BANK',
+    name: 'City Bank',
+    provider: 'City Bank',
+    accountReference: '002',
+  })
+  const mobile = await finance.createAccount({
+    tenantId,
+    type: 'MOBILE_BANKING',
+    name: 'Shop bKash',
+    provider: 'bKash',
+    accountReference: '01700000000',
+  })
+
+  return { bankOne, bankTwo, mobile }
 }
 
 describe.skipIf(!hasDatabase)('mature sales checkout customer identity', () => {
@@ -544,6 +594,395 @@ describe.skipIf(!hasDatabase)('mature sales checkout customer identity', () => {
         0,
       ),
     ).toBe(2900)
+  })
+
+
+  it('accepts Cash 500 + Bank 300 + bKash 200 as one paid Invoice', async () => {
+    const fixture = await createFixture('Checkout Split Payment')
+    const accounts = await createPaymentAccounts(fixture.tenant.id)
+    const payload = salePayload(fixture, {
+      payments: [
+        {
+          clientLineId: 'cash',
+          method: 'CASH',
+          amountPaisa: '500',
+        },
+        {
+          clientLineId: 'bank',
+          method: 'BANK',
+          accountId: accounts.bankOne.id,
+          amountPaisa: '300',
+        },
+        {
+          clientLineId: 'bkash',
+          method: 'MOBILE_BANKING',
+          accountId: accounts.mobile.id,
+          amountPaisa: '200',
+        },
+      ],
+    })
+
+    const response = await postSale(fixture.cookie, payload)
+
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({
+      settlementStatus: 'PAID',
+      paidAmountPaisa: '1000',
+      duePaisa: '0',
+      changePaisa: '0',
+    })
+    expect(await paymentRows(fixture.tenant.id)).toEqual([
+      {
+        method: 'CASH',
+        financial_account_id: null,
+        tendered_amount_paisa: '500',
+        applied_amount_paisa: '500',
+      },
+      {
+        method: 'BANK',
+        financial_account_id: accounts.bankOne.id,
+        tendered_amount_paisa: '300',
+        applied_amount_paisa: '300',
+      },
+      {
+        method: 'MOBILE_BANKING',
+        financial_account_id: accounts.mobile.id,
+        tendered_amount_paisa: '200',
+        applied_amount_paisa: '200',
+      },
+    ])
+  })
+
+  it('allows the same Bank method across two different accounts', async () => {
+    const fixture = await createFixture('Checkout Two Banks')
+    const accounts = await createPaymentAccounts(fixture.tenant.id)
+    const payload = salePayload(fixture, {
+      payments: [
+        {
+          clientLineId: 'bank-a',
+          method: 'BANK',
+          accountId: accounts.bankOne.id,
+          amountPaisa: '400',
+        },
+        {
+          clientLineId: 'bank-b',
+          method: 'BANK',
+          accountId: accounts.bankTwo.id,
+          amountPaisa: '600',
+        },
+      ],
+    })
+
+    const response = await postSale(fixture.cookie, payload)
+
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({
+      settlementStatus: 'PAID',
+      paidAmountPaisa: '1000',
+      duePaisa: '0',
+    })
+    expect(await paymentRows(fixture.tenant.id)).toEqual([
+      expect.objectContaining({
+        method: 'BANK',
+        financial_account_id: accounts.bankOne.id,
+        applied_amount_paisa: '400',
+      }),
+      expect.objectContaining({
+        method: 'BANK',
+        financial_account_id: accounts.bankTwo.id,
+        applied_amount_paisa: '600',
+      }),
+    ])
+  })
+
+  it.each(['BANK', 'MOBILE_BANKING'] as const)(
+    'rejects %s without an exact financial account before mutation',
+    async (method) => {
+      const fixture = await createFixture(`Checkout Missing ${method}`)
+      const payload = salePayload(fixture, {
+        payments: [
+          {
+            clientLineId: 'missing-account',
+            method,
+            amountPaisa: '1000',
+          },
+        ],
+      })
+
+      const response = await postSale(fixture.cookie, payload)
+
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({
+        error: expect.stringMatching(/account.*required/i),
+      })
+      expect((await counts(fixture.tenant.id)).invoices).toBe('0')
+      const lots = await fixture.inventory.listLots(
+        fixture.tenant.id,
+        fixture.product.defaultVariantId,
+      )
+      expect(lots[0]?.remainingBaseQty).toBe('10')
+    },
+  )
+
+  it('derives DUE from zero payments and stores no payment rows', async () => {
+    const fixture = await createFixture('Checkout Zero Payments')
+    const payload = salePayload(fixture, { payments: [] })
+
+    const response = await postSale(fixture.cookie, payload)
+
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({
+      settlementStatus: 'DUE',
+      paidAmountPaisa: '0',
+      duePaisa: '1000',
+      changePaisa: '0',
+    })
+    expect(await paymentRows(fixture.tenant.id)).toEqual([])
+  })
+
+  it('derives PARTIAL from an underpayment', async () => {
+    const fixture = await createFixture('Checkout Partial Payment')
+    const payload = salePayload(fixture, {
+      payments: [
+        {
+          clientLineId: 'cash-partial',
+          method: 'CASH',
+          amountPaisa: '400',
+        },
+      ],
+    })
+
+    const response = await postSale(fixture.cookie, payload)
+
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({
+      settlementStatus: 'PARTIAL',
+      paidAmountPaisa: '400',
+      duePaisa: '600',
+      changePaisa: '0',
+    })
+    expect(await paymentRows(fixture.tenant.id)).toEqual([
+      expect.objectContaining({
+        method: 'CASH',
+        tendered_amount_paisa: '400',
+        applied_amount_paisa: '400',
+      }),
+    ])
+  })
+
+  it('caps Cash over-tender at Grand Total and returns physical Change without creating Customer Credit', async () => {
+    const fixture = await createFixture('Checkout Cash Change')
+    const payload = salePayload(fixture, {
+      payments: [
+        {
+          clientLineId: 'cash-change',
+          method: 'CASH',
+          amountPaisa: '1200',
+        },
+      ],
+    })
+
+    const response = await postSale(fixture.cookie, payload)
+
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({
+      settlementStatus: 'PAID',
+      paidAmountPaisa: '1000',
+      duePaisa: '0',
+      changePaisa: '200',
+    })
+    expect(await paymentRows(fixture.tenant.id)).toEqual([
+      expect.objectContaining({
+        method: 'CASH',
+        tendered_amount_paisa: '1200',
+        applied_amount_paisa: '1000',
+      }),
+    ])
+    expect((await counts(fixture.tenant.id)).customers).toBe('0')
+    expect(await fixture.customers.resolveByPhone('01711111111')).toMatchObject({
+      kind: 'NONE',
+    })
+  })
+
+  it('rejects Bank and Mobile Banking overpayment when no Cash can absorb Change', async () => {
+    const fixture = await createFixture('Checkout Non Cash Overpay')
+    const accounts = await createPaymentAccounts(fixture.tenant.id)
+    const payload = salePayload(fixture, {
+      payments: [
+        {
+          clientLineId: 'bank-over',
+          method: 'BANK',
+          accountId: accounts.bankOne.id,
+          amountPaisa: '700',
+        },
+        {
+          clientLineId: 'mobile-over',
+          method: 'MOBILE_BANKING',
+          accountId: accounts.mobile.id,
+          amountPaisa: '400',
+        },
+      ],
+    })
+
+    const response = await postSale(fixture.cookie, payload)
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      error: expect.stringMatching(/overpayment|change.*cash/i),
+    })
+    expect((await counts(fixture.tenant.id)).invoices).toBe('0')
+  })
+
+  it('uses Cash as the Change source when Cash 600 + Bank 300 + bKash 200 tenders 1100 on a 1000 Invoice', async () => {
+    const fixture = await createFixture('Checkout Mixed Change')
+    const accounts = await createPaymentAccounts(fixture.tenant.id)
+    const payload = salePayload(fixture, {
+      payments: [
+        {
+          clientLineId: 'cash-mixed',
+          method: 'CASH',
+          amountPaisa: '600',
+        },
+        {
+          clientLineId: 'bank-mixed',
+          method: 'BANK',
+          accountId: accounts.bankOne.id,
+          amountPaisa: '300',
+        },
+        {
+          clientLineId: 'mobile-mixed',
+          method: 'MOBILE_BANKING',
+          accountId: accounts.mobile.id,
+          amountPaisa: '200',
+        },
+      ],
+    })
+
+    const response = await postSale(fixture.cookie, payload)
+
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({
+      settlementStatus: 'PAID',
+      paidAmountPaisa: '1000',
+      duePaisa: '0',
+      changePaisa: '100',
+    })
+    expect(await paymentRows(fixture.tenant.id)).toEqual([
+      expect.objectContaining({
+        method: 'CASH',
+        tendered_amount_paisa: '600',
+        applied_amount_paisa: '500',
+      }),
+      expect.objectContaining({
+        method: 'BANK',
+        financial_account_id: accounts.bankOne.id,
+        applied_amount_paisa: '300',
+      }),
+      expect.objectContaining({
+        method: 'MOBILE_BANKING',
+        financial_account_id: accounts.mobile.id,
+        applied_amount_paisa: '200',
+      }),
+    ])
+  })
+
+  it('allows CUSTOMER_CREDIT only for a resolved Customer with enough available credit', async () => {
+    const fixture = await createFixture('Checkout Customer Credit')
+    const customer = await fixture.customers.create({
+      name: 'Credit Buyer',
+      phone: '01777777777',
+    })
+    await getPool().query(
+      `INSERT INTO customer_ledger_entries
+       (
+         tenant_id,
+         customer_id,
+         business_date,
+         entry_type,
+         amount_paisa,
+         source_type,
+         notes
+       )
+       VALUES ($1,$2,'2026-09-24','ADVANCE',-1500,'OPENING','Credit fixture')`,
+      [fixture.tenant.id, customer.id],
+    )
+
+    const payload = salePayload(fixture, {
+      selectedCustomerId: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      payments: [
+        {
+          clientLineId: 'customer-credit',
+          method: 'CUSTOMER_CREDIT',
+          amountPaisa: '1000',
+        },
+      ],
+    })
+
+    const response = await postSale(fixture.cookie, payload)
+
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({
+      customerId: customer.id,
+      settlementStatus: 'PAID',
+      paidAmountPaisa: '1000',
+      duePaisa: '0',
+      changePaisa: '0',
+    })
+    expect(await paymentRows(fixture.tenant.id)).toEqual([
+      expect.objectContaining({
+        method: 'CUSTOMER_CREDIT',
+        financial_account_id: null,
+        tendered_amount_paisa: '1000',
+        applied_amount_paisa: '1000',
+      }),
+    ])
+    expect(await fixture.customers.balance(customer.id)).toBe('-500')
+  })
+
+  it('rejects CUSTOMER_CREDIT when the resolved Customer does not have enough credit', async () => {
+    const fixture = await createFixture('Checkout Insufficient Credit')
+    const customer = await fixture.customers.create({
+      name: 'Small Credit Buyer',
+      phone: '01788888888',
+    })
+    await getPool().query(
+      `INSERT INTO customer_ledger_entries
+       (
+         tenant_id,
+         customer_id,
+         business_date,
+         entry_type,
+         amount_paisa,
+         source_type,
+         notes
+       )
+       VALUES ($1,$2,'2026-09-24','ADVANCE',-500,'OPENING','Credit fixture')`,
+      [fixture.tenant.id, customer.id],
+    )
+
+    const payload = salePayload(fixture, {
+      selectedCustomerId: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      payments: [
+        {
+          clientLineId: 'customer-credit-too-large',
+          method: 'CUSTOMER_CREDIT',
+          amountPaisa: '1000',
+        },
+      ],
+    })
+
+    const response = await postSale(fixture.cookie, payload)
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      error: expect.stringMatching(/customer credit.*insufficient|insufficient.*credit/i),
+    })
+    expect((await counts(fixture.tenant.id)).invoices).toBe('0')
+    expect(await fixture.customers.balance(customer.id)).toBe('-500')
   })
 
 })
