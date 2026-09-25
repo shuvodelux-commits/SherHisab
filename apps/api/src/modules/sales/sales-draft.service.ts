@@ -81,9 +81,6 @@ export class SalesDraftService {
     if (!userId) {
       throw new Error('Actor user is required')
     }
-    if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
-      throw new Error('Expected Draft version must be a positive integer')
-    }
     const state = normalizeState(input)
 
     return withDatabaseTransaction(
@@ -152,6 +149,9 @@ export class SalesDraftService {
     }
     if (!id) {
       throw new Error('Draft id is required')
+    }
+    if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
+      throw new Error('Expected Draft version must be a positive integer')
     }
     const state = normalizeState(input)
 
