@@ -61,7 +61,9 @@ export class CashSessionService {
           'code' in error &&
           error.code === '23505'
         ) {
-          throw new Error('A cash session is already open')
+          throw new Error('A cash session is already open', {
+            cause: error,
+          })
         }
         throw error
       }
