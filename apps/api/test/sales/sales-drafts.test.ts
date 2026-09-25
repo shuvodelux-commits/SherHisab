@@ -4,6 +4,7 @@ import { closePool, getPool } from '../../src/db/pool'
 import { AuthService } from '../../src/modules/auth/auth.service'
 import { CustomerService } from '../../src/modules/customers/customer.service'
 import { FinanceRepository } from '../../src/modules/finance/finance.repository'
+import { ConversionService } from '../../src/modules/products/conversion.service'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
 import { SalesDraftService } from '../../src/modules/sales/sales-draft.service'
 import { VendorService } from '../../src/modules/vendors/vendor.service'
@@ -265,4 +266,422 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
 
     expect(await businessMutationCounts(tenant.id)).toEqual(before)
   })
+
+  it('loads and updates the complete Draft state without losing payment or line details', async () => {
+    const tenant = await createProductTestTenant('Draft Round Trip')
+    const owner = await new AuthService().createUser({
+      tenantId: tenant.id,
+      name: 'Draft Round Trip Owner',
+      email: `draft-round-trip-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    const products = new ProductMasterService(tenant.id, getPool())
+    const unit = (await products.listUnits()).find(
+      (candidate) => candidate.symbol === 'pcs',
+    )
+    if (!unit) {
+      throw new Error('Default Piece unit not found')
+    }
+    const product = await products.createProduct(
+      {
+        name: 'Round Trip Product',
+        baseUnitId: unit.id,
+        defaultPurchasePricePaisa: '1000',
+        defaultSellingPricePaisa: '1600',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'SIMPLE',
+      },
+      owner.id,
+    )
+    const vendor = await new VendorService(
+      tenant.id,
+      getPool(),
+    ).create({
+      name: 'Round Trip Vendor',
+      phone: '01822222222',
+      address: 'Belkuchi',
+    })
+    const bank = await new FinanceRepository(
+      getPool(),
+    ).createAccount({
+      tenantId: tenant.id,
+      type: 'BANK',
+      name: 'Round Trip Bank',
+      provider: 'DBBL',
+      accountReference: 'DRAFT-ROUND-TRIP',
+    })
+    const service = new SalesDraftService(tenant.id, getPool())
+    const profileId = randomUUID()
+    const serialId = randomUUID()
+    const batchLotId = randomUUID()
+
+    const created = await service.create(owner.id, {
+      customer: {
+        selectedCustomerId: null,
+        name: 'Draft Buyer',
+        phone: '01722222222',
+        guardianName: 'Draft Guardian',
+        address: 'Sirajganj',
+      },
+      discountPaisa: '75',
+      payments: [
+        {
+          clientLineId: 'cash-round-trip',
+          method: 'CASH',
+          accountId: null,
+          amountPaisa: '500',
+          reference: '',
+          note: 'Cash row',
+        },
+        {
+          clientLineId: 'bank-round-trip',
+          method: 'BANK',
+          accountId: bank.id,
+          amountPaisa: '1025',
+          reference: 'DBBL-001',
+          note: 'Bank row',
+        },
+      ],
+      note: 'Original Draft note',
+      lines: [
+        {
+          variantId: product.defaultVariantId,
+          quantityInput: {
+            kind: 'COMPONENTS',
+            profileId,
+            profileVersion: 4,
+            components: { gauge: '2', gira: '5' },
+          },
+          normalizedQuantitySnapshot: {
+            baseQty: '37',
+            pricingQty: '2.3125',
+            displayQty: '2.31',
+            components: { gauge: '2', gira: '5' },
+            snapshot: {
+              id: profileId,
+              productId: product.id,
+              type: 'COMPOUND',
+              version: 4,
+              baseUnitId: unit.id,
+              pricingUnitId: unit.id,
+              pricingBaseFactorNumerator: '16',
+              pricingBaseFactorDenominator: '1',
+              displayPrecision: 2,
+              components: [],
+            },
+          },
+          pricingMode: 'MANUAL',
+          manualUnitSellingPricePaisa: '1600',
+          shortageResolution: {
+            type: 'VENDOR',
+            vendorId: vendor.id,
+            unitCostPaisa: '950',
+          },
+          serialIds: [serialId],
+          batchSelection: {
+            lotId: batchLotId,
+            batchCode: 'ROUND-TRIP-BATCH',
+            expiresOn: '2028-01-31',
+          },
+          warrantySnapshot: {
+            durationValue: 6,
+            durationUnit: 'MONTH',
+            provider: 'SELLER',
+            text: 'Round trip warranty',
+          },
+          captureValues: {
+            vehicle_no: 'DHAKA-METRO-22',
+            color: 'Black',
+          },
+        },
+      ],
+    })
+
+    await expect(service.get(created.id)).resolves.toMatchObject({
+      id: created.id,
+      version: 1,
+      customer: {
+        name: 'Draft Buyer',
+        phone: '01722222222',
+      },
+      discountPaisa: '75',
+      payments: [
+        expect.objectContaining({
+          clientLineId: 'cash-round-trip',
+          method: 'CASH',
+          amountPaisa: '500',
+        }),
+        expect.objectContaining({
+          clientLineId: 'bank-round-trip',
+          method: 'BANK',
+          accountId: bank.id,
+          amountPaisa: '1025',
+        }),
+      ],
+      lines: [
+        expect.objectContaining({
+          variantId: product.defaultVariantId,
+          quantityInput: {
+            kind: 'COMPONENTS',
+            profileId,
+            profileVersion: 4,
+            components: { gauge: '2', gira: '5' },
+          },
+          normalizedQuantitySnapshot: expect.objectContaining({
+            baseQty: '37',
+            pricingQty: '2.3125',
+            displayQty: '2.31',
+            components: { gauge: '2', gira: '5' },
+          }),
+          shortageResolution: {
+            type: 'VENDOR',
+            vendorId: vendor.id,
+            unitCostPaisa: '950',
+          },
+          serialIds: [serialId],
+          batchSelection: {
+            lotId: batchLotId,
+            batchCode: 'ROUND-TRIP-BATCH',
+            expiresOn: '2028-01-31',
+          },
+          captureValues: {
+            vehicle_no: 'DHAKA-METRO-22',
+            color: 'Black',
+          },
+        }),
+      ],
+    })
+
+    const updated = await service.update(
+      owner.id,
+      created.id,
+      created.version,
+      {
+        customer: {
+          selectedCustomerId: null,
+          name: 'Updated Draft Buyer',
+          phone: '01733333333',
+          guardianName: 'Updated Guardian',
+          address: 'Dhaka',
+        },
+        discountPaisa: '125',
+        payments: [
+          {
+            clientLineId: 'cash-updated',
+            method: 'CASH',
+            accountId: null,
+            amountPaisa: '1475',
+            reference: '',
+            note: 'Updated cash row',
+          },
+        ],
+        note: 'Updated Draft note',
+        lines: [
+          {
+            variantId: product.defaultVariantId,
+            quantityInput: {
+              kind: 'SIMPLE',
+              baseQty: '3',
+            },
+            normalizedQuantitySnapshot: {
+              baseQty: '3',
+              pricingQty: '3',
+              displayQty: '3',
+              components: {},
+              snapshot: null,
+            },
+            pricingMode: 'AUTO',
+            manualUnitSellingPricePaisa: null,
+            shortageResolution: {
+              type: 'NEGATIVE_STOCK',
+            },
+            serialIds: [],
+            batchSelection: null,
+            warrantySnapshot: null,
+            captureValues: {
+              note: 'Updated capture',
+            },
+          },
+        ],
+      },
+    )
+
+    expect(updated).toMatchObject({
+      id: created.id,
+      version: 2,
+      customer: {
+        name: 'Updated Draft Buyer',
+        phone: '01733333333',
+      },
+      discountPaisa: '125',
+      payments: [
+        expect.objectContaining({
+          clientLineId: 'cash-updated',
+          amountPaisa: '1475',
+        }),
+      ],
+      note: 'Updated Draft note',
+      lines: [
+        expect.objectContaining({
+          quantityInput: { kind: 'SIMPLE', baseQty: '3' },
+          shortageResolution: { type: 'NEGATIVE_STOCK' },
+          serialIds: [],
+          batchSelection: null,
+          captureValues: { note: 'Updated capture' },
+        }),
+      ],
+    })
+
+    await expect(service.get(created.id)).resolves.toEqual(updated)
+  })
+
+  it('loads the saved conversion profile snapshot unchanged after the Product profile advances', async () => {
+    const tenant = await createProductTestTenant(
+      'Draft Conversion Snapshot',
+    )
+    const owner = await new AuthService().createUser({
+      tenantId: tenant.id,
+      name: 'Draft Conversion Owner',
+      email: `draft-conversion-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    const products = new ProductMasterService(tenant.id, getPool())
+    const gira = await products.createUnit({
+      name: 'Draft Gira',
+      symbol: 'dgira',
+    })
+    const gauge = await products.createUnit({
+      name: 'Draft Gauge',
+      symbol: 'dgauge',
+    })
+    const product = await products.createProduct(
+      {
+        name: 'Draft Fabric',
+        baseUnitId: gira.id,
+        defaultPurchasePricePaisa: '10000',
+        defaultSellingPricePaisa: '30000',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'SIMPLE',
+      },
+      owner.id,
+    )
+    const conversion = new ConversionService(tenant.id, getPool())
+    const profileV1 = await conversion.replaceActiveProfile(product.id, {
+      type: 'COMPOUND',
+      baseUnitId: gira.id,
+      pricingUnitId: gauge.id,
+      pricingBaseFactorNumerator: '16',
+      pricingBaseFactorDenominator: '1',
+      displayPrecision: 2,
+      components: [
+        {
+          key: 'gauge',
+          label: 'Gauge',
+          unitId: gauge.id,
+          baseFactorNumerator: '16',
+          baseFactorDenominator: '1',
+          sortOrder: 0,
+          minValue: '0',
+          maxExclusive: null,
+          allowFraction: false,
+          autoNormalizeRemainder: false,
+        },
+        {
+          key: 'gira',
+          label: 'Gira',
+          unitId: gira.id,
+          baseFactorNumerator: '1',
+          baseFactorDenominator: '1',
+          sortOrder: 1,
+          minValue: '0',
+          maxExclusive: '16',
+          allowFraction: false,
+          autoNormalizeRemainder: false,
+        },
+      ],
+    })
+    const quantityInput = {
+      kind: 'COMPONENTS' as const,
+      profileId: profileV1.id,
+      profileVersion: profileV1.version,
+      components: { gauge: '2', gira: '5' },
+    }
+    const normalized = await conversion.normalize(quantityInput)
+    const service = new SalesDraftService(tenant.id, getPool())
+    const created = await service.create(owner.id, {
+      customer: {
+        selectedCustomerId: null,
+        name: 'Fabric Buyer',
+        phone: '01744444444',
+        guardianName: '',
+        address: '',
+      },
+      discountPaisa: '0',
+      payments: [],
+      note: '',
+      lines: [
+        {
+          variantId: product.defaultVariantId,
+          quantityInput,
+          normalizedQuantitySnapshot: normalized,
+          pricingMode: 'AUTO',
+          manualUnitSellingPricePaisa: null,
+          shortageResolution: null,
+          serialIds: [],
+          batchSelection: null,
+          warrantySnapshot: null,
+          captureValues: {},
+        },
+      ],
+    })
+
+    const profileV2 = await conversion.replaceActiveProfile(product.id, {
+      type: 'COMPOUND',
+      baseUnitId: gira.id,
+      pricingUnitId: gauge.id,
+      pricingBaseFactorNumerator: '16',
+      pricingBaseFactorDenominator: '1',
+      displayPrecision: 3,
+      components: profileV1.components.map((component) => ({
+        key: component.key,
+        label: component.label,
+        unitId: component.unitId,
+        baseFactorNumerator: component.baseFactorNumerator,
+        baseFactorDenominator: component.baseFactorDenominator,
+        sortOrder: component.sortOrder,
+        minValue: component.minValue,
+        maxExclusive: component.maxExclusive,
+        allowFraction: component.allowFraction,
+        autoNormalizeRemainder: component.autoNormalizeRemainder,
+      })),
+    })
+
+    expect(profileV2.version).toBe(2)
+
+    const loaded = await service.get(created.id)
+    expect(loaded.lines[0]).toMatchObject({
+      quantityInput: {
+        kind: 'COMPONENTS',
+        profileId: profileV1.id,
+        profileVersion: 1,
+        components: { gauge: '2', gira: '5' },
+      },
+      normalizedQuantitySnapshot: {
+        baseQty: '37',
+        pricingQty: '2.3125',
+        displayQty: '2.31',
+        components: { gauge: '2', gira: '5' },
+        snapshot: expect.objectContaining({
+          id: profileV1.id,
+          version: 1,
+          displayPrecision: 2,
+        }),
+      },
+    })
+  })
+
 })
