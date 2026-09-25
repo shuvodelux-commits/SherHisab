@@ -128,6 +128,44 @@ export class ShortfallRepository {
     )
   }
 
+  async applyCogsAdjustment(input: {
+    tenantId: string
+    salesLineId: string
+    cogsAdjustmentPaisa: string
+  }): Promise<void> {
+    if (BigInt(input.cogsAdjustmentPaisa) === 0n) {
+      return
+    }
+
+    const result = await this.db.query(
+      `WITH updated_line AS (
+         UPDATE sales_lines
+         SET cogs_paisa = cogs_paisa + $3::bigint
+         WHERE tenant_id = $1
+           AND id = $2
+         RETURNING sale_id
+       )
+       UPDATE sales_invoices invoice
+       SET total_cogs_paisa =
+         invoice.total_cogs_paisa + $3::bigint
+       FROM updated_line
+       WHERE invoice.tenant_id = $1
+         AND invoice.id = updated_line.sale_id
+       RETURNING invoice.id`,
+      [
+        input.tenantId,
+        input.salesLineId,
+        input.cogsAdjustmentPaisa,
+      ],
+    )
+
+    if (result.rowCount !== 1) {
+      throw new Error(
+        'Failed to apply reconciled shortfall COGS adjustment',
+      )
+    }
+  }
+
   async createReconciliation(input: {
     tenantId: string
     shortfallId: string

@@ -185,6 +185,7 @@ export class InventoryReceiptService {
         .minus(shortfall.provisionalUnitCostPaisa)
         .times(reconciled)
 
+      const cogsAdjustmentPaisa = roundPaisa(costDelta)
       await shortfallRepository.createReconciliation({
         tenantId: input.tenantId,
         shortfallId: shortfall.id,
@@ -193,7 +194,12 @@ export class InventoryReceiptService {
         provisionalUnitCostPaisa:
           shortfall.provisionalUnitCostPaisa,
         actualUnitCostPaisa: unitCostPaisa,
-        cogsAdjustmentPaisa: roundPaisa(costDelta),
+        cogsAdjustmentPaisa,
+      })
+      await shortfallRepository.applyCogsAdjustment({
+        tenantId: input.tenantId,
+        salesLineId: shortfall.salesLineId,
+        cogsAdjustmentPaisa,
       })
       await shortfallRepository.updateOutstanding({
         tenantId: input.tenantId,
