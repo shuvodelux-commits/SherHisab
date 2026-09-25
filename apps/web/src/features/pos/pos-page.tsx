@@ -394,10 +394,6 @@ export function PosPage() {
                 <Button
                   aria-label={`Add ${product.productName}`}
                   className="pos-product-card"
-                  disabled={
-                    Number(product.availableOwnBaseQty) <= 0 ||
-                    product.variantsEnabled
-                  }
                   key={product.variantId}
                   onClick={() => addProduct(product)}
                   variant="outline"
