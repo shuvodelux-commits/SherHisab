@@ -374,7 +374,7 @@ export class SalesRepository {
         AND lot.id = allocation.lot_id
        WHERE allocation.tenant_id = $1
          AND line.sale_id = $2
-       ORDER BY line.created_at, line.id, allocation.created_at, allocation.lot_id`,
+       ORDER BY line.created_at, line.id, allocation.lot_id`,
       [tenantId, invoice.id],
     )
 
