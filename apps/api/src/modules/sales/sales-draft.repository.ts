@@ -338,16 +338,19 @@ export class SalesDraftRepository {
 
   async listRecentActiveIds(
     tenantId: string,
+    ownerUserId: string,
     limit: number,
+    canManageAll: boolean,
   ): Promise<string[]> {
     const result = await this.db.query<{ id: string }>(
       `SELECT id
        FROM sales_drafts
        WHERE tenant_id = $1
          AND status = 'ACTIVE'
+         AND ($3::boolean OR owner_user_id = $2)
        ORDER BY updated_at DESC, id DESC
-       LIMIT $2`,
-      [tenantId, limit],
+       LIMIT $4`,
+      [tenantId, ownerUserId, canManageAll, limit],
     )
     return result.rows.map((row) => row.id)
   }
