@@ -147,6 +147,7 @@ async function readPosPayloads(
   bootstrap: unknown
   products: unknown
   quote: unknown
+  legacyQuote: unknown
 }> {
   const bootstrapResponse = await app.request(
     'http://localhost/api/private/pos/bootstrap',
@@ -172,14 +173,32 @@ async function readPosPayloads(
     },
   )
 
+  const legacyQuoteResponse = await app.request(
+    'http://localhost/api/private/sales/quote-line',
+    {
+      method: 'POST',
+      headers: {
+        cookie,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        variantId,
+        baseQty: '1',
+        businessDate: '2026-09-25',
+      }),
+    },
+  )
+
   expect(bootstrapResponse.status).toBe(200)
   expect(productsResponse.status).toBe(200)
   expect(quoteResponse.status).toBe(200)
+  expect(legacyQuoteResponse.status).toBe(200)
 
   return {
     bootstrap: await bootstrapResponse.json(),
     products: await productsResponse.json(),
     quote: await quoteResponse.json(),
+    legacyQuote: await legacyQuoteResponse.json(),
   }
 }
 
