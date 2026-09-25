@@ -231,6 +231,7 @@ export class SalesDraftRepository {
   async findById(
     tenantId: string,
     draftId: string,
+    forUpdate = false,
   ): Promise<SalesDraftRecord | null> {
     const headerResult = await this.db.query<StoredDraftHeaderRow>(
       `SELECT
@@ -254,7 +255,7 @@ export class SalesDraftRepository {
        FROM sales_drafts
        WHERE tenant_id = $1
          AND id = $2
-       LIMIT 1`,
+       LIMIT 1 ${forUpdate ? 'FOR UPDATE' : ''}`,
       [tenantId, draftId],
     )
     const header = headerResult.rows[0]
@@ -368,6 +369,7 @@ export class SalesDraftRepository {
        WHERE tenant_id = $1
          AND id = $2
          AND status = 'ACTIVE'
+         AND posted_operation_id IS NULL
          AND version = $3
        RETURNING
          id,
@@ -405,6 +407,7 @@ export class SalesDraftRepository {
        WHERE tenant_id = $1
          AND id = $2
          AND status = 'ACTIVE'
+         AND posted_operation_id IS NULL
          AND version = $11
        RETURNING
          id,
@@ -444,59 +447,6 @@ export class SalesDraftRepository {
   }
 
 
-  async claimPost(input: {
-    tenantId: string
-    draftId: string
-    expectedVersion: number
-    operationId: string
-  }): Promise<boolean> {
-    const result = await this.db.query<{ id: string }>(
-      `UPDATE sales_drafts
-       SET posted_operation_id = $4,
-           updated_at = NOW()
-       WHERE tenant_id = $1
-         AND id = $2
-         AND status = 'ACTIVE'
-         AND version = $3
-         AND (
-           posted_operation_id IS NULL
-           OR posted_operation_id = $4
-         )
-       RETURNING id`,
-      [
-        input.tenantId,
-        input.draftId,
-        input.expectedVersion,
-        input.operationId,
-      ],
-    )
-    return result.rowCount === 1
-  }
-
-  async clearPostClaim(input: {
-    tenantId: string
-    draftId: string
-    expectedVersion: number
-    operationId: string
-  }): Promise<void> {
-    await this.db.query(
-      `UPDATE sales_drafts
-       SET posted_operation_id = NULL,
-           updated_at = NOW()
-       WHERE tenant_id = $1
-         AND id = $2
-         AND status = 'ACTIVE'
-         AND version = $3
-         AND posted_operation_id = $4`,
-      [
-        input.tenantId,
-        input.draftId,
-        input.expectedVersion,
-        input.operationId,
-      ],
-    )
-  }
-
   async markPosted(input: {
     tenantId: string
     draftId: string
@@ -514,7 +464,7 @@ export class SalesDraftRepository {
          AND id = $2
          AND status = 'ACTIVE'
          AND version = $3
-         AND posted_operation_id = $4
+         AND posted_operation_id IS NULL
        RETURNING id`,
       [
         input.tenantId,

@@ -9,9 +9,11 @@ import { SalesDraftAccessError, SalesDraftVersionConflictError } from './sales-d
 import { SalesDraftRepository } from './sales-draft.repository'
 import { SalesRepository } from './sales.repository'
 import { SalesService } from './sales.service'
+import { SalesConflictError } from './sales.errors'
 import type { CommittedSale, CommitSaleInput } from './sales.types'
 import type {
   SalesDraftInput,
+  SalesDraftLineInput,
   SalesDraftPostInput,
   SalesDraftRecord,
 } from './sales-draft.types'
@@ -24,7 +26,23 @@ function wholePaisa(raw: string, label: string): string {
   return BigInt(value).toString()
 }
 
+function validateSimpleQuantity(line: SalesDraftLineInput): void {
+  if (line.quantityInput.kind !== 'SIMPLE') return
+  let entered: Decimal
+  let saved: Decimal
+  try {
+    entered = new Decimal(line.quantityInput.baseQty)
+    saved = new Decimal(line.normalizedQuantitySnapshot.baseQty)
+  } catch {
+    throw new Error('Draft quantity snapshot is invalid')
+  }
+  if (!entered.isFinite() || entered.lte(0) || !saved.eq(entered)) {
+    throw new Error('Draft quantity snapshot does not match the entered quantity')
+  }
+}
+
 function normalizeState(input: SalesDraftInput): SalesDraftInput {
+  input.lines.forEach(validateSimpleQuantity)
   return {
     customer: {
       selectedCustomerId:
@@ -359,196 +377,134 @@ export class SalesDraftService {
       throw new Error('Operation ID must be a UUID')
     }
 
-    const repository = new SalesDraftRepository(this.database)
-    let draft = await repository.findById(this.tenantId, id)
-    if (!draft) {
-      throw new Error('Draft not found')
-    }
-    this.requireAccess(draft, userId, canManageAll)
-
-    if (draft.status === 'POSTED') {
-      if (draft.postedOperationId !== operationId) {
-        throw new Error('Draft has already been posted')
-      }
-      const committed = await new SalesRepository(
-        this.database,
-      ).findCommittedSaleByOperationId(
-        this.tenantId,
-        operationId,
-      )
-      if (!committed) {
-        throw new Error('Posted Draft Invoice was not found')
-      }
-      return committed
-    }
-
-    if (draft.status !== 'ACTIVE') {
-      throw new Error('Draft is not active')
-    }
-    if (draft.version !== expectedVersion) {
-      throw new SalesDraftVersionConflictError(draft.version)
-    }
-
-    await this.validateConversionCompatibility(draft)
-
-    const claimed = await repository.claimPost({
-      tenantId: this.tenantId,
-      draftId: id,
-      expectedVersion,
-      operationId,
-    })
-
-    if (!claimed) {
-      draft = await repository.findById(this.tenantId, id)
-      if (!draft) {
-        throw new Error('Draft not found')
-      }
-      this.requireAccess(draft, userId, canManageAll)
-      if (
-        draft.status === 'POSTED' &&
-        draft.postedOperationId === operationId
-      ) {
-        const committed = await new SalesRepository(
-          this.database,
-        ).findCommittedSaleByOperationId(
-          this.tenantId,
-          operationId,
-        )
-        if (!committed) {
-          throw new Error('Posted Draft Invoice was not found')
-        }
-        return committed
-      }
-      if (draft.version !== expectedVersion) {
-        throw new SalesDraftVersionConflictError(draft.version)
-      }
-      throw new Error(
-        'Draft posting is already in progress with another operation',
-      )
-    }
-
-    const saleInput: CommitSaleInput = {
-      operationId,
-      businessDate: input.businessDate,
-      customer: {
-        ...(draft.customer.selectedCustomerId
-          ? { selectedCustomerId: draft.customer.selectedCustomerId }
-          : {}),
-        name: draft.customer.name,
-        phone: draft.customer.phone,
-        guardianName: draft.customer.guardianName,
-        address: draft.customer.address,
-      },
-      discountPaisa: draft.discountPaisa,
-      payments: draft.payments.map((payment) => ({
-        clientLineId: payment.clientLineId,
-        method: payment.method,
-        ...(payment.accountId
-          ? { accountId: payment.accountId }
-          : {}),
-        amountPaisa: payment.amountPaisa,
-        reference: payment.reference,
-        note: payment.note,
-      })),
-      lines: draft.lines.map((line) => {
-        if (
-          line.pricingMode === 'MANUAL' &&
-          line.manualUnitSellingPricePaisa === null
-        ) {
-          throw new Error(
-            'Manual Draft line is missing its selling price',
-          )
-        }
-
-        return {
-          variantId: line.variantId,
-          baseQty: line.normalizedQuantitySnapshot.baseQty,
-          ...(line.pricingMode === 'MANUAL'
-            ? {
-                manualUnitSellingPricePaisa:
-                  line.manualUnitSellingPricePaisa!,
-              }
-            : {}),
-          ...(line.shortageResolution === null
-            ? {}
-            : {
-                shortageResolution: line.shortageResolution,
-              }),
-        }
-      }),
-      sourceDraft: {
-        id: draft.id,
-        version: draft.version,
-      },
-    }
-
-    let sale: CommittedSale
     try {
-      sale = await new SalesService(this.database).commitSale(
-        this.tenantId,
-        userId,
-        input.canOverrideSellingPrice,
-        saleInput,
-      )
-    } catch (error) {
-      const committed = await new SalesRepository(
-        this.database,
-      ).findCommittedSaleByOperationId(
-        this.tenantId,
-        operationId,
-      )
-      if (committed) {
-        sale = committed
-      } else {
-        await repository.clearPostClaim({
+      return await withDatabaseTransaction(this.database, async (database) => {
+        const repository = new SalesDraftRepository(database)
+        // The row lock also serializes update, archive, and a second post.
+        const draft = await repository.findById(this.tenantId, id, true)
+        if (!draft) throw new Error('Draft not found')
+        this.requireAccess(draft, userId, canManageAll)
+
+        if (draft.status === 'POSTED') {
+          if (draft.version !== expectedVersion) {
+            throw new SalesDraftVersionConflictError(draft.version)
+          }
+          if (draft.postedOperationId !== operationId) {
+            throw new SalesConflictError('Draft has already been posted with another operation.')
+          }
+          const salesRepository = new SalesRepository(database)
+          const committed = await salesRepository.findCommittedSaleByOperationId(
+            this.tenantId, operationId,
+          )
+          const source = await salesRepository.findDraftSourceByOperationId(
+            this.tenantId, operationId,
+          )
+          if (
+            !committed || committed.id !== draft.postedSaleId ||
+            source?.id !== draft.id || source.version !== draft.version
+          ) {
+            throw new Error('Posted Draft Invoice source does not match the Draft')
+          }
+          return committed
+        }
+
+        if (draft.status !== 'ACTIVE') throw new Error('Draft is not active')
+        if (draft.version !== expectedVersion) {
+          throw new SalesDraftVersionConflictError(draft.version)
+        }
+        if (draft.postedOperationId !== null) {
+          throw new SalesConflictError('Draft posting is already in progress.')
+        }
+        await this.validateConversionCompatibility(draft, database)
+
+        const saleInput: CommitSaleInput = {
+          operationId,
+          businessDate: input.businessDate,
+          customer: {
+            ...(draft.customer.selectedCustomerId
+              ? { selectedCustomerId: draft.customer.selectedCustomerId }
+              : {}),
+            name: draft.customer.name,
+            phone: draft.customer.phone,
+            guardianName: draft.customer.guardianName,
+            address: draft.customer.address,
+          },
+          discountPaisa: draft.discountPaisa,
+          payments: draft.payments.map((payment) => ({
+            clientLineId: payment.clientLineId,
+            method: payment.method,
+            ...(payment.accountId ? { accountId: payment.accountId } : {}),
+            amountPaisa: payment.amountPaisa,
+            reference: payment.reference,
+            note: payment.note,
+          })),
+          lines: draft.lines.map((line) => {
+            if (
+              line.pricingMode === 'MANUAL' &&
+              line.manualUnitSellingPricePaisa === null
+            ) {
+              throw new Error('Manual Draft line is missing its selling price')
+            }
+            return {
+              variantId: line.variantId,
+              baseQty: line.quantityInput.kind === 'SIMPLE'
+                ? line.quantityInput.baseQty
+                : line.normalizedQuantitySnapshot.baseQty,
+              ...(line.pricingMode === 'MANUAL'
+                ? { manualUnitSellingPricePaisa: line.manualUnitSellingPricePaisa! }
+                : {}),
+              ...(line.shortageResolution === null
+                ? {}
+                : { shortageResolution: line.shortageResolution }),
+            }
+          }),
+          sourceDraft: { id: draft.id, version: draft.version },
+        }
+
+        // SalesService uses this same transaction; its stock and accounting
+        // writes cannot commit separately from the Draft status and audit.
+        const sale = await new SalesService(database, true).commitSale(
+          this.tenantId, userId, input.canOverrideSellingPrice, saleInput,
+        )
+        const marked = await repository.markPosted({
           tenantId: this.tenantId,
           draftId: id,
           expectedVersion,
           operationId,
+          saleId: sale.id,
         })
-        throw error
-      }
-    }
-
-    await withDatabaseTransaction(this.database, async (database) => {
-      const postingRepository = new SalesDraftRepository(database)
-      const marked = await postingRepository.markPosted({
-        tenantId: this.tenantId,
-        draftId: id,
-        expectedVersion,
-        operationId,
-        saleId: sale.id,
+        if (!marked) throw new Error('Draft could not be linked to its posted Invoice')
+        await repository.insertAudit({
+          tenantId: this.tenantId,
+          draftId: id,
+          version: draft.version,
+          actorUserId: userId,
+          state: {
+            customer: draft.customer,
+            discountPaisa: draft.discountPaisa,
+            payments: draft.payments,
+            note: draft.note,
+            lines: draft.lines,
+          },
+          action: 'POSTED',
+        })
+        return sale
       })
-
-      if (!marked) {
-        const current = await postingRepository.findById(this.tenantId, id)
-        if (
-          current?.status !== 'POSTED' ||
-          current.postedOperationId !== operationId ||
-          current.postedSaleId !== sale.id
-        ) {
-          throw new Error('Draft could not be linked to its posted Invoice')
+    } catch (error) {
+      // A simultaneous post of a different Draft may win operation_id's
+      // unique index while this transaction waits for its sale to commit.
+      if (
+        typeof error === 'object' && error !== null &&
+        'code' in error && error.code === '23505'
+      ) {
+        const source = await new SalesRepository(this.database)
+          .findDraftSourceByOperationId(this.tenantId, operationId)
+        if (source && (source.id !== id || source.version !== expectedVersion)) {
+          throw new SalesConflictError('Operation ID belongs to a different Draft.')
         }
-        return
       }
-
-      await postingRepository.insertAudit({
-        tenantId: this.tenantId,
-        draftId: id,
-        version: draft.version,
-        actorUserId: userId,
-        state: {
-          customer: draft.customer,
-          discountPaisa: draft.discountPaisa,
-          payments: draft.payments,
-          note: draft.note,
-          lines: draft.lines,
-        },
-        action: 'POSTED',
-      })
-    })
-
-    return sale
+      throw error
+    }
   }
 
   private requireAccess(
@@ -566,15 +522,19 @@ export class SalesDraftService {
 
   private async validateConversionCompatibility(
     draft: SalesDraftRecord,
+    database: DatabaseClient,
   ): Promise<void> {
     const conversions = new ConversionService(
       this.tenantId,
-      this.database,
+      database,
     )
-    const products = new PosRepository(this.database)
+    const products = new PosRepository(database)
 
     for (const line of draft.lines) {
-      if (line.quantityInput.kind !== 'COMPONENTS') continue
+      if (line.quantityInput.kind === 'SIMPLE') {
+        validateSimpleQuantity(line)
+        continue
+      }
       const savedProfile = line.normalizedQuantitySnapshot
         .snapshot as ConversionProfileSnapshot | null
       if (!savedProfile) {

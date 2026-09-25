@@ -17,6 +17,7 @@ import {
   roundPaisa,
 } from './sales-allocation'
 import {
+  SalesConflictError,
   SalesPermissionError,
   SalesValidationError,
 } from './sales.errors'
@@ -124,7 +125,10 @@ interface PlannedLine {
 }
 
 export class SalesService {
-  constructor(private readonly database: DatabaseClient) {}
+  constructor(
+    private readonly database: DatabaseClient,
+    private readonly transactionAlreadyOpen = false,
+  ) {}
 
   async commitSale(
     tenantId: string,
@@ -182,9 +186,7 @@ export class SalesService {
     ).toString()
 
     try {
-      return await withDatabaseTransaction(
-        this.database,
-        async (database) => {
+      const work = async (database: DatabaseClient) => {
           const salesRepository = new SalesRepository(database)
           const existing =
             await salesRepository.findCommittedSaleByOperationId(
@@ -192,6 +194,18 @@ export class SalesService {
               input.operationId!,
             )
           if (existing) {
+            if (input.sourceDraft) {
+              const source = await salesRepository.findDraftSourceByOperationId(
+                tenantId,
+                input.operationId!,
+              )
+              if (
+                source?.id !== input.sourceDraft.id ||
+                source.version !== input.sourceDraft.version
+              ) {
+                throw new SalesConflictError('Operation ID belongs to a different sale or Draft.')
+              }
+            }
             return existing
           }
 
@@ -407,6 +421,7 @@ export class SalesService {
             operationId: input.operationId ?? null,
             businessDate: input.businessDate,
             createdByUserId: actorUserId,
+            sourceDraft: input.sourceDraft,
           })
 
           const inventoryRepository = new InventoryRepository(database)
@@ -664,10 +679,12 @@ export class SalesService {
             duePaisa: settlement.duePaisa,
             changePaisa: settlement.changePaisa,
           }
-        },
-      )
+      }
+      return this.transactionAlreadyOpen
+        ? await work(this.database)
+        : await withDatabaseTransaction(this.database, work)
     } catch (error) {
-      if (input.operationId && isUniqueViolation(error)) {
+      if (!this.transactionAlreadyOpen && input.operationId && isUniqueViolation(error)) {
         const existing = await new SalesRepository(
           this.database,
         ).findCommittedSaleByOperationId(
@@ -675,6 +692,16 @@ export class SalesService {
           input.operationId,
         )
         if (existing) {
+          if (input.sourceDraft) {
+            const source = await new SalesRepository(this.database)
+              .findDraftSourceByOperationId(tenantId, input.operationId)
+            if (
+              source?.id !== input.sourceDraft.id ||
+              source.version !== input.sourceDraft.version
+            ) {
+              throw new SalesConflictError('Operation ID belongs to a different sale or Draft.')
+            }
+          }
           return existing
         }
       }

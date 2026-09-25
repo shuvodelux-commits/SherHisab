@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import type { SalesDraftInput } from '../../src/modules/sales/sales-draft.types'
 import { closePool, getPool } from '../../src/db/pool'
 import { AuthService } from '../../src/modules/auth/auth.service'
 import { CustomerService } from '../../src/modules/customers/customer.service'
@@ -15,6 +16,46 @@ import {
 } from '../products/product-test-helpers'
 
 const hasDatabase = Boolean(process.env.DATABASE_URL)
+
+async function postableDraftFixture(name: string) {
+  const tenant = await createProductTestTenant(name)
+  const owner = await new AuthService().createUser({
+    tenantId: tenant.id,
+    name: 'Draft Post Owner',
+    email: `draft-post-${randomUUID()}@example.com`,
+    password: 'strong-password-123',
+    role: 'OWNER',
+  })
+  const products = new ProductMasterService(tenant.id, getPool())
+  const unit = (await products.listUnits()).find((candidate) => candidate.symbol === 'pcs')
+  if (!unit) throw new Error('Default Piece unit not found')
+  const product = await products.createProduct({
+    name: `${name} Product`,
+    baseUnitId: unit.id,
+    defaultPurchasePricePaisa: '900',
+    defaultSellingPricePaisa: '1400',
+    openingStockBaseQty: '0',
+    minimumStockBaseQty: '0',
+    trackingMode: 'SIMPLE',
+  }, owner.id)
+  await new InventoryService(getPool()).adjustStock(
+    tenant.id, owner.id, product.defaultVariantId,
+    { deltaBaseQty: '10', note: 'Draft posting stock', unitCostPaisa: '900', sellingPricePaisa: '1400', businessDate: '2026-09-25' },
+  )
+  const state: SalesDraftInput = {
+    customer: { selectedCustomerId: null, name: 'Draft Buyer', phone: '01770000001', guardianName: '', address: '' },
+    discountPaisa: '0', payments: [], note: '',
+    lines: [{
+      variantId: product.defaultVariantId,
+      quantityInput: { kind: 'SIMPLE', baseQty: '1' },
+      normalizedQuantitySnapshot: { baseQty: '1', pricingQty: '1', displayQty: '1', components: {}, snapshot: null },
+      pricingMode: 'AUTO', manualUnitSellingPricePaisa: null,
+      shortageResolution: null, serialIds: [], batchSelection: null,
+      warrantySnapshot: null, captureValues: {},
+    }],
+  }
+  return { tenant, owner, product, state, service: new SalesDraftService(tenant.id, getPool()) }
+}
 
 async function businessMutationCounts(tenantId: string) {
   const result = await getPool().query<{
@@ -1298,4 +1339,101 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
     ])
   })
 
+  it('rejects a second Draft using an operation ID already bound to another Draft', async () => {
+    const { tenant, owner, state, service } = await postableDraftFixture('Draft Operation Binding')
+    const first = await service.create(owner.id, state)
+    const second = await service.create(owner.id, { ...state, note: 'Different transaction' })
+    const operationId = randomUUID()
+    const sale = await service.post(owner.id, first.id, first.version, {
+      operationId, businessDate: '2026-09-25', canOverrideSellingPrice: true,
+    })
+
+    await expect(service.post(owner.id, second.id, second.version, {
+      operationId, businessDate: '2026-09-25', canOverrideSellingPrice: true,
+    })).rejects.toThrow(/operation|draft|conflict/i)
+
+    expect(await service.get(second.id, owner.id)).toMatchObject({ status: 'ACTIVE', postedSaleId: null })
+    const invoices = await getPool().query<{ id: string; source_draft_id: string; source_draft_version: number }>(
+      `SELECT id, source_draft_id::text, source_draft_version FROM sales_invoices WHERE tenant_id = $1`,
+      [tenant.id],
+    )
+    expect(invoices.rows).toEqual([{ id: sale.id, source_draft_id: first.id, source_draft_version: first.version }])
+  })
+
+  it('rejects a simple quantity snapshot that differs from the entered quantity', async () => {
+    const { owner, state, service } = await postableDraftFixture('Draft Simple Quantity')
+    state.lines[0]!.normalizedQuantitySnapshot.baseQty = '5'
+    await expect(service.create(owner.id, state)).rejects.toThrow(/quantity|snapshot/i)
+  })
+
+  it('revalidates a stored simple quantity before any sale mutation', async () => {
+    const { tenant, owner, state, service } = await postableDraftFixture('Draft Stored Quantity')
+    const draft = await service.create(owner.id, state)
+    await getPool().query(
+      `UPDATE sales_draft_lines SET base_qty = 5, normalized_quantity_snapshot = jsonb_set(normalized_quantity_snapshot, '{baseQty}', '"5"') WHERE tenant_id = $1 AND draft_id = $2`,
+      [tenant.id, draft.id],
+    )
+    await expect(service.post(owner.id, draft.id, draft.version, {
+      operationId: randomUUID(), businessDate: '2026-09-25', canOverrideSellingPrice: true,
+    })).rejects.toThrow(/quantity|snapshot/i)
+    expect((await businessMutationCounts(tenant.id)).sales_invoices).toBe('0')
+  })
+
+  it.each(['update', 'archive'] as const)('does not commit a sale against a concurrent %s', async (mutation) => {
+    const { tenant, owner, state, service } = await postableDraftFixture(`Draft Concurrent ${mutation}`)
+    const draft = await service.create(owner.id, state)
+    await getPool().query(
+      `INSERT INTO tenant_document_counters (tenant_id, document_type, next_value) VALUES ($1, 'INV', 1) ON CONFLICT DO NOTHING`,
+      [tenant.id],
+    )
+    const blocker = await getPool().connect()
+    const postingClient = await getPool().connect()
+    const postingService = new SalesDraftService(tenant.id, postingClient)
+    const postingPid = (await postingClient.query<{ pid: number }>(
+      'SELECT pg_backend_pid() AS pid',
+    )).rows[0]?.pid
+    await blocker.query('BEGIN')
+    await blocker.query(
+      `SELECT next_value FROM tenant_document_counters WHERE tenant_id = $1 AND document_type = 'INV' FOR UPDATE`,
+      [tenant.id],
+    )
+    let posting: Promise<unknown> | null = null
+    let competing: Promise<unknown> | null = null
+    try {
+      posting = postingService.post(owner.id, draft.id, draft.version, {
+        operationId: randomUUID(), businessDate: '2026-09-25', canOverrideSellingPrice: true,
+      })
+      // Wait until posting reaches the locked Invoice counter, then race the mutation.
+      let reachedCounter = false
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const waiting = await getPool().query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = 'Lock' AND query LIKE 'INSERT INTO tenant_document_counters%'`,
+          [postingPid],
+        )
+        if (Number(waiting.rows[0]?.count) > 0) {
+          reachedCounter = true
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+      expect(reachedCounter).toBe(true)
+      competing = mutation === 'update'
+        ? service.update(owner.id, draft.id, draft.version, { ...state, note: 'Competing update' })
+        : service.archive(owner.id, draft.id, draft.version)
+      await blocker.query('COMMIT')
+      const sale = await posting as { id: string }
+      await expect(competing).rejects.toThrow()
+      expect(await service.get(draft.id, owner.id)).toMatchObject({ status: 'POSTED', postedSaleId: sale.id })
+      const audit = await getPool().query<{ action: string }>(
+        `SELECT action FROM sales_draft_audit WHERE tenant_id = $1 AND draft_id = $2 AND action = 'POSTED'`,
+        [tenant.id, draft.id],
+      )
+      expect(audit.rows).toHaveLength(1)
+    } finally {
+      await blocker.query('ROLLBACK')
+      await Promise.allSettled([posting, competing].filter((operation) => operation !== null))
+      blocker.release()
+      postingClient.release()
+    }
+  })
 })

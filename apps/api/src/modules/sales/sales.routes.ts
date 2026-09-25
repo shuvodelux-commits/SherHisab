@@ -647,6 +647,9 @@ export const salesRoutes = new Hono<AppEnv>()
       if (error instanceof SalesPermissionError) {
         return c.json({ error: error.message }, 403)
       }
+      if (error instanceof SalesConflictError) {
+        return c.json({ error: error.message }, 409)
+      }
       if (
         error instanceof SalesValidationError ||
         error instanceof Error

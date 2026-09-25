@@ -1011,6 +1011,23 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
       id: sale.id,
       invoiceNumber: sale.invoiceNumber,
     })
+    const secondCreate = await privatePost(fixture.cookie, '/sales/drafts', {
+      ...draftState,
+      note: 'Second sale',
+    })
+    expect(secondCreate.status).toBe(201)
+    const secondDraft = (await secondCreate.json()) as { id: string }
+    const reusedOperation = await privatePost(
+      fixture.cookie,
+      `/sales/drafts/${secondDraft.id}/post`,
+      { expectedVersion: 1, operationId, businessDate: '2026-09-25' },
+    )
+    expect(reusedOperation.status).toBe(409)
+    const secondLoad = await app.request(
+      `http://localhost/api/private/sales/drafts/${secondDraft.id}`,
+      { headers: { cookie: fixture.cookie } },
+    )
+    expect(await secondLoad.json()).toMatchObject({ status: 'ACTIVE', postedSaleId: null })
     const invoices = await getPool().query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM sales_invoices WHERE tenant_id = $1`,
       [fixture.tenant.id],
@@ -1021,6 +1038,28 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
       fixture.product.defaultVariantId,
     )
     expect(lots[0]?.remainingBaseQty).toBe('1')
+  })
+
+  it('rejects a Draft route payload whose entered simple quantity disagrees with its snapshot', async () => {
+    const fixture = await createFixture('Draft Quantity Route')
+    const response = await privatePost(fixture.cookie, '/sales/drafts', {
+      customer: { selectedCustomerId: null, name: 'Quantity Buyer', phone: '01712345678', guardianName: '', address: '' },
+      discountPaisa: '0', payments: [], note: '',
+      lines: [{
+        variantId: fixture.product.defaultVariantId,
+        quantityInput: { kind: 'SIMPLE', baseQty: '1' },
+        normalizedQuantitySnapshot: { baseQty: '5', pricingQty: '5', displayQty: '5', components: {}, snapshot: null },
+        pricingMode: 'AUTO', manualUnitSellingPricePaisa: null,
+        shortageResolution: null, serialIds: [], batchSelection: null,
+        warrantySnapshot: null, captureValues: {},
+      }],
+    })
+    expect(response.status).toBe(400)
+    const count = await getPool().query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM sales_drafts WHERE tenant_id = $1`,
+      [fixture.tenant.id],
+    )
+    expect(count.rows[0]?.count).toBe('0')
   })
 
 })
