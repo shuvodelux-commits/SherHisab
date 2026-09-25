@@ -396,11 +396,13 @@ describe.skipIf(!hasDatabase)('serial and warranty tracking', () => {
         serialIds: [serialId],
       })
 
-      const competing = secondTracking.validateAndLockSerials({
-        variantId: fixture.first.defaultVariantId,
-        baseQty: '1',
-        serialIds: [serialId],
-      })
+      const competing = expect(
+        secondTracking.validateAndLockSerials({
+          variantId: fixture.first.defaultVariantId,
+          baseQty: '1',
+          serialIds: [serialId],
+        }),
+      ).rejects.toThrow('Serial is unavailable for this Variant')
 
       await new Promise((resolve) => setTimeout(resolve, 25))
       await firstClient.query(
@@ -411,9 +413,7 @@ describe.skipIf(!hasDatabase)('serial and warranty tracking', () => {
       )
       await firstClient.query('COMMIT')
 
-      await expect(competing).rejects.toThrow(
-        'Serial is unavailable for this Variant',
-      )
+      await competing
       await secondClient.query('ROLLBACK')
     } finally {
       await firstClient.query('ROLLBACK').catch(() => undefined)
