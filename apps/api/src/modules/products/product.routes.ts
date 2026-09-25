@@ -8,6 +8,7 @@ import {
 } from './product.errors'
 import { InventoryService } from './inventory.service'
 import { ProductMasterService } from './product-master.service'
+import type { AllocationPolicy } from './tracking.types'
 import type {
   AdvancedProductConfigurationInput,
   AlternativeUnitInput,
@@ -160,6 +161,11 @@ function createProductInput(
       'trackingMode',
       'SIMPLE',
     ) as TrackingMode,
+    allocationPolicy: stringValue(
+      body,
+      'allocationPolicy',
+      'FIFO',
+    ) as AllocationPolicy,
     advanced: optionalAdvanced(body.advanced),
   }
 }
@@ -204,6 +210,11 @@ async function updateProductInput(
       'trackingMode',
       current.trackingMode,
     ) as TrackingMode,
+    allocationPolicy: stringValue(
+      body,
+      'allocationPolicy',
+      current.allocationPolicy,
+    ) as AllocationPolicy,
     advanced: optionalAdvanced(body.advanced),
   }
 }
