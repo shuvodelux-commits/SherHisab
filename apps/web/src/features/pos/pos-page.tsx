@@ -31,6 +31,10 @@ import type {
   PosLineQuoteDto,
   PosProductSearchDto,
 } from './pos-types'
+import {
+  CustomerPanel,
+  type PosCustomerDraft,
+} from './components/customer-panel'
 
 interface CartLineState {
   product: PosProductSearchDto
@@ -91,6 +95,15 @@ export function PosPage() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [activeResultIndex, setActiveResultIndex] = useState(-1)
   const [cart, setCart] = useState<CartLineState[]>([])
+  const [customer, setCustomer] = useState<PosCustomerDraft>({
+    selectedCustomerId: null,
+    selectedCustomerCode: null,
+    name: '',
+    phone: '',
+    guardianName: '',
+    address: '',
+    balancePaisa: null,
+  })
   const [pageError, setPageError] = useState('')
   const [saleMessage, setSaleMessage] = useState('')
 
@@ -506,6 +519,10 @@ export function PosPage() {
         </section>
 
         <section className="pos-panel pos-cart-panel">
+          <CustomerPanel
+            onChange={setCustomer}
+            value={customer}
+          />
           <div className="pos-cart-heading">
             <div className="pos-cart-title">
               <BilingualLabel en="Cart" bn="কার্ট" />
