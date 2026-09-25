@@ -1089,4 +1089,117 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
     expect(line.rows).toEqual([{ base_qty: '37' }])
   })
 
+
+  it('lists recent ACTIVE Drafts newest-first and archives with optimistic versioning', async () => {
+    const tenant = await createProductTestTenant('Recent Drafts')
+    const owner = await new AuthService().createUser({
+      tenantId: tenant.id,
+      name: 'Recent Draft Owner',
+      email: `recent-draft-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    const products = new ProductMasterService(tenant.id, getPool())
+    const unit = (await products.listUnits()).find(
+      (candidate) => candidate.symbol === 'pcs',
+    )
+    if (!unit) {
+      throw new Error('Default Piece unit not found')
+    }
+    const product = await products.createProduct(
+      {
+        name: 'Recent Draft Product',
+        baseUnitId: unit.id,
+        defaultPurchasePricePaisa: '1000',
+        defaultSellingPricePaisa: '1500',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'SIMPLE',
+      },
+      owner.id,
+    )
+    const service = new SalesDraftService(tenant.id, getPool())
+    const state = (name: string) => ({
+      customer: {
+        selectedCustomerId: null,
+        name,
+        phone: '01710000000',
+        guardianName: '',
+        address: '',
+      },
+      discountPaisa: '0',
+      payments: [],
+      note: '',
+      lines: [
+        {
+          variantId: product.defaultVariantId,
+          quantityInput: {
+            kind: 'SIMPLE' as const,
+            baseQty: '1',
+          },
+          normalizedQuantitySnapshot: {
+            baseQty: '1',
+            pricingQty: '1',
+            displayQty: '1',
+            components: {},
+            snapshot: null,
+          },
+          pricingMode: 'AUTO' as const,
+          manualUnitSellingPricePaisa: null,
+          shortageResolution: null,
+          serialIds: [],
+          batchSelection: null,
+          warrantySnapshot: null,
+          captureValues: {},
+        },
+      ],
+    })
+
+    const first = await service.create(owner.id, state('First Buyer'))
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const second = await service.create(owner.id, state('Second Buyer'))
+
+    const recent = await service.listRecent(5)
+    expect(recent.map((draft) => draft.id)).toEqual([
+      second.id,
+      first.id,
+    ])
+
+    const archived = await service.archive(
+      owner.id,
+      first.id,
+      first.version,
+    )
+    expect(archived).toMatchObject({
+      id: first.id,
+      status: 'ARCHIVED',
+      version: first.version + 1,
+    })
+
+    await expect(
+      service.archive(owner.id, first.id, first.version),
+    ).rejects.toMatchObject({
+      name: 'SalesDraftVersionConflictError',
+      currentVersion: first.version + 1,
+    })
+
+    const activeOnly = await service.listRecent(5)
+    expect(activeOnly.map((draft) => draft.id)).toEqual([second.id])
+
+    const audit = await getPool().query<{
+      action: string
+      draft_version: number
+    }>(
+      `SELECT action, draft_version
+       FROM sales_draft_audit
+       WHERE tenant_id = $1 AND draft_id = $2
+       ORDER BY created_at, id`,
+      [tenant.id, first.id],
+    )
+    expect(audit.rows).toEqual([
+      { action: 'CREATED', draft_version: 1 },
+      { action: 'ARCHIVED', draft_version: 2 },
+    ])
+  })
+
 })
