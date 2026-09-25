@@ -802,4 +802,177 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
     expect(await emptyRecent.json()).toEqual([])
   })
 
+  it('restricts active Draft routes to their owner or SALES_EDIT manager', async () => {
+    const fixture = await createFixture('Draft Route Ownership')
+    const password = 'strong-password-123'
+    const makeStaff = async (name: string, manager = false) => {
+      const user = await fixture.authService.createUser({
+        tenantId: fixture.tenant.id,
+        name,
+        email: `draft-${randomUUID()}@example.com`,
+        password,
+        role: 'STAFF',
+      })
+      for (const permission of manager
+        ? (['POS_VIEW', 'POS_SELL', 'SALES_EDIT'] as const)
+        : (['POS_VIEW', 'POS_SELL'] as const)) {
+        await fixture.authService.grantPermission({
+          tenantId: fixture.tenant.id,
+          userId: user.id,
+          permission,
+          grantedByUserId: fixture.user.id,
+        })
+      }
+      const login = await app.request('http://localhost/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: fixture.tenant.slug,
+          email: user.email,
+          password,
+        }),
+      })
+      expect(login.status).toBe(200)
+      return { user, cookie: readSessionCookie(login.headers.get('set-cookie')) }
+    }
+    const owner = await makeStaff('Draft owner')
+    const other = await makeStaff('Other seller')
+    const manager = await makeStaff('Sales manager', true)
+    const draftState = {
+      customer: {
+        selectedCustomerId: null,
+        name: 'Draft Buyer',
+        phone: '01712345678',
+        guardianName: '',
+        address: '',
+      },
+      discountPaisa: '0',
+      payments: [],
+      note: 'Private draft',
+      lines: [],
+    }
+    const create = await privatePost(owner.cookie, '/sales/drafts', draftState)
+    expect(create.status).toBe(201)
+    const draft = (await create.json()) as { id: string; version: number; ownerUserId: string }
+    expect(draft.ownerUserId).toBe(owner.user.id)
+    const path = `/sales/drafts/${draft.id}`
+    const recent = async (cookie: string) => app.request(
+      'http://localhost/api/private/sales/drafts',
+      { headers: { cookie } },
+    )
+    const load = async (cookie: string) => app.request(
+      `http://localhost/api/private${path}`,
+      { headers: { cookie } },
+    )
+    const update = async (cookie: string) => app.request(
+      `http://localhost/api/private${path}`,
+      {
+        method: 'PATCH',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ expectedVersion: 1, ...draftState, note: 'Changed' }),
+      },
+    )
+    expect((await recent(owner.cookie)).status).toBe(200)
+    expect((await load(owner.cookie)).status).toBe(200)
+
+    expect(await (await recent(other.cookie)).json()).toEqual([])
+    expect((await load(other.cookie)).status).toBe(403)
+    expect((await update(other.cookie)).status).toBe(403)
+    expect((await privatePost(other.cookie, `${path}/archive`, { expectedVersion: 1 })).status).toBe(403)
+    expect((await privatePost(other.cookie, `${path}/post`, {
+      expectedVersion: 1,
+      operationId: randomUUID(),
+      businessDate: '2026-09-25',
+    })).status).toBe(403)
+
+    expect(await (await recent(manager.cookie)).json()).toEqual([
+      expect.objectContaining({ id: draft.id }),
+    ])
+    expect((await load(manager.cookie)).status).toBe(200)
+    const managed = await update(manager.cookie)
+    expect(managed.status).toBe(200)
+    expect(await managed.json()).toMatchObject({ version: 2, note: 'Changed' })
+    expect((await privatePost(manager.cookie, `${path}/archive`, { expectedVersion: 2 })).status).toBe(200)
+  })
+
+  it('posts a Draft through the route once, returns stale version metadata, and replays the same sale', async () => {
+    const fixture = await createFixture('Draft Route Post')
+    await addLot(fixture, {
+      qty: '2',
+      cost: '900',
+      selling: '1400',
+      date: '2026-09-25',
+    })
+    const draftState = {
+      customer: {
+        selectedCustomerId: null,
+        name: 'Route Post Buyer',
+        phone: '01712345678',
+        guardianName: '',
+        address: '',
+      },
+      discountPaisa: '0',
+      payments: [],
+      note: 'Post via route',
+      lines: [{
+        variantId: fixture.product.defaultVariantId,
+        quantityInput: { kind: 'SIMPLE', baseQty: '1' },
+        normalizedQuantitySnapshot: {
+          baseQty: '1',
+          pricingQty: '1',
+          displayQty: '1',
+          components: {},
+          snapshot: null,
+        },
+        pricingMode: 'AUTO',
+        manualUnitSellingPricePaisa: null,
+        shortageResolution: null,
+        serialIds: [],
+        batchSelection: null,
+        warrantySnapshot: null,
+        captureValues: {},
+      }],
+    }
+    const create = await privatePost(fixture.cookie, '/sales/drafts', draftState)
+    expect(create.status).toBe(201)
+    const draft = (await create.json()) as { id: string }
+    const update = await app.request(
+      `http://localhost/api/private/sales/drafts/${draft.id}`,
+      {
+        method: 'PATCH',
+        headers: { cookie: fixture.cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ expectedVersion: 1, ...draftState, note: 'Ready' }),
+      },
+    )
+    expect(update.status).toBe(200)
+    const operationId = randomUUID()
+    const post = (expectedVersion: number) => privatePost(
+      fixture.cookie,
+      `/sales/drafts/${draft.id}/post`,
+      { expectedVersion, operationId, businessDate: '2026-09-25' },
+    )
+    const stale = await post(1)
+    expect(stale.status).toBe(409)
+    expect(await stale.json()).toMatchObject({ currentVersion: 2 })
+    const first = await post(2)
+    expect(first.status).toBe(201)
+    const sale = (await first.json()) as { id: string; invoiceNumber: string }
+    const retry = await post(2)
+    expect(retry.status).toBe(201)
+    expect(await retry.json()).toMatchObject({
+      id: sale.id,
+      invoiceNumber: sale.invoiceNumber,
+    })
+    const invoices = await getPool().query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM sales_invoices WHERE tenant_id = $1`,
+      [fixture.tenant.id],
+    )
+    expect(invoices.rows[0]?.count).toBe('1')
+    const lots = await fixture.inventory.listLots(
+      fixture.tenant.id,
+      fixture.product.defaultVariantId,
+    )
+    expect(lots[0]?.remainingBaseQty).toBe('1')
+  })
+
 })
