@@ -600,4 +600,61 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
     })
   })
 
+
+  it('requires POS_SELL before any sale mutation', async () => {
+    const fixture = await createFixture(
+      'POS Sell Permission',
+      'STAFF',
+    )
+    await addLot(fixture, {
+      qty: '1',
+      cost: '700',
+      selling: '1100',
+      date: '2026-09-01',
+    })
+
+    const response = await privatePost(
+      fixture.cookie,
+      '/sales',
+      {
+        operationId: randomUUID(),
+        businessDate: '2026-09-25',
+        customer: {
+          name: 'Permission Buyer',
+          phone: '01710000000',
+        },
+        discountPaisa: '0',
+        lines: [
+          {
+            variantId: fixture.product.defaultVariantId,
+            baseQty: '1',
+          },
+        ],
+        payments: [
+          {
+            clientLineId: 'cash-1',
+            method: 'CASH',
+            amountPaisa: '1100',
+          },
+        ],
+      },
+    )
+
+    expect(response.status).toBe(403)
+
+    const invoices = await getPool().query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM sales_invoices
+       WHERE tenant_id = $1`,
+      [fixture.tenant.id],
+    )
+    expect(invoices.rows[0]?.count).toBe('0')
+
+    const lots = await fixture.inventory.listLots(
+      fixture.tenant.id,
+      fixture.product.defaultVariantId,
+    )
+    expect(lots[0]?.remainingBaseQty).toBe('1')
+  })
+
 })

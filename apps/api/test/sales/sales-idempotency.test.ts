@@ -333,4 +333,39 @@ describe.skipIf(!hasDatabase)('mature sales numbering and idempotency', () => {
     expect((await countRows(tenantA.tenant.id)).invoices).toBe('1')
     expect((await countRows(tenantB.tenant.id)).invoices).toBe('1')
   })
+
+  it('reconstructs the same discounted Cash-over-tender Invoice on idempotent retry', async () => {
+    const fixture = await createFixture('Idempotent Mature Economics')
+    const operationId = randomUUID()
+    const request = payload(fixture, operationId)
+    request.discountPaisa = '100'
+    request.payments[0]!.amountPaisa = '1200'
+
+    const first = await postSale(fixture.cookie, request)
+    expect(first.status).toBe(201)
+    const firstBody = (await first.json()) as Record<string, unknown>
+
+    expect(firstBody).toMatchObject({
+      subtotalPaisa: '1000',
+      discountPaisa: '100',
+      grandTotalPaisa: '900',
+      paidAmountPaisa: '900',
+      duePaisa: '0',
+      changePaisa: '300',
+      grossProfitPaisa: '400',
+      lines: [
+        expect.objectContaining({
+          grossAmountPaisa: '1000',
+          allocatedDiscountPaisa: '100',
+          netAmountPaisa: '900',
+          grossProfitPaisa: '400',
+        }),
+      ],
+    })
+
+    const retry = await postSale(fixture.cookie, request)
+    expect(retry.status).toBe(201)
+    expect(await retry.json()).toEqual(firstBody)
+  })
+
 })
