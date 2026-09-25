@@ -238,7 +238,20 @@ describe('POS drafts', () => {
   })
 
   it('keeps an unchanged saved draft at its version after a failed post, then saves edits', async () => {
-    const fetchMock = installFetch()
+    // PostgreSQL JSONB returns payment object keys in a different order from
+    // the editor payload, even though the saved values are identical.
+    const persistedDraft: SalesDraftDto = {
+      ...draft,
+      payments: draft.payments.map((payment) => ({
+        note: payment.note,
+        method: payment.method,
+        accountId: payment.accountId,
+        reference: payment.reference,
+        amountPaisa: payment.amountPaisa,
+        clientLineId: payment.clientLineId,
+      })),
+    }
+    const fetchMock = installFetch(persistedDraft)
     renderPos()
     fireEvent.click(screen.getByRole('button', { name: /Recent Drafts/i }))
     fireEvent.click(await screen.findByRole('button', { name: /DRAFT-000001.*Ayesha/i }))

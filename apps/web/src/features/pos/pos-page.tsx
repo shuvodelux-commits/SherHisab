@@ -170,13 +170,23 @@ function sameDraftState(
   draft: SalesDraftDto,
   input: DraftMutationInput,
 ): boolean {
-  return JSON.stringify({
+  const stableJson = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(stableJson)
+    if (value !== null && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, item]) => [key, stableJson(item)]),
+      )
+    }
+    return value
+  }
+  return JSON.stringify(stableJson({
     customer: draft.customer,
     discountPaisa: draft.discountPaisa,
     payments: draft.payments,
     note: draft.note,
     lines: draft.lines,
-  }) === JSON.stringify(input)
+  })) === JSON.stringify(stableJson(input))
 }
 
 function sameBaseQuantity(left: string, right: string): boolean {
