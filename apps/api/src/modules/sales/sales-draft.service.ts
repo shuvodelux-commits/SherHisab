@@ -84,7 +84,6 @@ export class SalesDraftService {
   async create(
     actorUserId: string,
     input: SalesDraftInput,
-    canManageAll = false,
   ): Promise<SalesDraftRecord> {
     const userId = actorUserId.trim()
     if (!userId) {
@@ -260,6 +259,7 @@ export class SalesDraftService {
     draftId: string,
     expectedVersion: number,
     input: SalesDraftInput,
+    canManageAll = false,
   ): Promise<SalesDraftRecord> {
     const userId = actorUserId.trim()
     const id = draftId.trim()
