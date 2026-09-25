@@ -684,4 +684,103 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
     })
   })
 
+
+  it('rejects a stale expectedVersion and reports the current Draft version', async () => {
+    const tenant = await createProductTestTenant('Draft Version Conflict')
+    const owner = await new AuthService().createUser({
+      tenantId: tenant.id,
+      name: 'Draft Conflict Owner',
+      email: `draft-conflict-${randomUUID()}@example.com`,
+      password: 'strong-password-123',
+      role: 'OWNER',
+    })
+    const products = new ProductMasterService(tenant.id, getPool())
+    const unit = (await products.listUnits()).find(
+      (candidate) => candidate.symbol === 'pcs',
+    )
+    if (!unit) {
+      throw new Error('Default Piece unit not found')
+    }
+    const product = await products.createProduct(
+      {
+        name: 'Draft Conflict Product',
+        baseUnitId: unit.id,
+        defaultPurchasePricePaisa: '1000',
+        defaultSellingPricePaisa: '1500',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'SIMPLE',
+      },
+      owner.id,
+    )
+    const service = new SalesDraftService(tenant.id, getPool())
+    const state = {
+      customer: {
+        selectedCustomerId: null,
+        name: 'Conflict Buyer',
+        phone: '01755555555',
+        guardianName: '',
+        address: '',
+      },
+      discountPaisa: '0',
+      payments: [],
+      note: 'Version one',
+      lines: [
+        {
+          variantId: product.defaultVariantId,
+          quantityInput: {
+            kind: 'SIMPLE' as const,
+            baseQty: '1',
+          },
+          normalizedQuantitySnapshot: {
+            baseQty: '1',
+            pricingQty: '1',
+            displayQty: '1',
+            components: {},
+            snapshot: null,
+          },
+          pricingMode: 'AUTO' as const,
+          manualUnitSellingPricePaisa: null,
+          shortageResolution: null,
+          serialIds: [],
+          batchSelection: null,
+          warrantySnapshot: null,
+          captureValues: {},
+        },
+      ],
+    }
+
+    const created = await service.create(owner.id, state)
+    const versionTwo = await service.update(
+      owner.id,
+      created.id,
+      created.version,
+      {
+        ...state,
+        note: 'Version two',
+      },
+    )
+    expect(versionTwo.version).toBe(2)
+
+    await expect(
+      service.update(
+        owner.id,
+        created.id,
+        created.version,
+        {
+          ...state,
+          note: 'Stale write must not win',
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: 'SalesDraftVersionConflictError',
+      currentVersion: 2,
+    })
+
+    await expect(service.get(created.id)).resolves.toMatchObject({
+      version: 2,
+      note: 'Version two',
+    })
+  })
+
 })
