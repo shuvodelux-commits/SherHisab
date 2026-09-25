@@ -77,6 +77,30 @@ function requireAllocationPolicy(
   return value
 }
 
+function resolveAllocationPolicy(
+  trackingMode: TrackingMode,
+  requested: AllocationPolicy | undefined,
+  fallback: AllocationPolicy = 'FIFO',
+): AllocationPolicy {
+  if (requested !== undefined) {
+    const policy = requireAllocationPolicy(requested)
+
+    if (trackingMode !== 'BATCH_EXPIRY' && policy === 'FEFO') {
+      throw new ProductValidationError(
+        'FEFO allocation is only available for Batch & Expiry Products',
+      )
+    }
+
+    return trackingMode === 'BATCH_EXPIRY' ? policy : 'FIFO'
+  }
+
+  if (trackingMode !== 'BATCH_EXPIRY') {
+    return 'FIFO'
+  }
+
+  return requireAllocationPolicy(fallback)
+}
+
 const PRODUCT_SORT_KEYS = new Set([
   'name',
   'category',
@@ -578,8 +602,9 @@ export class ProductMasterService {
       'Minimum stock',
     )
     const trackingMode = requireTrackingMode(input.trackingMode ?? 'SIMPLE')
-    const allocationPolicy = requireAllocationPolicy(
-      input.allocationPolicy ?? 'FIFO',
+    const allocationPolicy = resolveAllocationPolicy(
+      trackingMode,
+      input.allocationPolicy,
     )
 
     if (
@@ -772,8 +797,10 @@ export class ProductMasterService {
       'Minimum stock',
     )
     const trackingMode = requireTrackingMode(input.trackingMode)
-    const allocationPolicy = requireAllocationPolicy(
-      input.allocationPolicy ?? current.allocationPolicy,
+    const allocationPolicy = resolveAllocationPolicy(
+      trackingMode,
+      input.allocationPolicy,
+      current.allocationPolicy,
     )
 
     if (categoryId && categoryId !== current.category?.id) {
