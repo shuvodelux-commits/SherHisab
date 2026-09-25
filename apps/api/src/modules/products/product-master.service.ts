@@ -773,7 +773,7 @@ export class ProductMasterService {
     )
     const trackingMode = requireTrackingMode(input.trackingMode)
     const allocationPolicy = requireAllocationPolicy(
-      input.allocationPolicy,
+      input.allocationPolicy ?? current.allocationPolicy,
     )
 
     if (categoryId && categoryId !== current.category?.id) {

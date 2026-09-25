@@ -70,7 +70,7 @@ export interface UpdateProductInput {
   defaultSellingPricePaisa: string
   minimumStockBaseQty: string
   trackingMode: TrackingMode
-  allocationPolicy: AllocationPolicy
+  allocationPolicy?: AllocationPolicy
   advanced?: AdvancedProductConfigurationInput
 }
 
