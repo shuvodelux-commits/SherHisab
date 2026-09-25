@@ -397,15 +397,26 @@ export class SalesService {
             })
           }
 
+          const invoiceSnapshot =
+            snapshot.selectedCustomerId && customer
+              ? {
+                  name: customer.name,
+                  phone: customer.phone,
+                  normalizedPhone: customer.normalizedPhone,
+                  guardianName: customer.guardianName,
+                  address: customer.address,
+                }
+              : snapshot
+
           await salesRepository.finalizeMatureInvoice({
             tenantId,
             saleId: invoice.id,
             customerId: customer?.id ?? null,
-            customerName: snapshot.name,
-            customerPhone: snapshot.phone,
-            normalizedPhone: snapshot.normalizedPhone,
-            guardianName: snapshot.guardianName,
-            address: snapshot.address,
+            customerName: invoiceSnapshot.name,
+            customerPhone: invoiceSnapshot.phone,
+            normalizedPhone: invoiceSnapshot.normalizedPhone,
+            guardianName: invoiceSnapshot.guardianName,
+            address: invoiceSnapshot.address,
             subtotalPaisa: subtotal.toString(),
             discountPaisa,
             grandTotalPaisa: grandTotal.toString(),

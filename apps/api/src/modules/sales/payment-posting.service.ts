@@ -117,9 +117,10 @@ export class PaymentPostingService {
            reference,
            note,
            cash_session_id,
-           created_by_user_id
+           created_by_user_id,
+           created_at
          )
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,clock_timestamp())`,
         [
           this.tenantId,
           saleId,
