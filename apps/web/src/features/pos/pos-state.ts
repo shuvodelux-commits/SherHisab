@@ -21,6 +21,7 @@ export interface CartLineState {
   isQuoting: boolean
   error: string
   savedDraftLine?: SalesDraftLineDto
+  draftLineEdited?: boolean
 }
 
 export type CartAction =

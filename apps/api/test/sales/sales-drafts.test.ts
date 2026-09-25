@@ -1077,6 +1077,73 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
       }),
     ).rejects.toThrow(/conversion/i)
 
+    const compatibleProduct = await products.createProduct(
+      {
+        name: 'Unrelated Compatible Conversion Product',
+        baseUnitId: gira.id,
+        defaultPurchasePricePaisa: '1000',
+        defaultSellingPricePaisa: '2000',
+        openingStockBaseQty: '0',
+        minimumStockBaseQty: '0',
+        trackingMode: 'SIMPLE',
+      },
+      owner.id,
+    )
+    await conversion.replaceActiveProfile(compatibleProduct.id, {
+      type: 'COMPOUND',
+      baseUnitId: gira.id,
+      pricingUnitId: gauge.id,
+      pricingBaseFactorNumerator: '16',
+      pricingBaseFactorDenominator: '1',
+      displayPrecision: 2,
+      components: profileV1.components.map((component) => ({
+        key: component.key,
+        label: component.label,
+        unitId: component.unitId,
+        baseFactorNumerator: component.baseFactorNumerator,
+        baseFactorDenominator: component.baseFactorDenominator,
+        sortOrder: component.sortOrder,
+        minValue: component.minValue,
+        maxExclusive: component.maxExclusive,
+        allowFraction: component.allowFraction,
+        autoNormalizeRemainder: component.autoNormalizeRemainder,
+      })),
+    })
+    const spoofedDraft = await service.create(owner.id, {
+      customer: {
+        selectedCustomerId: null,
+        name: 'Conversion Buyer',
+        phone: '01770000002',
+        guardianName: '',
+        address: '',
+      },
+      discountPaisa: '0',
+      payments: [],
+      note: '',
+      lines: [{
+        variantId: product.defaultVariantId,
+        quantityInput,
+        normalizedQuantitySnapshot: {
+          ...normalized,
+          snapshot: { ...profileV1, productId: compatibleProduct.id },
+        },
+        pricingMode: 'AUTO',
+        manualUnitSellingPricePaisa: null,
+        shortageResolution: null,
+        serialIds: [],
+        batchSelection: null,
+        warrantySnapshot: null,
+        captureValues: {},
+      }],
+    })
+    await expect(
+      service.post(owner.id, spoofedDraft.id, spoofedDraft.version, {
+        operationId: randomUUID(),
+        businessDate: '2026-09-25',
+        canOverrideSellingPrice: true,
+      }),
+    ).rejects.toThrow(/product|conversion/i)
+
     const invoices = await getPool().query<{ count: string }>(
       `SELECT COUNT(*)::text AS count
        FROM sales_invoices

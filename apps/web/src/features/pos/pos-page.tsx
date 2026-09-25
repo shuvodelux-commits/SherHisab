@@ -33,6 +33,7 @@ import {
   getPosBootstrap,
   quoteSaleLine,
   searchPosProducts,
+  getPosProductByVariant,
   getSalesDraft,
   createSalesDraft,
   updateSalesDraft,
@@ -42,6 +43,7 @@ import type {
   CommittedSaleDto,
   CommitSalePayload,
   PosPaymentLineDraft,
+  PosLineQuoteDto,
   PosProductSearchDto,
   PosVendorSearchDto,
   SalesDraftDto,
@@ -438,8 +440,9 @@ export function PosPage() {
       })),
       note: saleNote,
       lines: cart.map((line): SalesDraftLineDto => {
-        if (line.savedDraftLine) {
-          return line.savedDraftLine
+        const savedLine = line.savedDraftLine
+        if (savedLine && !line.draftLineEdited) {
+          return savedLine
         }
         const profile = line.quote.conversion.snapshot
         const quantityInput = profile?.type === 'COMPOUND'
@@ -461,16 +464,17 @@ export function PosPage() {
           }
         }
         return {
+          ...(savedLine ?? {}),
           variantId: line.product.variantId,
           quantityInput,
           normalizedQuantitySnapshot: line.quote.conversion,
           pricingMode: line.manualUnitSellingPricePaisa ? 'MANUAL' : 'AUTO',
           manualUnitSellingPricePaisa: line.manualUnitSellingPricePaisa,
           shortageResolution,
-          serialIds: [],
-          batchSelection: null,
-          warrantySnapshot: null,
-          captureValues: {},
+          serialIds: savedLine?.serialIds ?? [],
+          batchSelection: savedLine?.batchSelection ?? null,
+          warrantySnapshot: savedLine?.warrantySnapshot ?? null,
+          captureValues: savedLine?.captureValues ?? {},
         }
       }),
     }
@@ -480,11 +484,12 @@ export function PosPage() {
     try {
       const draft = await getSalesDraft(draftId)
       const restoredLines = await Promise.all(draft.lines.map(async (savedLine) => {
-        const [productResult, quote] = await Promise.all([
-          searchPosProducts(savedLine.variantId, 1),
-          // Requote with the original quantity input so an obsolete conversion
-          // profile is rejected instead of silently reinterpreting its base qty.
-          quoteSaleLine(
+        const product = await getPosProductByVariant(savedLine.variantId)
+        let conversionError = ''
+        let quote: PosLineQuoteDto
+        try {
+          // Validate the stored components against the current Product profile.
+          quote = await quoteSaleLine(
             savedLine.variantId,
             savedLine.quantityInput.kind === 'SIMPLE'
               ? savedLine.quantityInput.baseQty
@@ -492,10 +497,19 @@ export function PosPage() {
             savedLine.quantityInput.kind === 'COMPONENTS'
               ? savedLine.quantityInput
               : undefined,
-          ),
-        ])
-        const product = productResult[0]
-        if (!product) throw new Error(`Product ${savedLine.variantId} is no longer available.`)
+          )
+        } catch (error) {
+          if (savedLine.quantityInput.kind !== 'COMPONENTS') throw error
+          conversionError = error instanceof Error
+            ? error.message
+            : 'Conversion profile changed. Review this quantity before posting.'
+          // Keep the old component snapshot visible and block posting. The
+          // fallback quote only paints the last normalized base quantity.
+          quote = await quoteSaleLine(
+            savedLine.variantId,
+            savedLine.normalizedQuantitySnapshot.baseQty,
+          )
+        }
         const vendor = savedLine.shortageResolution?.type === 'VENDOR'
           ? savedLine.shortageResolution
           : null
@@ -515,7 +529,7 @@ export function PosPage() {
           vendorName: '',
           vendorUnitCostInput: vendor ? formatPaisaToTaka(vendor.unitCostPaisa) : '',
           isQuoting: false,
-          error: '',
+          error: conversionError,
           savedDraftLine: savedLine,
         }
       }))
@@ -700,7 +714,7 @@ export function PosPage() {
           ? {
               ...line,
               conversionComponents: components,
-              savedDraftLine: undefined,
+              draftLineEdited: true,
               isQuoting: true,
               error: '',
             }
@@ -731,7 +745,7 @@ export function PosPage() {
             quote,
             quantity: quote.displayQty,
             conversionComponents: quote.conversion.components,
-            savedDraftLine: undefined,
+            draftLineEdited: true,
             ...(Number(quote.shortfallBaseQty) <= 0
               ? {
                   shortageResolution: null,
@@ -799,7 +813,7 @@ export function PosPage() {
           ? {
               ...line,
               quantity,
-              savedDraftLine: undefined,
+              draftLineEdited: true,
               isQuoting: true,
               error: '',
             }
@@ -841,7 +855,7 @@ export function PosPage() {
             ...line,
             quote,
             quantity,
-            savedDraftLine: undefined,
+            draftLineEdited: true,
             ...(Number(quote.shortfallBaseQty) <= 0
               ? {
                   shortageResolution: null,
@@ -923,7 +937,7 @@ export function PosPage() {
           ? {
               ...line,
               shortageResolution: resolution,
-              savedDraftLine: undefined,
+              draftLineEdited: true,
               ...(resolution === 'NEGATIVE_STOCK'
                 ? {
                     vendorId: null,
@@ -948,7 +962,7 @@ export function PosPage() {
               ...line,
               vendorId: vendor.id || null,
               vendorName: vendor.name,
-              savedDraftLine: undefined,
+              draftLineEdited: true,
             }
           : line,
       ),
@@ -965,7 +979,7 @@ export function PosPage() {
           ? {
               ...line,
               vendorUnitCostInput: value,
-              savedDraftLine: undefined,
+              draftLineEdited: true,
             }
           : line,
       ),
@@ -996,7 +1010,7 @@ export function PosPage() {
             ...line,
             priceInput: value,
             manualUnitSellingPricePaisa,
-            savedDraftLine: undefined,
+            draftLineEdited: true,
             error: '',
           }
         } catch {
@@ -1004,7 +1018,7 @@ export function PosPage() {
             ...line,
             priceInput: value,
             manualUnitSellingPricePaisa: null,
-            savedDraftLine: undefined,
+            draftLineEdited: true,
             error: 'Enter a valid selling price.',
           }
         }

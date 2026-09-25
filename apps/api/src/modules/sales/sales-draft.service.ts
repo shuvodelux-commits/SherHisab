@@ -2,6 +2,7 @@ import { getPool } from '../../db/pool'
 import type { DatabaseClient } from '../../db/request-database'
 import { withDatabaseTransaction } from '../../db/transaction'
 import Decimal from 'decimal.js'
+import { PosRepository } from '../pos/pos.repository'
 import { ConversionService } from '../products/conversion.service'
 import type { ConversionProfileSnapshot } from '../products/conversion.types'
 import { SalesDraftVersionConflictError } from './sales-draft.errors'
@@ -503,6 +504,7 @@ export class SalesDraftService {
       this.tenantId,
       this.database,
     )
+    const products = new PosRepository(this.database)
 
     for (const line of draft.lines) {
       if (line.quantityInput.kind !== 'COMPONENTS') continue
@@ -512,8 +514,16 @@ export class SalesDraftService {
         throw new Error('Draft conversion snapshot is missing; reload the Draft before posting.')
       }
 
+      const variant = await products.findVariantContext(
+        this.tenantId,
+        line.variantId,
+      )
+      if (!variant || savedProfile.productId !== variant.productId) {
+        throw new Error('Draft conversion snapshot does not match this Product Variant.')
+      }
+
       const activeProfile = await conversions.getActiveProfile(
-        savedProfile.productId,
+        variant.productId,
       )
       if (!activeProfile) {
         throw new Error('Draft conversion profile is no longer compatible with this Product.')

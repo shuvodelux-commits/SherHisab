@@ -31,6 +31,14 @@ export function searchPosProducts(
   )
 }
 
+export function getPosProductByVariant(
+  variantId: string,
+): Promise<PosProductSearchDto> {
+  return apiRequest<PosProductSearchDto>(
+    `${API_ROOT}/pos/products/${encodeURIComponent(variantId)}`,
+  )
+}
+
 export function searchPosCustomers(
   search: string,
   limit = 20,

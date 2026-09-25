@@ -83,10 +83,13 @@ function installFetch(selectedDraft = draft) {
     if (url.startsWith('/api/private/sales/drafts?')) return jsonResponse([selectedDraft])
     if (url === `/api/private/sales/drafts/${selectedDraft.id}` && init?.method === 'PATCH') return jsonResponse({ ...selectedDraft, version: selectedDraft.version + 1 })
     if (url === `/api/private/sales/drafts/${selectedDraft.id}`) return jsonResponse(selectedDraft)
-    if (url === '/api/private/pos/products?search=variant-1&limit=1') return jsonResponse([product])
+    if (url === '/api/private/pos/products/variant-1') return jsonResponse(product)
     if (url === '/api/private/pos/products?search=Pipe&limit=20') return jsonResponse([product])
     if (url === '/api/private/pos/quote-line' && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as { variantId: string; baseQty?: string; quantity?: { components?: Record<string, string> } }
+      if (body.quantity?.components) {
+        return jsonResponse({ error: 'Conversion profile version was not found.' }, 400)
+      }
       const qty = body.baseQty ?? '2'
       return jsonResponse({ variantId: body.variantId, baseQty: qty, pricingQty: qty, displayQty: qty, availableOwnBaseQty: '10', shortfallBaseQty: '0', automaticSalesTotalPaisa: String(Number(qty) * 10000), effectiveUnitSellingPricePaisa: '10000', sellingSegments: [], conversion: { baseQty: qty, pricingQty: qty, displayQty: qty, components: {}, snapshot: null } })
     }
@@ -141,6 +144,8 @@ describe('POS drafts', () => {
     fireEvent.click(screen.getByRole('button', { name: /Recent Drafts/i }))
     fireEvent.click(await screen.findByRole('button', { name: /DRAFT-000001.*Ayesha/i }))
     await screen.findByRole('textbox', { name: 'Quantity for Draft Pipe' })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Quantity for Draft Pipe' }), { target: { value: '4' } })
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Quantity for Draft Pipe' })).toHaveValue('4'))
     fireEvent.change(screen.getByRole('textbox', { name: 'Discount' }), { target: { value: '7.50' } })
     fireEvent.click(screen.getByRole('button', { name: 'Update Draft' }))
 
@@ -155,7 +160,14 @@ describe('POS drafts', () => {
       expectedVersion: 3,
       discountPaisa: '750',
       payments: draft.payments,
-      lines: draft.lines,
+      lines: [expect.objectContaining({
+        quantityInput: { kind: 'SIMPLE', baseQty: '4' },
+        normalizedQuantitySnapshot: expect.objectContaining({ baseQty: '4' }),
+        serialIds: draft.lines[0]?.serialIds,
+        batchSelection: draft.lines[0]?.batchSelection,
+        warrantySnapshot: draft.lines[0]?.warrantySnapshot,
+        captureValues: draft.lines[0]?.captureValues,
+      })],
     })
   })
 
@@ -196,6 +208,8 @@ describe('POS drafts', () => {
     fireEvent.click(screen.getByRole('button', { name: /Recent Drafts/i }))
     fireEvent.click(await screen.findByRole('button', { name: /DRAFT-000001.*Ayesha/i }))
 
+    expect(await screen.findByRole('textbox', { name: 'Quantity for Draft Pipe' })).toHaveValue('2')
+    expect(await screen.findByText(/conversion profile version was not found/i)).toBeInTheDocument()
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/private/pos/quote-line',
       expect.objectContaining({
@@ -211,5 +225,12 @@ describe('POS drafts', () => {
         }),
       }),
     ))
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/private/pos/quote-line',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ variantId: 'variant-1', baseQty: '2' }),
+      }),
+    )
   })
 })
