@@ -179,6 +179,20 @@ function sameDraftState(
   }) === JSON.stringify(input)
 }
 
+function sameBaseQuantity(left: string, right: string): boolean {
+  const canonical = (value: string) => {
+    if (!/^\d+(?:\.\d+)?$/.test(value)) return null
+    const [whole, fraction = ''] = value.split('.')
+    const normalizedWhole = whole!.replace(/^0+(?=\d)/, '')
+    const normalizedFraction = fraction.replace(/0+$/, '')
+    return normalizedFraction
+      ? `${normalizedWhole}.${normalizedFraction}`
+      : normalizedWhole
+  }
+  const normalizedLeft = canonical(left)
+  return normalizedLeft !== null && normalizedLeft === canonical(right)
+}
+
 export function PosPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -314,14 +328,15 @@ export function PosPage() {
       if (activeDraft) {
         const requestedDraft = buildDraftInput()
         let stored = await getSalesDraft(activeDraft.id)
+        const isSameState = sameDraftState(stored, requestedDraft)
         if (
           stored.status !== 'POSTED' &&
           stored.version !== activeDraft.version &&
-          !sameDraftState(stored, requestedDraft)
+          !isSameState
         ) {
           throw new Error(`This draft changed elsewhere. Current version is ${stored.version}. Reload it before completing the sale.`)
         }
-        if (stored.status !== 'POSTED' && stored.version === activeDraft.version) {
+        if (stored.status !== 'POSTED' && !isSameState) {
           try {
             stored = await updateSalesDraft(
               activeDraft.id,
@@ -334,6 +349,7 @@ export function PosPage() {
             stored = latest
           }
         }
+        setActiveDraft({ id: stored.id, version: stored.version })
         return postSalesDraft(activeDraft.id, stored.version, {
           operationId: intent.operationId,
           businessDate: payload.businessDate,
@@ -505,10 +521,46 @@ export function PosPage() {
             : 'Conversion profile changed. Review this quantity before posting.'
           // Keep the old component snapshot visible and block posting. The
           // fallback quote only paints the last normalized base quantity.
-          quote = await quoteSaleLine(
+          const fallback = await quoteSaleLine(
             savedLine.variantId,
             savedLine.normalizedQuantitySnapshot.baseQty,
           )
+          quote = {
+            ...fallback,
+            conversion: savedLine.normalizedQuantitySnapshot,
+          }
+        }
+        if (savedLine.quantityInput.kind === 'COMPONENTS') {
+          try {
+            const activeQuote = await quoteSaleLine(
+              savedLine.variantId,
+              savedLine.normalizedQuantitySnapshot.baseQty,
+            )
+            const activeProfile = activeQuote.conversion.snapshot
+            if (!activeProfile || activeProfile.productId !== product.productId) {
+              throw new Error('Draft conversion profile is no longer compatible with this Product.')
+            }
+            const currentQuote = await quoteSaleLine(
+              savedLine.variantId,
+              undefined,
+              {
+                kind: 'COMPONENTS',
+                profileId: activeProfile.id,
+                profileVersion: activeProfile.version,
+                components: savedLine.quantityInput.components,
+              },
+            )
+            if (!sameBaseQuantity(
+              currentQuote.conversion.baseQty,
+              savedLine.normalizedQuantitySnapshot.baseQty,
+            )) {
+              throw new Error('Draft conversion changed; reload the Draft and review its quantity before posting.')
+            }
+          } catch (error) {
+            conversionError ||= error instanceof Error
+              ? error.message
+              : 'Draft conversion components are no longer compatible with this Product.'
+          }
         }
         const vendor = savedLine.shortageResolution?.type === 'VENDOR'
           ? savedLine.shortageResolution
