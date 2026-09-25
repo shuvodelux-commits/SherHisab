@@ -405,7 +405,7 @@ export function ProductAdvancedFields({
             <strong>
               <BilingualLabel
                 en="Inventory Tracking"
-                bn="স্টক ট্র্যাকিং"
+                bn="ইনভেন্টরি ট্র্যাকিং"
               />
             </strong>
             <p>
