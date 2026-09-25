@@ -663,4 +663,143 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
     expect(lots[0]?.remainingBaseQty).toBe('1')
   })
 
+
+  it('exposes versioned Draft create, recent list, load, update and archive routes', async () => {
+    const fixture = await createFixture('Draft Route Workflow')
+    const draftState = {
+      customer: {
+        selectedCustomerId: null,
+        name: 'Route Draft Buyer',
+        phone: '01712345678',
+        guardianName: '',
+        address: 'Belkuchi',
+      },
+      discountPaisa: '0',
+      payments: [],
+      note: 'Route Draft',
+      lines: [
+        {
+          variantId: fixture.product.defaultVariantId,
+          quantityInput: {
+            kind: 'SIMPLE',
+            baseQty: '1',
+          },
+          normalizedQuantitySnapshot: {
+            baseQty: '1',
+            pricingQty: '1',
+            displayQty: '1',
+            components: {},
+            snapshot: null,
+          },
+          pricingMode: 'AUTO',
+          manualUnitSellingPricePaisa: null,
+          shortageResolution: null,
+          serialIds: [],
+          batchSelection: null,
+          warrantySnapshot: null,
+          captureValues: {},
+        },
+      ],
+    }
+
+    const create = await privatePost(
+      fixture.cookie,
+      '/sales/drafts',
+      draftState,
+    )
+    expect(create.status).toBe(201)
+    const created = (await create.json()) as {
+      id: string
+      draftNumber: string
+      version: number
+      status: string
+    }
+    expect(created).toMatchObject({
+      draftNumber: 'DRAFT-000001',
+      version: 1,
+      status: 'ACTIVE',
+    })
+
+    const recent = await app.request(
+      'http://localhost/api/private/sales/drafts?limit=5',
+      { headers: { cookie: fixture.cookie } },
+    )
+    expect(recent.status).toBe(200)
+    expect(await recent.json()).toEqual([
+      expect.objectContaining({
+        id: created.id,
+        customer: expect.objectContaining({
+          name: 'Route Draft Buyer',
+        }),
+      }),
+    ])
+
+    const load = await app.request(
+      `http://localhost/api/private/sales/drafts/${created.id}`,
+      { headers: { cookie: fixture.cookie } },
+    )
+    expect(load.status).toBe(200)
+    expect(await load.json()).toMatchObject({
+      id: created.id,
+      version: 1,
+      note: 'Route Draft',
+      lines: [
+        expect.objectContaining({
+          variantId: fixture.product.defaultVariantId,
+        }),
+      ],
+    })
+
+    const update = await app.request(
+      `http://localhost/api/private/sales/drafts/${created.id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          cookie: fixture.cookie,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          expectedVersion: 1,
+          ...draftState,
+          note: 'Updated Route Draft',
+        }),
+      },
+    )
+    expect(update.status).toBe(200)
+    expect(await update.json()).toMatchObject({
+      id: created.id,
+      version: 2,
+      note: 'Updated Route Draft',
+    })
+
+    const staleArchive = await privatePost(
+      fixture.cookie,
+      `/sales/drafts/${created.id}/archive`,
+      { expectedVersion: 1 },
+    )
+    expect(staleArchive.status).toBe(409)
+    expect(await staleArchive.json()).toMatchObject({
+      currentVersion: 2,
+    })
+
+    const archive = await privatePost(
+      fixture.cookie,
+      `/sales/drafts/${created.id}/archive`,
+      { expectedVersion: 2 },
+    )
+    expect(archive.status).toBe(200)
+    expect(await archive.json()).toMatchObject({
+      id: created.id,
+      version: 3,
+      status: 'ARCHIVED',
+    })
+
+    const emptyRecent = await app.request(
+      'http://localhost/api/private/sales/drafts?limit=5',
+      { headers: { cookie: fixture.cookie } },
+    )
+    expect(emptyRecent.status).toBe(200)
+    expect(await emptyRecent.json()).toEqual([])
+  })
+
 })
