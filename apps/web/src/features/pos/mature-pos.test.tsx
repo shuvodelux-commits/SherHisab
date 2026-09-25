@@ -71,6 +71,25 @@ const fabric: PosProductSearchDto = {
   availableOwnBaseQty: '100',
 }
 
+const shortageProduct: PosProductSearchDto = {
+  ...product('variant-shortage', 'Shortage Pipe', 'SHORT-001'),
+  availableOwnBaseQty: '5',
+}
+
+const zeroStockProduct: PosProductSearchDto = {
+  ...product('variant-zero', 'Zero Stock Switch', 'ZERO-001'),
+  availableOwnBaseQty: '0',
+}
+
+const vendor = {
+  id: 'vendor-1',
+  vendorCode: 'VEN-00001',
+  name: 'Rahman Vendor',
+  phone: '01733333333',
+  address: 'Natore',
+  isActive: true,
+}
+
 const dueCustomer: PosCustomerSearchDto = {
   id: 'customer-due',
   customerCode: 'CUS-00001',
@@ -199,6 +218,45 @@ function safeQuote(variantId: string) {
   }
 }
 
+function shortageQuote(
+  variantId: string,
+  requestedBaseQty: string,
+) {
+  const requested = Number(requestedBaseQty)
+  const own = variantId === 'variant-zero' ? 0 : 5
+  const allocated = Math.min(requested, own)
+  const shortfall = Math.max(requested - own, 0)
+
+  return {
+    variantId,
+    baseQty: requestedBaseQty,
+    pricingQty: requestedBaseQty,
+    displayQty: requestedBaseQty,
+    availableOwnBaseQty: String(own),
+    shortfallBaseQty: String(shortfall),
+    automaticSalesTotalPaisa: String(allocated * 1000),
+    effectiveUnitSellingPricePaisa: '1000',
+    sellingSegments:
+      allocated > 0
+        ? [
+            {
+              lotId: `lot-${variantId}`,
+              baseQty: String(allocated),
+              unitSellingPricePaisa: '1000',
+              amountPaisa: String(allocated * 1000),
+            },
+          ]
+        : [],
+    conversion: {
+      baseQty: requestedBaseQty,
+      pricingQty: requestedBaseQty,
+      displayQty: requestedBaseQty,
+      components: {},
+      snapshot: null,
+    },
+  }
+}
+
 function installFetch() {
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -218,6 +276,12 @@ function installFetch() {
         if (search.toLowerCase().includes('muslin')) {
           return jsonResponse([fabric])
         }
+        if (search.toLowerCase().includes('shortage')) {
+          return jsonResponse([shortageProduct])
+        }
+        if (search.toLowerCase().includes('zero')) {
+          return jsonResponse([zeroStockProduct])
+        }
         return jsonResponse(search ? [alpha, beta] : [])
       }
 
@@ -231,6 +295,14 @@ function installFetch() {
           return jsonResponse([dueCustomer])
         }
         return jsonResponse([])
+      }
+
+      if (url.startsWith('/api/private/vendors?')) {
+        const params = new URLSearchParams(url.split('?')[1])
+        const search = params.get('search') ?? ''
+        return jsonResponse(
+          search.toLowerCase().includes('rahman') ? [vendor] : [],
+        )
       }
 
       if (
@@ -249,6 +321,16 @@ function installFetch() {
         if (body.variantId === 'variant-fabric') {
           return jsonResponse(
             fabricQuote(body.quantity?.components ?? {}),
+          )
+        }
+        if (
+          body.variantId === 'variant-shortage' ||
+          body.variantId === 'variant-zero'
+        ) {
+          const requestedBaseQty =
+            typeof body.baseQty === 'string' ? body.baseQty : '1'
+          return jsonResponse(
+            shortageQuote(body.variantId, requestedBaseQty),
           )
         }
         return jsonResponse(safeQuote(body.variantId))
@@ -768,4 +850,155 @@ describe('Mature POS compound conversion row', () => {
       ).toBe(true)
     })
   })
+
+describe('Mature POS shortage resolution', () => {
+  async function addProductAndSetQuantity(
+    searchValue: string,
+    productName: string,
+    quantity: string,
+  ) {
+    const search = screen.getByRole('textbox', {
+      name: 'Search products',
+    })
+    fireEvent.change(search, { target: { value: searchValue } })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: `Add ${productName}`,
+      }),
+    )
+    const row = await screen.findByRole('row', {
+      name: new RegExp(productName, 'i'),
+    })
+    fireEvent.change(
+      within(row).getByLabelText(`Quantity for ${productName}`),
+      { target: { value: quantity } },
+    )
+    return row
+  }
+
+  it('Own Stock clamps a partial shortage to exact available own quantity and closes the panel', async () => {
+    installFetch()
+    renderPos()
+
+    const row = await addProductAndSetQuantity(
+      'shortage',
+      'Shortage Pipe',
+      '10',
+    )
+
+    expect(
+      await screen.findByText(/Shortfall: 5 pcs/i),
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Own Stock (5)' }),
+    )
+
+    await waitFor(() => {
+      expect(
+        within(row).getByLabelText('Quantity for Shortage Pipe'),
+      ).toHaveValue('5')
+    })
+    expect(
+      screen.queryByText(/Shortfall: 5 pcs/i),
+    ).not.toBeInTheDocument()
+  })
+
+  it('Own Stock removes a zero-stock line and shows the compact no-stock message', async () => {
+    installFetch()
+    renderPos()
+
+    await addProductAndSetQuantity(
+      'zero',
+      'Zero Stock Switch',
+      '1',
+    )
+
+    expect(
+      await screen.findByText(/Shortfall: 1 pcs/i),
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Own Stock (0)' }),
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('row', {
+          name: /Zero Stock Switch/i,
+        }),
+      ).not.toBeInTheDocument()
+    })
+    expect(
+      screen.getByText(/no own stock available/i),
+    ).toBeInTheDocument()
+  })
+
+  it('Vendor reveals selector, unit cost, shortage total and New Vendor; switching to Negative clears Vendor fields', async () => {
+    installFetch()
+    renderPos()
+
+    await addProductAndSetQuantity(
+      'shortage',
+      'Shortage Pipe',
+      '10',
+    )
+    await screen.findByText(/Shortfall: 5 pcs/i)
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Vendor / Consignment',
+      }),
+    )
+
+    const vendorSearch = screen.getByRole('textbox', {
+      name: 'Vendor for Shortage Pipe',
+    })
+    expect(
+      screen.getByRole('button', { name: '+ New Vendor' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText('Sourcing Unit Cost for Shortage Pipe'),
+    ).toBeInTheDocument()
+
+    fireEvent.change(vendorSearch, {
+      target: { value: 'Rahman' },
+    })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Select Rahman Vendor',
+      }),
+    )
+    fireEvent.change(
+      screen.getByLabelText('Sourcing Unit Cost for Shortage Pipe'),
+      { target: { value: '80.00' } },
+    )
+
+    expect(screen.getByText('Shortage 5 pcs')).toBeInTheDocument()
+    expect(screen.getByText('Vendor total ৳400.00')).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Negative Stock Sale',
+      }),
+    )
+
+    expect(
+      screen.queryByRole('textbox', {
+        name: 'Vendor for Shortage Pipe',
+      }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText(
+        'Sourcing Unit Cost for Shortage Pipe',
+      ),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Negative Stock Sale',
+      }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
 })
