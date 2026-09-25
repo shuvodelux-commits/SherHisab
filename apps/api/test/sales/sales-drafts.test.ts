@@ -400,7 +400,7 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
       ],
     })
 
-    await expect(service.get(created.id)).resolves.toMatchObject({
+    await expect(service.get(created.id, owner.id)).resolves.toMatchObject({
       id: created.id,
       version: 1,
       customer: {
@@ -535,7 +535,7 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
       ],
     })
 
-    await expect(service.get(created.id)).resolves.toEqual(updated)
+    await expect(service.get(created.id, owner.id)).resolves.toEqual(updated)
 
     const audit = await getPool().query<{
       action: string
@@ -679,7 +679,7 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
 
     expect(profileV2.version).toBe(2)
 
-    const loaded = await service.get(created.id)
+    const loaded = await service.get(created.id, owner.id)
     expect(loaded.lines[0]).toMatchObject({
       quantityInput: {
         kind: 'COMPONENTS',
@@ -794,7 +794,7 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
       currentVersion: 2,
     })
 
-    await expect(service.get(created.id)).resolves.toMatchObject({
+    await expect(service.get(created.id, owner.id)).resolves.toMatchObject({
       version: 2,
       note: 'Version two',
     })
@@ -915,7 +915,7 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
     )
     expect(invoices.rows[0]?.count).toBe('1')
 
-    await expect(service.get(created.id)).resolves.toMatchObject({
+    await expect(service.get(created.id, owner.id)).resolves.toMatchObject({
       id: created.id,
       version: created.version,
       status: 'POSTED',
@@ -1255,7 +1255,7 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
     await new Promise((resolve) => setTimeout(resolve, 5))
     const second = await service.create(owner.id, state('Second Buyer'))
 
-    const recent = await service.listRecent(5)
+    const recent = await service.listRecent(owner.id, 5)
     expect(recent.map((draft) => draft.id)).toEqual([
       second.id,
       first.id,
@@ -1279,7 +1279,7 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
       currentVersion: first.version + 1,
     })
 
-    const activeOnly = await service.listRecent(5)
+    const activeOnly = await service.listRecent(owner.id, 5)
     expect(activeOnly.map((draft) => draft.id)).toEqual([second.id])
 
     const audit = await getPool().query<{
