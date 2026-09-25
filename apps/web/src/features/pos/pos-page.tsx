@@ -962,21 +962,22 @@ export function PosPage() {
                     }
 
                     if (Number(line.quote.shortfallBaseQty) > 0) {
-                      let vendorTotalPaisa = '0'
-                      try {
-                        const vendorCostPaisa =
-                          line.vendorUnitCostInput.trim()
-                            ? parseTakaToPaisa(
-                                line.vendorUnitCostInput,
-                              )
-                            : '0'
-                        vendorTotalPaisa = quantityTimesPaisa(
-                          line.quote.shortfallBaseQty,
-                          vendorCostPaisa,
-                        )
-                      } catch {
-                        vendorTotalPaisa = '0'
-                      }
+                      const vendorTotalPaisa = (() => {
+                        try {
+                          const vendorCostPaisa =
+                            line.vendorUnitCostInput.trim()
+                              ? parseTakaToPaisa(
+                                  line.vendorUnitCostInput,
+                                )
+                              : '0'
+                          return quantityTimesPaisa(
+                            line.quote.shortfallBaseQty,
+                            vendorCostPaisa,
+                          )
+                        } catch {
+                          return '0'
+                        }
+                      })()
 
                       detailRows.push(
                         <tr
