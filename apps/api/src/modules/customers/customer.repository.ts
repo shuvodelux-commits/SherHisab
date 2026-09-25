@@ -96,6 +96,31 @@ export class CustomerRepository {
     return mapCustomer(row)
   }
 
+  async findActiveById(
+    tenantId: string,
+    customerId: string,
+  ): Promise<CustomerRecord | null> {
+    const result = await this.db.query<CustomerRow>(
+      `SELECT
+         id,
+         customer_code,
+         name,
+         phone,
+         normalized_phone,
+         guardian_name,
+         address,
+         is_active
+       FROM customers
+       WHERE tenant_id = $1
+         AND id = $2
+         AND is_active
+       LIMIT 1`,
+      [tenantId, customerId],
+    )
+    const row = result.rows[0]
+    return row ? mapCustomer(row) : null
+  }
+
   async findActiveByNormalizedPhone(
     tenantId: string,
     normalizedPhone: string,

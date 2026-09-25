@@ -1,19 +1,24 @@
 import { Hono } from 'hono'
 import { withRequestDatabase } from '../../db/request-database'
 import type { AppEnv } from '../../types/context'
+import { PosService } from '../pos/pos.service'
 import {
+  SalesConflictError,
   SalesPermissionError,
   SalesValidationError,
 } from './sales.errors'
-import { PosService } from '../pos/pos.service'
 import { SalesService } from './sales.service'
-import type { CommitSaleInput } from './sales.types'
+import type {
+  CommitSaleInput,
+  SaleCustomerInput,
+  SalesPaymentInput,
+  SalesPaymentMethod,
+} from './sales.types'
 
 function objectBody(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new SalesValidationError('Request body must be an object.')
   }
-
   return value as Record<string, unknown>
 }
 
@@ -22,11 +27,9 @@ function stringField(
   key: string,
 ): string {
   const value = body[key]
-
   if (typeof value !== 'string') {
     throw new SalesValidationError(`${key} is required.`)
   }
-
   return value
 }
 
@@ -35,39 +38,74 @@ function optionalStringField(
   key: string,
 ): string | undefined {
   const value = body[key]
-
   if (value === undefined) {
     return undefined
   }
-
   if (typeof value !== 'string') {
     throw new SalesValidationError(`${key} must be a string.`)
   }
-
   return value
+}
+
+function customerInput(value: unknown): SaleCustomerInput | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  const body = objectBody(value)
+  return {
+    selectedCustomerId: optionalStringField(body, 'selectedCustomerId'),
+    name: stringField(body, 'name'),
+    phone: stringField(body, 'phone'),
+    guardianName: optionalStringField(body, 'guardianName'),
+    address: optionalStringField(body, 'address'),
+  }
+}
+
+function paymentMethod(raw: string): SalesPaymentMethod {
+  if (
+    raw !== 'CASH' &&
+    raw !== 'BANK' &&
+    raw !== 'MOBILE_BANKING' &&
+    raw !== 'CUSTOMER_CREDIT'
+  ) {
+    throw new SalesValidationError('Unsupported payment method.')
+  }
+  return raw
+}
+
+function paymentInput(value: unknown): SalesPaymentInput {
+  const body = objectBody(value)
+  return {
+    clientLineId: stringField(body, 'clientLineId'),
+    method: paymentMethod(stringField(body, 'method')),
+    accountId: optionalStringField(body, 'accountId'),
+    amountPaisa: stringField(body, 'amountPaisa'),
+    reference: optionalStringField(body, 'reference'),
+    note: optionalStringField(body, 'note'),
+  }
 }
 
 function commitInput(body: Record<string, unknown>): CommitSaleInput {
   if (!Array.isArray(body.lines)) {
     throw new SalesValidationError('lines must be an array.')
   }
+  if (body.payments !== undefined && !Array.isArray(body.payments)) {
+    throw new SalesValidationError('payments must be an array.')
+  }
 
   return {
     operationId: optionalStringField(body, 'operationId'),
     businessDate: stringField(body, 'businessDate'),
+    customer: customerInput(body.customer),
+    discountPaisa: optionalStringField(body, 'discountPaisa'),
     lines: body.lines.map((rawLine) => {
       const line = objectBody(rawLine)
       const manual = line.manualUnitSellingPricePaisa
-
-      if (
-        manual !== undefined &&
-        typeof manual !== 'string'
-      ) {
+      if (manual !== undefined && typeof manual !== 'string') {
         throw new SalesValidationError(
           'manualUnitSellingPricePaisa must be a string.',
         )
       }
-
       return {
         variantId: stringField(line, 'variantId'),
         baseQty: stringField(line, 'baseQty'),
@@ -76,6 +114,9 @@ function commitInput(body: Record<string, unknown>): CommitSaleInput {
           : { manualUnitSellingPricePaisa: manual }),
       }
     }),
+    ...(body.payments === undefined
+      ? {}
+      : { payments: body.payments.map(paymentInput) }),
   }
 }
 
@@ -87,20 +128,13 @@ export const salesRoutes = new Hono<AppEnv>()
 
     try {
       const body = objectBody(await c.req.json())
-
       return await withRequestDatabase(c.env, async (database) =>
         c.json(
-          await new PosService(
-            c.get('tenantId'),
-            database,
-          ).quoteLine(
+          await new PosService(c.get('tenantId'), database).quoteLine(
             {
               variantId: stringField(body, 'variantId'),
               baseQty: stringField(body, 'baseQty'),
-              businessDate: optionalStringField(
-                body,
-                'businessDate',
-              ),
+              businessDate: optionalStringField(body, 'businessDate'),
             },
             c.get('permissions'),
           ),
@@ -110,11 +144,9 @@ export const salesRoutes = new Hono<AppEnv>()
       if (error instanceof SalesValidationError) {
         return c.json({ error: error.message }, 400)
       }
-
       if (error instanceof Error) {
         return c.json({ error: error.message }, 400)
       }
-
       throw error
     }
   })
@@ -141,11 +173,12 @@ export const salesRoutes = new Hono<AppEnv>()
       if (error instanceof SalesPermissionError) {
         return c.json({ error: error.message }, 403)
       }
-
+      if (error instanceof SalesConflictError) {
+        return c.json({ error: error.message }, 409)
+      }
       if (error instanceof SalesValidationError) {
         return c.json({ error: error.message }, 400)
       }
-
       throw error
     }
   })

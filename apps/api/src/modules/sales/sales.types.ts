@@ -28,6 +28,12 @@ export interface AvailableSalesLot {
 }
 
 export type SalesPricingMode = 'LOT' | 'MANUAL'
+export type SalesSettlementStatus = 'DUE' | 'PARTIAL' | 'PAID'
+export type SalesPaymentMethod =
+  | 'CASH'
+  | 'BANK'
+  | 'MOBILE_BANKING'
+  | 'CUSTOMER_CREDIT'
 
 export interface CommitSaleLineInput {
   variantId: string
@@ -35,10 +41,31 @@ export interface CommitSaleLineInput {
   manualUnitSellingPricePaisa?: string
 }
 
+export interface SaleCustomerInput {
+  selectedCustomerId?: string
+  name: string
+  phone: string
+  guardianName?: string
+  address?: string
+}
+
+export interface SalesPaymentInput {
+  clientLineId: string
+  method: SalesPaymentMethod
+  accountId?: string
+  amountPaisa: string
+  reference?: string
+  note?: string
+}
+
 export interface CommitSaleInput {
   operationId?: string
   businessDate: string
+  customer?: SaleCustomerInput
+  discountPaisa?: string
   lines: CommitSaleLineInput[]
+  payments?: SalesPaymentInput[]
+  sourceDraft?: { id: string; version: number }
 }
 
 export interface CommittedSaleLine {
@@ -54,6 +81,9 @@ export interface CommittedSaleLine {
   belowCost: boolean
   lossPaisa: string
   allocations: SalesFifoAllocation[]
+  grossAmountPaisa?: string
+  allocatedDiscountPaisa?: string
+  netAmountPaisa?: string
 }
 
 export interface CommittedSale {
@@ -64,4 +94,12 @@ export interface CommittedSale {
   totalCogsPaisa: string
   grossProfitPaisa: string
   lines: CommittedSaleLine[]
+  customerId?: string | null
+  subtotalPaisa?: string
+  discountPaisa?: string
+  grandTotalPaisa?: string
+  settlementStatus?: SalesSettlementStatus
+  paidAmountPaisa?: string
+  duePaisa?: string
+  changePaisa?: string
 }
