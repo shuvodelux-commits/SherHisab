@@ -219,7 +219,7 @@ export class SalesDraftRepository {
       status: header.status,
       ownerUserId: header.owner_user_id,
       postedSaleId: header.posted_sale_id,
-      postedOperationId: header.posted_operation_id,
+      postedOperationId: null,
       createdAt: header.created_at,
       updatedAt: header.updated_at,
       ...state,
@@ -317,7 +317,7 @@ export class SalesDraftRepository {
       status: header.status,
       ownerUserId: header.owner_user_id,
       postedSaleId: header.posted_sale_id,
-      postedOperationId: null,
+      postedOperationId: header.posted_operation_id,
       createdAt: header.created_at,
       updatedAt: header.updated_at,
       customer: {
