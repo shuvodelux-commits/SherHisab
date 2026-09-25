@@ -12,6 +12,7 @@ import {
 } from './sales-settlement'
 import {
   buildFifoLineQuote,
+  buildPartialFifoLineQuote,
   normalizeMoneyPaisa,
   roundPaisa,
 } from './sales-allocation'
@@ -20,6 +21,9 @@ import {
   SalesValidationError,
 } from './sales.errors'
 import { SalesNumberingRepository } from './sales-numbering.repository'
+import { ShortfallRepository } from './shortfall.repository'
+import { StockSourceService } from './stock-source.service'
+import { VendorSourceRepository } from './vendor-source.repository'
 import { SalesRepository } from './sales.repository'
 import type {
   CommitSaleInput,
@@ -86,6 +90,9 @@ function normalizeLines(lines: CommitSaleLineInput[]): CommitSaleLineInput[] {
               'Manual selling price',
             ),
           }),
+      ...(line.shortageResolution === undefined
+        ? {}
+        : { shortageResolution: line.shortageResolution }),
     }
   })
 }
@@ -106,6 +113,13 @@ interface PlannedLine {
   quote: ReturnType<typeof buildFifoLineQuote>
   grossAmountPaisa: string
   cogsPaisa: string
+  shortfallBaseQty: string
+  provisionalUnitCostPaisa: string | null
+  vendorSource: {
+    vendorId: string
+    unitCostPaisa: string
+    totalCostPaisa: string
+  } | null
   snapshot: Awaited<ReturnType<SalesRepository['getVariantSnapshot']>>
 }
 
@@ -200,32 +214,147 @@ export class SalesService {
                 line.variantId,
                 input.businessDate,
               )
-            const quote = buildFifoLineQuote(
-              line.variantId,
-              line.baseQty,
-              lockedLots,
-            )
-            const manualUnit =
-              line.manualUnitSellingPricePaisa ?? null
-            const grossAmountPaisa = manualUnit
-              ? roundPaisa(
-                  new Decimal(quote.requestedBaseQty).times(manualUnit),
-                )
-              : quote.automaticSalesTotalPaisa
             const variantSnapshot =
               await salesRepository.getVariantSnapshot(
                 tenantId,
                 line.variantId,
               )
+            const partial = buildPartialFifoLineQuote(
+              line.variantId,
+              line.baseQty,
+              lockedLots,
+            )
+            const sourceDecision = new StockSourceService().plan({
+              requestedBaseQty: line.baseQty,
+              ownAllocations: partial.allocations,
+              shortageResolution:
+                line.shortageResolution ?? null,
+            })
+
+            if (sourceDecision.type === 'REMOVE_LINE') {
+              throw new SalesValidationError(
+                'No own stock is available for this sale line.',
+              )
+            }
+            const sourcePlan = sourceDecision.plan
+            if (
+              new Decimal(sourcePlan.shortfallBaseQty).gt(0) &&
+              sourcePlan.shortageResolution === null
+            ) {
+              throw new SalesValidationError(
+                `Insufficient stock. Requested ${line.baseQty}, available ${sourcePlan.ownBaseQty}.`,
+              )
+            }
+            let vendorSource: PlannedLine['vendorSource'] = null
+            if (
+              sourcePlan.shortageResolution?.type === 'VENDOR'
+            ) {
+              const vendorId =
+                sourcePlan.shortageResolution.vendorId.trim()
+              const vendorCostPaisa = normalizeMoneyPaisa(
+                sourcePlan.shortageResolution.unitCostPaisa,
+                'Vendor unit cost',
+              )
+              const vendorRepository =
+                new VendorSourceRepository(database)
+              if (
+                !(await vendorRepository.lockActiveVendor(
+                  tenantId,
+                  vendorId,
+                ))
+              ) {
+                throw new SalesValidationError(
+                  'Vendor was not found or is inactive.',
+                )
+              }
+              vendorSource = {
+                vendorId,
+                unitCostPaisa: vendorCostPaisa,
+                totalCostPaisa: roundPaisa(
+                  new Decimal(
+                    sourcePlan.shortfallBaseQty,
+                  ).times(vendorCostPaisa),
+                ),
+              }
+            }
+
+            const effectiveRequested =
+              sourcePlan.requestedBaseQty
+            const ownSalesTotal = partial.allocations.reduce(
+              (sum, allocation) =>
+                sum + BigInt(allocation.automaticSalesAmountPaisa),
+              0n,
+            )
+            const ownCogs = partial.allocations.reduce(
+              (sum, allocation) =>
+                sum + BigInt(allocation.cogsAmountPaisa),
+              0n,
+            )
+            const shortfall = new Decimal(
+              sourcePlan.shortfallBaseQty,
+            )
+            const shortageSales = BigInt(
+              roundPaisa(
+                shortfall.times(
+                  variantSnapshot.defaultSellingPricePaisa,
+                ),
+              ),
+            )
+            const shortageUnitCostPaisa =
+              vendorSource?.unitCostPaisa ??
+              variantSnapshot.defaultPurchasePricePaisa
+            const provisionalShortageCogs = BigInt(
+              roundPaisa(
+                shortfall.times(shortageUnitCostPaisa),
+              ),
+            )
+            const automaticSalesTotalPaisa = (
+              ownSalesTotal + shortageSales
+            ).toString()
+            const cogsPaisa = (
+              ownCogs + provisionalShortageCogs
+            ).toString()
+            const quote = {
+              variantId: line.variantId,
+              requestedBaseQty: effectiveRequested,
+              availableBaseQty: partial.availableBaseQty,
+              allocations: partial.allocations,
+              automaticSalesTotalPaisa,
+              effectiveUnitSellingPricePaisa: roundPaisa(
+                new Decimal(
+                  automaticSalesTotalPaisa,
+                ).div(effectiveRequested),
+              ),
+              cogsPaisa,
+              isSufficient: true as const,
+            }
+            const manualUnit =
+              line.manualUnitSellingPricePaisa ?? null
+            const grossAmountPaisa = manualUnit
+              ? roundPaisa(
+                  new Decimal(effectiveRequested).times(manualUnit),
+                )
+              : automaticSalesTotalPaisa
 
             subtotal += BigInt(grossAmountPaisa)
-            totalCogs += BigInt(quote.cogsPaisa)
+            totalCogs += BigInt(cogsPaisa)
             plannedLines.push({
-              input: line,
+              input: {
+                ...line,
+                baseQty: effectiveRequested,
+              },
               lockedLots,
               quote,
               grossAmountPaisa,
-              cogsPaisa: quote.cogsPaisa,
+              cogsPaisa,
+              shortfallBaseQty: sourcePlan.shortfallBaseQty,
+              provisionalUnitCostPaisa:
+                new Decimal(sourcePlan.shortfallBaseQty).gt(0) &&
+                sourcePlan.shortageResolution?.type ===
+                  'NEGATIVE_STOCK'
+                  ? variantSnapshot.defaultPurchasePricePaisa
+                  : null,
+              vendorSource,
               snapshot: variantSnapshot,
             })
           }
@@ -322,6 +451,63 @@ export class SalesService {
               netAmountPaisa: discount.netAmountPaisa,
             })
 
+            if (
+              new Decimal(planned.shortfallBaseQty).gt(0) &&
+              planned.input.shortageResolution?.type ===
+                'NEGATIVE_STOCK'
+            ) {
+              if (planned.provisionalUnitCostPaisa === null) {
+                throw new Error(
+                  'Negative Stock provisional cost is missing',
+                )
+              }
+              await new ShortfallRepository(database).create({
+                tenantId,
+                salesLineId: line.id,
+                variantId: planned.input.variantId,
+                shortfallBaseQty: planned.shortfallBaseQty,
+                provisionalUnitCostPaisa:
+                  planned.provisionalUnitCostPaisa,
+              })
+            }
+
+            if (planned.vendorSource) {
+              const vendorRepository =
+                new VendorSourceRepository(database)
+              const sourcing =
+                await vendorRepository.createSourcing({
+                  tenantId,
+                  salesLineId: line.id,
+                  vendorId: planned.vendorSource.vendorId,
+                  variantId: planned.input.variantId,
+                  businessDate: input.businessDate,
+                  baseQty: planned.shortfallBaseQty,
+                  unitCostPaisa:
+                    planned.vendorSource.unitCostPaisa,
+                  totalCostPaisa:
+                    planned.vendorSource.totalCostPaisa,
+                })
+              await vendorRepository.createLineAllocation({
+                tenantId,
+                salesLineId: line.id,
+                vendorSourcingId: sourcing.id,
+                vendorId: planned.vendorSource.vendorId,
+                baseQty: planned.shortfallBaseQty,
+                unitCostPaisa:
+                  planned.vendorSource.unitCostPaisa,
+                totalCostPaisa:
+                  planned.vendorSource.totalCostPaisa,
+              })
+              await vendorRepository.createPayable({
+                tenantId,
+                vendorId: planned.vendorSource.vendorId,
+                businessDate: input.businessDate,
+                amountPaisa:
+                  planned.vendorSource.totalCostPaisa,
+                vendorSourcingId: sourcing.id,
+              })
+            }
+
             const lotById = new Map(
               planned.lockedLots.map((lot) => [lot.id, lot]),
             )
@@ -346,34 +532,47 @@ export class SalesService {
               })
             }
 
-            const currentBalance =
-              await inventoryRepository.getVariantBalance(
-                tenantId,
-                planned.input.variantId,
+            const ownMovementQty =
+              planned.quote.allocations.reduce(
+                (sum, allocation) =>
+                  sum.plus(allocation.baseQty),
+                new Decimal(0),
               )
-            const movement = await inventoryRepository.createMovement({
-              tenantId,
-              variantId: planned.input.variantId,
-              movementType: 'SALE',
-              businessDate: input.businessDate,
-              baseQtyDelta: new Decimal(
-                planned.quote.requestedBaseQty,
-              ).negated().toFixed(),
-              balanceAfterBaseQty: new Decimal(currentBalance)
-                .minus(planned.quote.requestedBaseQty)
-                .toFixed(),
-              referenceType: 'SALE',
-              note: `Sale ${invoice.id}`,
-              createdByUserId: actorUserId,
-            })
-            for (const allocation of planned.quote.allocations) {
-              await inventoryRepository.createMovementLotAllocation({
-                tenantId,
-                movementId: movement.id,
-                lotId: allocation.lotId,
-                baseQty: allocation.baseQty,
-                unitCostPaisa: allocation.unitCostPaisa,
-              })
+            const movementQty = planned.vendorSource
+              ? ownMovementQty
+              : new Decimal(planned.quote.requestedBaseQty)
+
+            if (movementQty.gt(0)) {
+              const currentBalance =
+                await inventoryRepository.getVariantBalance(
+                  tenantId,
+                  planned.input.variantId,
+                )
+              const movement =
+                await inventoryRepository.createMovement({
+                  tenantId,
+                  variantId: planned.input.variantId,
+                  movementType: 'SALE',
+                  businessDate: input.businessDate,
+                  baseQtyDelta: movementQty.negated().toFixed(),
+                  balanceAfterBaseQty: new Decimal(
+                    currentBalance,
+                  )
+                    .minus(movementQty)
+                    .toFixed(),
+                  referenceType: 'SALE',
+                  note: `Sale ${invoice.id}`,
+                  createdByUserId: actorUserId,
+                })
+              for (const allocation of planned.quote.allocations) {
+                await inventoryRepository.createMovementLotAllocation({
+                  tenantId,
+                  movementId: movement.id,
+                  lotId: allocation.lotId,
+                  baseQty: allocation.baseQty,
+                  unitCostPaisa: allocation.unitCostPaisa,
+                })
+              }
             }
 
             committedLines.push({
