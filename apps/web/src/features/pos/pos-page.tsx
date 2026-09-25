@@ -39,6 +39,7 @@ import {
   type PosCustomerDraft,
 } from './components/customer-panel'
 import { ConversionEditor } from './components/conversion-editor'
+import { CostReveal } from './components/cost-reveal'
 import { ShortageResolution } from './components/shortage-resolution'
 
 interface CartLineState {
@@ -828,6 +829,12 @@ export function PosPage() {
                             >
                               <Eye aria-hidden="true" />
                             </Button>
+                            <CostReveal
+                              productName={line.product.productName}
+                              purchasePricePaisa={
+                                line.product.configuredPurchasePricePaisa
+                              }
+                            />
                           </div>
                         </td>
                         <td>
