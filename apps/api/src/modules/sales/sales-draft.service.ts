@@ -120,4 +120,67 @@ export class SalesDraftService {
       },
     )
   }
+
+  async get(draftId: string): Promise<SalesDraftRecord> {
+    const id = draftId.trim()
+    if (!id) {
+      throw new Error('Draft id is required')
+    }
+    const draft = await new SalesDraftRepository(
+      this.database,
+    ).findById(this.tenantId, id)
+    if (!draft) {
+      throw new Error('Draft not found')
+    }
+    return draft
+  }
+
+  async update(
+    actorUserId: string,
+    draftId: string,
+    _expectedVersion: number,
+    input: SalesDraftInput,
+  ): Promise<SalesDraftRecord> {
+    const userId = actorUserId.trim()
+    const id = draftId.trim()
+    if (!userId) {
+      throw new Error('Actor user is required')
+    }
+    if (!id) {
+      throw new Error('Draft id is required')
+    }
+    const state = normalizeState(input)
+
+    return withDatabaseTransaction(
+      this.database,
+      async (database) => {
+        const repository = new SalesDraftRepository(database)
+        const header = await repository.replaceState({
+          tenantId: this.tenantId,
+          draftId: id,
+          state,
+        })
+        if (!header) {
+          throw new Error('Draft not found or is not active')
+        }
+
+        await repository.deleteLines(this.tenantId, id)
+        for (let index = 0; index < state.lines.length; index += 1) {
+          await repository.insertLine({
+            tenantId: this.tenantId,
+            draftId: id,
+            sortOrder: index,
+            line: state.lines[index]!,
+          })
+        }
+
+        const loaded = await repository.findById(this.tenantId, id)
+        if (!loaded) {
+          throw new Error('Updated Draft disappeared')
+        }
+        return loaded
+      },
+    )
+  }
+
 }
