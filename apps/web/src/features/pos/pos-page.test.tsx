@@ -19,22 +19,22 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 const product = {
-  id: 'product-1',
-  name: '4" SWR Pipe PPL 2.7 mm',
+  productId: 'product-1',
+  variantId: 'variant-1',
+  productName: '4" SWR Pipe PPL 2.7 mm',
+  variantName: null,
+  sku: 'SWR-27',
+  primaryBarcode: '123456',
   brand: 'RFL',
-  category: { id: 'cat-1', name: 'Pipe', isActive: true },
-  baseUnit: { id: 'unit-1', name: 'Feet', symbol: 'Feet', isActive: true },
-  defaultVariantId: 'variant-1',
-  variantCount: 1,
-  defaultPurchasePricePaisa: '5000',
-  defaultSellingPricePaisa: '6500',
+  categoryName: 'Pipe',
+  unitId: 'unit-1',
+  unitName: 'Feet',
+  unitSymbol: 'Feet',
   currentSellingPricePaisa: '6900',
-  stockBaseQty: '3',
-  stockValuePaisa: '15500',
-  minimumStockBaseQty: '0',
+  availableOwnBaseQty: '3',
   trackingMode: 'SIMPLE' as const,
+  allocationPolicy: 'FIFO' as const,
   variantsEnabled: false,
-  isActive: true,
 }
 
 const baseSession: AuthSession = {
@@ -46,107 +46,81 @@ const baseSession: AuthSession = {
   expiresAt: '2026-09-25T00:00:00.000Z',
 }
 
-function installFetch() {
-  const fetchMock = vi.fn(async (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ) => {
-    const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url
-
-    if (url.startsWith('/api/private/products?')) {
-      return jsonResponse({
-        items: [product],
-        total: 1,
-        limit: 50,
-        offset: 0,
-      })
-    }
-
-    if (
-      url === '/api/private/sales/quote-line' &&
-      init?.method === 'POST'
-    ) {
-      const body = JSON.parse(String(init.body)) as {
-        baseQty: string
-      }
-
-      if (body.baseQty === '2') {
-        return jsonResponse({
-          variantId: 'variant-1',
-          requestedBaseQty: '2',
-          availableBaseQty: '3',
-          allocations: [
-            {
-              lotId: 'lot-1',
-              receivedOn: '2026-01-01',
-              baseQty: '1',
-              unitCostPaisa: '5000',
-              lotSellingPricePaisa: '6900',
-              automaticSalesAmountPaisa: '6900',
-              cogsAmountPaisa: '5000',
-            },
-            {
-              lotId: 'lot-2',
-              receivedOn: '2026-02-01',
-              baseQty: '1',
-              unitCostPaisa: '5500',
-              lotSellingPricePaisa: '7200',
-              automaticSalesAmountPaisa: '7200',
-              cogsAmountPaisa: '5500',
-            },
-          ],
-          automaticSalesTotalPaisa: '14100',
-          effectiveUnitSellingPricePaisa: '7050',
-          cogsPaisa: '10500',
-          isSufficient: true,
-        })
-      }
-
-      return jsonResponse({
-        variantId: 'variant-1',
-        requestedBaseQty: '1',
-        availableBaseQty: '3',
-        allocations: [
-          {
-            lotId: 'lot-1',
-            receivedOn: '2026-01-01',
-            baseQty: '1',
-            unitCostPaisa: '5000',
-            lotSellingPricePaisa: '6900',
-            automaticSalesAmountPaisa: '6900',
-            cogsAmountPaisa: '5000',
-          },
+function safeQuote(baseQty: string) {
+  const two = baseQty === '2'
+  return {
+    variantId: 'variant-1',
+    baseQty,
+    pricingQty: baseQty,
+    displayQty: baseQty,
+    availableOwnBaseQty: '3',
+    shortfallBaseQty: '0',
+    sellingSegments: two
+      ? [
+          { lotId: 'lot-1', baseQty: '1', unitSellingPricePaisa: '6900', amountPaisa: '6900' },
+          { lotId: 'lot-2', baseQty: '1', unitSellingPricePaisa: '7200', amountPaisa: '7200' },
+        ]
+      : [
+          { lotId: 'lot-1', baseQty: '1', unitSellingPricePaisa: '6900', amountPaisa: '6900' },
         ],
-        automaticSalesTotalPaisa: '6900',
-        effectiveUnitSellingPricePaisa: '6900',
-        cogsPaisa: '5000',
-        isSufficient: true,
-      })
-    }
+    automaticSalesTotalPaisa: two ? '14100' : '6900',
+    effectiveUnitSellingPricePaisa: two ? '7050' : '6900',
+    conversion: {
+      baseQty,
+      pricingQty: baseQty,
+      displayQty: baseQty,
+      components: {},
+      snapshot: null,
+    },
+  }
+}
 
-    if (
-      url === '/api/private/sales' &&
-      init?.method === 'POST'
-    ) {
+function installFetch() {
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url
+
+      if (url.startsWith('/api/private/pos/products?')) {
+        const params = new URLSearchParams(url.split('?')[1])
+        return jsonResponse(params.get('search') ? [product] : [])
+      }
+
+      if (
+        url === '/api/private/pos/quote-line' &&
+        init?.method === 'POST'
+      ) {
+        const body = JSON.parse(String(init.body)) as {
+          baseQty: string
+        }
+        return jsonResponse(safeQuote(body.baseQty))
+      }
+
+      if (
+        url === '/api/private/sales' &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse(
+          {
+            id: 'sale-1',
+            businessDate: '2026-09-25',
+            totalSalesPaisa: '14100',
+            lines: [],
+          },
+          201,
+        )
+      }
+
       return jsonResponse(
-        {
-          id: 'sale-1',
-          totalSalesPaisa: '14100',
-          totalCogsPaisa: '10500',
-          grossProfitPaisa: '3600',
-          lines: [],
-        },
-        201,
+        { error: `Unexpected test request: ${url}` },
+        404,
       )
-    }
-
-    return jsonResponse({ error: 'Unexpected test request' }, 404)
-  })
+    },
+  )
 
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
@@ -170,19 +144,44 @@ function renderPos(session: AuthSession = baseSession) {
   )
 }
 
+async function searchForProduct() {
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Search products' }),
+    { target: { value: 'SWR' } },
+  )
+
+  return screen.findByRole('button', {
+    name: /4" SWR Pipe PPL 2.7 mm/i,
+  })
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 
 describe('PosPage lot pricing', () => {
-  it('adds a Product with automatic FIFO price and shows lot breakdown', async () => {
-    installFetch()
+  it('uses server-backed Product search and safe automatic lot pricing', async () => {
+    const fetchMock = installFetch()
     renderPos()
 
-    const productButton = await screen.findByRole('button', {
-      name: /4" SWR Pipe PPL 2.7 mm/i,
-    })
-    fireEvent.click(productButton)
+    expect(
+      screen.getByText('Search to find Products.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(await searchForProduct())
+
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).startsWith(
+          '/api/private/pos/products?search=SWR&limit=20',
+        ),
+      ),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).startsWith('/api/private/products?'),
+      ),
+    ).toBe(false)
 
     const cartRow = await screen.findByRole('row', {
       name: /4" SWR Pipe PPL 2.7 mm/i,
@@ -190,7 +189,9 @@ describe('PosPage lot pricing', () => {
     expect(
       within(cartRow).getByDisplayValue('69.00'),
     ).toHaveAttribute('readonly')
-    expect(within(cartRow).getByText('৳69.00')).toBeInTheDocument()
+    expect(
+      within(cartRow).getByText('৳69.00'),
+    ).toBeInTheDocument()
 
     fireEvent.click(
       within(cartRow).getByRole('button', {
@@ -206,11 +207,7 @@ describe('PosPage lot pricing', () => {
     installFetch()
     renderPos()
 
-    fireEvent.click(
-      await screen.findByRole('button', {
-        name: /4" SWR Pipe PPL 2.7 mm/i,
-      }),
-    )
+    fireEvent.click(await searchForProduct())
 
     const price = await screen.findByLabelText(
       'Selling price for 4" SWR Pipe PPL 2.7 mm',
@@ -220,18 +217,14 @@ describe('PosPage lot pricing', () => {
     expect(price).toHaveValue('69.00')
   })
 
-  it('allows permitted manual price, warns below cost, and resets to lot price', async () => {
+  it('allows permitted manual price and resets to lot price without browser COGS', async () => {
     installFetch()
     renderPos({
       ...baseSession,
       permissions: ['SALES_OVERRIDE_SELLING_PRICE'],
     })
 
-    fireEvent.click(
-      await screen.findByRole('button', {
-        name: /4" SWR Pipe PPL 2.7 mm/i,
-      }),
-    )
+    fireEvent.click(await searchForProduct())
 
     const price = await screen.findByLabelText(
       'Selling price for 4" SWR Pipe PPL 2.7 mm',
@@ -244,11 +237,13 @@ describe('PosPage lot pricing', () => {
       await screen.findByText('Manual selling price'),
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/below FIFO cost/i),
-    ).toBeInTheDocument()
+      screen.queryByText(/below FIFO cost/i),
+    ).not.toBeInTheDocument()
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Reset to Lot Price' }),
+      screen.getByRole('button', {
+        name: 'Reset to Lot Price',
+      }),
     )
     expect(price).toHaveValue('69.00')
     expect(
@@ -263,11 +258,7 @@ describe('PosPage lot pricing', () => {
       permissions: ['SALES_OVERRIDE_SELLING_PRICE'],
     })
 
-    fireEvent.click(
-      await screen.findByRole('button', {
-        name: /4" SWR Pipe PPL 2.7 mm/i,
-      }),
-    )
+    fireEvent.click(await searchForProduct())
 
     const qty = await screen.findByLabelText(
       'Quantity for 4" SWR Pipe PPL 2.7 mm',
@@ -278,7 +269,7 @@ describe('PosPage lot pricing', () => {
       expect(
         fetchMock.mock.calls.some(([input, init]) => {
           if (
-            input !== '/api/private/sales/quote-line' ||
+            input !== '/api/private/pos/quote-line' ||
             init?.method !== 'POST'
           ) {
             return false
@@ -299,7 +290,9 @@ describe('PosPage lot pricing', () => {
       await screen.findByText('Manual selling price'),
     ).toBeInTheDocument()
     fireEvent.click(
-      screen.getByRole('button', { name: 'Reset to Lot Price' }),
+      screen.getByRole('button', {
+        name: 'Reset to Lot Price',
+      }),
     )
 
     fireEvent.click(
@@ -323,6 +316,8 @@ describe('PosPage lot pricing', () => {
       expect(body.businessDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     })
 
-    expect(await screen.findByText('Sale completed')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Sale completed'),
+    ).toBeInTheDocument()
   })
 })
