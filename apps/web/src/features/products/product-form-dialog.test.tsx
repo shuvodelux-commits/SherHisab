@@ -694,4 +694,98 @@ describe('ProductFormDialog', () => {
     })
   })
 
+
+  it('configures mature tracking, warranty and typed capture fields from the compact Product editor', async () => {
+    const fetchMock = installFetch()
+    renderForm()
+
+    fireEvent.change(await screen.findByLabelText('Product Name'), {
+      target: { value: 'Tracked Medicine' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Unit' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Piece/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+
+    expect(screen.queryByLabelText('Allocation Policy')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Warranty Duration')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Tracking'))
+    fireEvent.click(
+      await screen.findByRole('option', { name: 'Batch & Expiry' }),
+    )
+
+    const allocationPolicy = screen.getByLabelText('Allocation Policy')
+    expect(allocationPolicy).toHaveAttribute('data-slot', 'select-trigger')
+    fireEvent.click(allocationPolicy)
+    fireEvent.click(await screen.findByRole('option', { name: 'FEFO' }))
+
+    const warrantyToggle = screen.getByRole('checkbox', {
+      name: 'Enable Warranty',
+    })
+    fireEvent.click(warrantyToggle)
+
+    fireEvent.change(screen.getByLabelText('Warranty Duration'), {
+      target: { value: '12' },
+    })
+    fireEvent.click(screen.getByLabelText('Warranty Duration Unit'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Months' }))
+    fireEvent.change(screen.getByLabelText('Warranty Provider'), {
+      target: { value: 'Manufacturer' },
+    })
+    fireEvent.change(screen.getByLabelText('Warranty Terms'), {
+      target: { value: 'Original warranty' },
+    })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Add Capture Field' }),
+    )
+    fireEvent.change(screen.getByLabelText('Capture Field Key 1'), {
+      target: { value: 'dosage_form' },
+    })
+    fireEvent.change(screen.getByLabelText('Capture Field Label 1'), {
+      target: { value: 'Dosage Form' },
+    })
+    fireEvent.click(screen.getByLabelText('Capture Field Type 1'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Select' }))
+    fireEvent.change(screen.getByLabelText('Capture Field Options 1'), {
+      target: { value: 'Tablet, Syrup' },
+    })
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'Capture Field Required 1',
+      }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }))
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          input === '/api/private/products' && init?.method === 'POST',
+      )
+      expect(createCall).toBeDefined()
+      const body = JSON.parse(String(createCall?.[1]?.body))
+
+      expect(body.trackingMode).toBe('BATCH_EXPIRY')
+      expect(body.allocationPolicy).toBe('FEFO')
+      expect(body.advanced.warrantyPolicy).toEqual({
+        enabled: true,
+        durationValue: 12,
+        durationUnit: 'MONTH',
+        provider: 'Manufacturer',
+        text: 'Original warranty',
+      })
+      expect(body.advanced.captureFields).toEqual([
+        {
+          key: 'dosage_form',
+          label: 'Dosage Form',
+          type: 'select',
+          selectOptions: ['Tablet', 'Syrup'],
+          required: true,
+        },
+      ])
+    })
+  })
+
 })
