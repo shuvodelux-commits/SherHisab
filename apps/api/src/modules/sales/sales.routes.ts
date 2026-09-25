@@ -30,6 +30,23 @@ function stringField(
   return value
 }
 
+function optionalStringField(
+  body: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = body[key]
+
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (typeof value !== 'string') {
+    throw new SalesValidationError(`${key} must be a string.`)
+  }
+
+  return value
+}
+
 function commitInput(body: Record<string, unknown>): CommitSaleInput {
   if (!Array.isArray(body.lines)) {
     throw new SalesValidationError('lines must be an array.')
@@ -72,6 +89,7 @@ export const salesRoutes = new Hono<AppEnv>()
             c.get('tenantId'),
             stringField(body, 'variantId'),
             stringField(body, 'baseQty'),
+            optionalStringField(body, 'businessDate'),
           ),
         ),
       )

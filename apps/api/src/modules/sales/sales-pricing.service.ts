@@ -14,10 +14,12 @@ export class SalesPricingService {
     tenantId: string,
     variantId: string,
     baseQty: string,
+    businessDate = new Date().toISOString().slice(0, 10),
   ): Promise<FifoLineQuote> {
-    const lots = await this.repository.listAvailableFifoLots(
+    const lots = await this.repository.listAvailableLotsForSale(
       tenantId,
       variantId,
+      businessDate,
     )
 
     return buildFifoLineQuote(variantId, baseQty, lots)

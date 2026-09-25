@@ -111,6 +111,7 @@ function initialAdvancedState(
   if (mode === 'edit' && product) {
     return advancedFormStateFromProduct(
       product.trackingMode,
+      product.allocationPolicy,
       product.variantsEnabled,
       product.advanced,
     )
@@ -231,6 +232,7 @@ export function ProductFormDialog({
             : form.openingStock || '0',
           minimumStockBaseQty: form.minimumStock || '0',
           trackingMode: advanced.trackingMode,
+          allocationPolicy: advanced.allocationPolicy,
           advanced: advancedPayload,
         })
       }
@@ -249,6 +251,7 @@ export function ProductFormDialog({
         defaultSellingPricePaisa: sellingPrice,
         minimumStockBaseQty: form.minimumStock || '0',
         trackingMode: advanced.trackingMode,
+        allocationPolicy: advanced.allocationPolicy,
         advanced: advancedPayload,
       })
     },

@@ -63,6 +63,95 @@ export class SalesRepository {
     return this.listLots(tenantId, variantId, true)
   }
 
+  private async listConfiguredSaleLots(
+    tenantId: string,
+    variantId: string,
+    businessDate: string,
+    forUpdate: boolean,
+  ): Promise<AvailableSalesLot[]> {
+    const result = await this.db.query<{
+      id: string
+      received_on: string
+      remaining_base_qty: string
+      unit_cost_paisa: string
+      default_sell_price_paisa: string
+    }>(
+      `SELECT
+         l.id,
+         l.received_on::text,
+         trim_scale(l.remaining_base_qty)::text AS remaining_base_qty,
+         l.unit_cost_paisa::text,
+         l.default_sell_price_paisa::text
+       FROM inventory_lots l
+       JOIN product_variants v
+         ON v.tenant_id = l.tenant_id
+        AND v.id = l.variant_id
+       JOIN products p
+         ON p.tenant_id = v.tenant_id
+        AND p.id = v.product_id
+       WHERE l.tenant_id = $1
+         AND l.variant_id = $2
+         AND v.is_active
+         AND p.is_active
+         AND l.status = 'ACTIVE'
+         AND l.remaining_base_qty > 0
+         AND (
+           p.tracking_mode <> 'BATCH_EXPIRY'
+           OR (
+             l.batch_code IS NOT NULL
+             AND btrim(l.batch_code) <> ''
+             AND l.expires_on IS NOT NULL
+             AND l.expires_on >= $3::date
+           )
+         )
+       ORDER BY
+         CASE
+           WHEN p.tracking_mode = 'BATCH_EXPIRY'
+             AND p.allocation_policy = 'FEFO'
+           THEN l.expires_on
+           ELSE NULL
+         END ASC NULLS LAST,
+         l.received_on ASC,
+         l.id ASC
+       ${forUpdate ? 'FOR UPDATE OF l' : ''}`,
+      [tenantId, variantId, businessDate],
+    )
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      receivedOn: row.received_on,
+      remainingBaseQty: row.remaining_base_qty,
+      unitCostPaisa: row.unit_cost_paisa,
+      sellingPricePaisa: row.default_sell_price_paisa,
+    }))
+  }
+
+  listAvailableLotsForSale(
+    tenantId: string,
+    variantId: string,
+    businessDate: string,
+  ): Promise<AvailableSalesLot[]> {
+    return this.listConfiguredSaleLots(
+      tenantId,
+      variantId,
+      businessDate,
+      false,
+    )
+  }
+
+  listAvailableLotsForSaleForUpdate(
+    tenantId: string,
+    variantId: string,
+    businessDate: string,
+  ): Promise<AvailableSalesLot[]> {
+    return this.listConfiguredSaleLots(
+      tenantId,
+      variantId,
+      businessDate,
+      true,
+    )
+  }
+
   async createInvoice(input: {
     tenantId: string
     businessDate: string

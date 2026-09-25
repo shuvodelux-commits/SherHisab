@@ -282,3 +282,110 @@ describe.skipIf(!hasDatabase)('FIFO sales pricing', () => {
     })
   })
 })
+
+
+describe.skipIf(!hasDatabase)('FEFO sales pricing', () => {
+  afterEach(async () => {
+    await cleanupProductTestTenants()
+  })
+
+  afterAll(async () => {
+    await closePool()
+  })
+
+  it('uses the earliest unexpired batch for BATCH_EXPIRY Products configured for FEFO', async () => {
+    const fixture = await createSalesFixture('FEFO Pricing')
+
+    await getPool().query(
+      `UPDATE products
+       SET tracking_mode = 'BATCH_EXPIRY',
+           allocation_policy = 'FEFO'
+       WHERE tenant_id = $1 AND id = $2`,
+      [fixture.tenant.id, fixture.product.id],
+    )
+
+    const insertBatch = async (input: {
+      receivedOn: string
+      expiresOn: string
+      batchCode: string
+      unitCostPaisa: string
+      sellingPricePaisa: string
+    }) => {
+      const result = await getPool().query<{ id: string }>(
+        `INSERT INTO inventory_lots
+         (
+           tenant_id,
+           variant_id,
+           source_type,
+           received_on,
+           unit_cost_paisa,
+           default_sell_price_paisa,
+           original_base_qty,
+           remaining_base_qty,
+           batch_code,
+           expires_on
+         )
+         VALUES ($1,$2,'ADJUSTMENT',$3,$4,$5,5,5,$6,$7)
+         RETURNING id`,
+        [
+          fixture.tenant.id,
+          fixture.product.defaultVariantId,
+          input.receivedOn,
+          input.unitCostPaisa,
+          input.sellingPricePaisa,
+          input.batchCode,
+          input.expiresOn,
+        ],
+      )
+
+      const id = result.rows[0]?.id
+      if (!id) {
+        throw new Error('Failed to create FEFO batch')
+      }
+      return id
+    }
+
+    await insertBatch({
+      receivedOn: '2025-12-01',
+      expiresOn: '2026-09-20',
+      batchCode: 'EXPIRED',
+      unitCostPaisa: '500',
+      sellingPricePaisa: '900',
+    })
+    await insertBatch({
+      receivedOn: '2026-01-01',
+      expiresOn: '2027-01-01',
+      batchCode: 'LATER-EXPIRY',
+      unitCostPaisa: '700',
+      sellingPricePaisa: '1100',
+    })
+    const earliestValid = await insertBatch({
+      receivedOn: '2026-06-01',
+      expiresOn: '2026-10-15',
+      batchCode: 'EARLIER-EXPIRY',
+      unitCostPaisa: '1300',
+      sellingPricePaisa: '2000',
+    })
+
+    const quote = await fixture.pricing.quoteFifoLine(
+      fixture.tenant.id,
+      fixture.product.defaultVariantId,
+      '1',
+      '2026-09-24',
+    )
+
+    expect(quote).toMatchObject({
+      availableBaseQty: '10',
+      automaticSalesTotalPaisa: '2000',
+      cogsPaisa: '1300',
+    })
+    expect(quote.allocations).toEqual([
+      expect.objectContaining({
+        lotId: earliestValid,
+        baseQty: '1',
+        unitCostPaisa: '1300',
+        lotSellingPricePaisa: '2000',
+      }),
+    ])
+  })
+})

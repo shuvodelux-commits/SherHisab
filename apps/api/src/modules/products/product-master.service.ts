@@ -10,6 +10,8 @@ import {
 import { ConversionService } from './conversion.service'
 import { InventoryService } from './inventory.service'
 import { ProductMasterRepository } from './product-master.repository'
+import { TrackingService } from './tracking.service'
+import type { AllocationPolicy } from './tracking.types'
 import type {
   AdvancedProductConfigurationInput,
   AlternativeUnitInput,
@@ -54,11 +56,49 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 function requireTrackingMode(value: TrackingMode): TrackingMode {
-  if (value !== 'SIMPLE' && value !== 'LOT' && value !== 'BATCH') {
+  if (
+    value !== 'SIMPLE' &&
+    value !== 'SERIAL' &&
+    value !== 'BATCH_EXPIRY'
+  ) {
     throw new ProductValidationError('Tracking mode is invalid')
   }
 
   return value
+}
+
+function requireAllocationPolicy(
+  value: AllocationPolicy,
+): AllocationPolicy {
+  if (value !== 'FIFO' && value !== 'FEFO') {
+    throw new ProductValidationError('Allocation policy is invalid')
+  }
+
+  return value
+}
+
+function resolveAllocationPolicy(
+  trackingMode: TrackingMode,
+  requested: AllocationPolicy | undefined,
+  fallback: AllocationPolicy = 'FIFO',
+): AllocationPolicy {
+  if (requested !== undefined) {
+    const policy = requireAllocationPolicy(requested)
+
+    if (trackingMode !== 'BATCH_EXPIRY' && policy === 'FEFO') {
+      throw new ProductValidationError(
+        'FEFO allocation is only available for Batch & Expiry Products',
+      )
+    }
+
+    return trackingMode === 'BATCH_EXPIRY' ? policy : 'FIFO'
+  }
+
+  if (trackingMode !== 'BATCH_EXPIRY') {
+    return 'FIFO'
+  }
+
+  return requireAllocationPolicy(fallback)
 }
 
 const PRODUCT_SORT_KEYS = new Set([
@@ -562,6 +602,10 @@ export class ProductMasterService {
       'Minimum stock',
     )
     const trackingMode = requireTrackingMode(input.trackingMode ?? 'SIMPLE')
+    const allocationPolicy = resolveAllocationPolicy(
+      trackingMode,
+      input.allocationPolicy,
+    )
 
     if (
       input.advanced?.variantConfiguration?.enabled &&
@@ -615,6 +659,7 @@ export class ProductMasterService {
             categoryId,
             baseUnitId,
             trackingMode,
+            allocationPolicy,
           })
           const variant = await repository.insertDefaultVariant(
             this.tenantId,
@@ -752,6 +797,11 @@ export class ProductMasterService {
       'Minimum stock',
     )
     const trackingMode = requireTrackingMode(input.trackingMode)
+    const allocationPolicy = resolveAllocationPolicy(
+      trackingMode,
+      input.allocationPolicy,
+      current.allocationPolicy,
+    )
 
     if (categoryId && categoryId !== current.category?.id) {
       const category = await this.repository.findCategoryById(
@@ -836,6 +886,7 @@ export class ProductMasterService {
             categoryId,
             baseUnitId,
             trackingMode,
+            allocationPolicy,
           },
         )
 
@@ -931,7 +982,16 @@ export class ProductMasterService {
     productId: string,
   ): Promise<ProductAdvancedConfiguration> {
     const product = await this.getProduct(productId)
-    const [advanced, conversionProfile] = await Promise.all([
+    const trackingService = new TrackingService(
+      this.tenantId,
+      this.database,
+    )
+    const [
+      advanced,
+      conversionProfile,
+      warrantyPolicy,
+      captureFields,
+    ] = await Promise.all([
       this.repository.getAdvancedConfiguration(
         this.tenantId,
         productId,
@@ -941,11 +1001,15 @@ export class ProductMasterService {
         this.tenantId,
         this.database,
       ).getActiveProfile(productId),
+      trackingService.getWarrantyPolicy(productId),
+      trackingService.listCaptureFields(productId),
     ])
 
     return {
       ...advanced,
       conversionProfile,
+      warrantyPolicy,
+      captureFields,
     }
   }
 
@@ -1060,6 +1124,25 @@ export class ProductMasterService {
           advanced.conversionProfile,
         )
       }
+    }
+
+    const trackingService = new TrackingService(
+      this.tenantId,
+      database,
+    )
+
+    if (advanced.warrantyPolicy !== undefined) {
+      await trackingService.replaceWarrantyPolicyInTransaction(
+        productId,
+        advanced.warrantyPolicy,
+      )
+    }
+
+    if (advanced.captureFields !== undefined) {
+      await trackingService.replaceCaptureFieldsInTransaction(
+        productId,
+        advanced.captureFields,
+      )
     }
   }
 

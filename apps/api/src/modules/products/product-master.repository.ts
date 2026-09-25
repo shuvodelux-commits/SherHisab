@@ -1,4 +1,5 @@
 import type { DatabaseClient } from '../../db/request-database'
+import type { AllocationPolicy } from './tracking.types'
 import type {
   CategoryRecord,
   CreateUnitInput,
@@ -48,6 +49,7 @@ interface ProductRow {
   stock_value_paisa: string
   minimum_stock_base_qty: string
   tracking_mode: TrackingMode
+  allocation_policy: AllocationPolicy
   variants_enabled: boolean
   is_active: boolean
   primary_barcode: string | null
@@ -59,6 +61,7 @@ interface ProductInsertFields {
   categoryId: string | null
   baseUnitId: string
   trackingMode: TrackingMode
+  allocationPolicy: AllocationPolicy
 }
 
 interface VariantInsertFields {
@@ -114,6 +117,7 @@ function mapProduct(row: ProductRow): ProductDetail {
     stockValuePaisa: row.stock_value_paisa,
     minimumStockBaseQty: row.minimum_stock_base_qty,
     trackingMode: row.tracking_mode,
+    allocationPolicy: row.allocation_policy,
     variantsEnabled: row.variants_enabled,
     isActive: row.is_active,
     primaryBarcode: row.primary_barcode,
@@ -191,6 +195,7 @@ const productSelect = `
     ) AS stock_value_paisa,
     trim_scale(dv.minimum_stock_base_qty)::text AS minimum_stock_base_qty,
     p.tracking_mode,
+    p.allocation_policy,
     p.variants_enabled,
     p.is_active,
     (
@@ -514,8 +519,16 @@ export class ProductMasterRepository {
   ): Promise<{ id: string }> {
     const result = await this.db.query<{ id: string }>(
       `INSERT INTO products
-       (tenant_id, name, brand, category_id, base_unit_id, tracking_mode)
-       VALUES ($1, $2, $3, $4, $5, $6)
+       (
+         tenant_id,
+         name,
+         brand,
+         category_id,
+         base_unit_id,
+         tracking_mode,
+         allocation_policy
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
       [
         tenantId,
@@ -524,6 +537,7 @@ export class ProductMasterRepository {
         fields.categoryId,
         fields.baseUnitId,
         fields.trackingMode,
+        fields.allocationPolicy,
       ],
     )
 
@@ -729,6 +743,7 @@ export class ProductMasterRepository {
            category_id = $5,
            base_unit_id = $6,
            tracking_mode = $7,
+           allocation_policy = $8,
            updated_at = NOW()
        WHERE tenant_id = $1 AND id = $2`,
       [
@@ -739,6 +754,7 @@ export class ProductMasterRepository {
         fields.categoryId,
         fields.baseUnitId,
         fields.trackingMode,
+        fields.allocationPolicy,
       ],
     )
 
@@ -1359,7 +1375,12 @@ export class ProductMasterRepository {
     tenantId: string,
     productId: string,
     baseUnitId: string,
-  ): Promise<Omit<ProductAdvancedConfiguration, 'conversionProfile'>> {
+  ): Promise<
+    Omit<
+      ProductAdvancedConfiguration,
+      'conversionProfile' | 'warrantyPolicy' | 'captureFields'
+    >
+  > {
     const [alternativeUnits, specifications, variants] = await Promise.all([
       this.listAlternativeUnits(tenantId, productId, baseUnitId),
       this.listSpecifications(tenantId, productId),

@@ -50,6 +50,7 @@ function product(
     stockValuePaisa: '3125',
     minimumStockBaseQty: '0.12500000',
     trackingMode: 'SIMPLE',
+    allocationPolicy: 'FIFO',
     variantsEnabled: true,
     isActive: true,
     ...overrides,

@@ -21,11 +21,14 @@ import {
 import { formatPaisaToTaka, parseTakaToPaisa } from '../../lib/money'
 import type {
   AdvancedProductConfigurationInput,
+  AllocationPolicy,
   ConversionMode,
   ConversionProfileType,
   ProductAdvancedConfigurationDto,
+  ProductCaptureFieldType,
   ProductUnitDto,
   TrackingMode,
+  WarrantyDurationUnit,
   VariantInput,
   VariantOptionInput,
 } from './product-types'
@@ -76,8 +79,24 @@ export interface ConversionComponentFormRow {
   autoNormalizeRemainder: boolean
 }
 
+export interface CaptureFieldFormRow {
+  key: string
+  fieldKey: string
+  label: string
+  type: ProductCaptureFieldType
+  selectOptionsText: string
+  required: boolean
+}
+
 export interface ProductAdvancedFormState {
   trackingMode: TrackingMode
+  allocationPolicy: AllocationPolicy
+  warrantyEnabled: boolean
+  warrantyDurationValue: string
+  warrantyDurationUnit: WarrantyDurationUnit
+  warrantyProvider: string
+  warrantyText: string
+  captureFields: CaptureFieldFormRow[]
   conversionEnabled: boolean
   conversionType: ConversionProfileType
   conversionPricingUnitId: string
@@ -110,6 +129,13 @@ export function emptyAdvancedFormState(
 ): ProductAdvancedFormState {
   return {
     trackingMode,
+    allocationPolicy: 'FIFO',
+    warrantyEnabled: false,
+    warrantyDurationValue: '',
+    warrantyDurationUnit: 'MONTH',
+    warrantyProvider: '',
+    warrantyText: '',
+    captureFields: [],
     conversionEnabled: false,
     conversionType: 'COMPOUND',
     conversionPricingUnitId: '',
@@ -129,12 +155,14 @@ export function emptyAdvancedFormState(
 // eslint-disable-next-line react-refresh/only-export-components
 export function advancedFormStateFromProduct(
   trackingMode: TrackingMode,
+  allocationPolicy: AllocationPolicy,
   variantsEnabled: boolean,
   advanced?: ProductAdvancedConfigurationDto,
 ): ProductAdvancedFormState {
   if (!advanced) {
     return {
       ...emptyAdvancedFormState(trackingMode),
+      allocationPolicy,
       variantsEnabled,
     }
   }
@@ -150,8 +178,27 @@ export function advancedFormStateFromProduct(
 
   const conversion = advanced.conversionProfile
 
+  const warranty = advanced.warrantyPolicy
+
   return {
     trackingMode,
+    allocationPolicy,
+    warrantyEnabled: Boolean(warranty?.enabled),
+    warrantyDurationValue:
+      warranty?.durationValue?.toString() ?? '',
+    warrantyDurationUnit:
+      warranty?.durationUnit ?? 'MONTH',
+    warrantyProvider: warranty?.provider ?? '',
+    warrantyText: warranty?.text ?? '',
+    captureFields:
+      advanced.captureFields?.map((field, index) => ({
+        key: field.id ?? rowKey('capture', index),
+        fieldKey: field.key,
+        label: field.label,
+        type: field.type,
+        selectOptionsText: field.selectOptions.join(', '),
+        required: field.required,
+      })) ?? [],
     conversionEnabled: Boolean(conversion),
     conversionType: conversion?.type ?? 'COMPOUND',
     conversionPricingUnitId: conversion?.pricingUnitId ?? '',
@@ -243,7 +290,33 @@ export function buildAdvancedPayload(
     10,
   )
 
+  const warrantyDurationValue = Number.parseInt(
+    state.warrantyDurationValue || '0',
+    10,
+  )
+
   return {
+    warrantyPolicy: state.warrantyEnabled
+      ? {
+          enabled: true,
+          durationValue: Number.isFinite(warrantyDurationValue)
+            ? warrantyDurationValue
+            : 0,
+          durationUnit: state.warrantyDurationUnit,
+          provider: state.warrantyProvider.trim(),
+          text: state.warrantyText.trim(),
+        }
+      : { enabled: false },
+    captureFields: state.captureFields.map((field) => ({
+      key: field.fieldKey.trim(),
+      label: field.label.trim(),
+      type: field.type,
+      selectOptions:
+        field.type === 'select'
+          ? commaValues(field.selectOptionsText)
+          : [],
+      required: field.required,
+    })),
     conversionProfile: state.conversionEnabled
       ? {
           type: state.conversionType,
@@ -326,40 +399,438 @@ export function ProductAdvancedFields({
   return (
     <div className="product-advanced-fields">
       <TooltipProvider>
-      <div className="product-advanced-section">
-        <label className="product-field">
-          <BilingualLabel en="Tracking" bn="স্টক ট্র্যাকিং" />
-          <Select
-            onValueChange={(value) =>
-              patch({ trackingMode: value as TrackingMode })
-            }
-            value={state.trackingMode}
-          >
-            <SelectTrigger
-              aria-label={t('Tracking', 'স্টক ট্র্যাকিং')}
-              className="product-select"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="SIMPLE">
-                  {t('Simple', 'সাধারণ')}
-                </SelectItem>
-                <SelectItem value="LOT">{t('Lot', 'লট')}</SelectItem>
-                <SelectItem value="BATCH">{t('Batch', 'ব্যাচ')}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </label>
-        <p className="product-field-help">
-          <BilingualLabel
+      <section className="product-advanced-section">
+        <div className="product-advanced-heading">
+          <div>
+            <strong>
+              <BilingualLabel
+                en="Inventory Tracking"
+                bn="ইনভেন্টরি ট্র্যাকিং"
+              />
+            </strong>
+            <p>
+              <BilingualLabel
                 layout="stacked"
-            en="Choose how inventory is tracked. Lot or batch details are entered during stock transactions."
-            bn="স্টক কীভাবে ট্র্যাক হবে তা নির্বাচন করুন। লট বা ব্যাচের তথ্য স্টক লেনদেনের সময় যোগ করা হবে।"
+                en="Keep ordinary Products simple. Enable serial or batch/expiry tracking only when the business needs it."
+                bn="সাধারণ পণ্য সহজ রাখুন। ব্যবসায় প্রয়োজন হলেই সিরিয়াল বা ব্যাচ/মেয়াদ ট্র্যাকিং চালু করুন।"
+              />
+            </p>
+          </div>
+        </div>
+
+        <div className="product-inline-grid">
+          <label className="product-field">
+            <BilingualLabel en="Tracking" bn="স্টক ট্র্যাকিং" />
+            <Select
+              onValueChange={(value) => {
+                const trackingMode = value as TrackingMode
+                patch({
+                  trackingMode,
+                  allocationPolicy:
+                    trackingMode === 'BATCH_EXPIRY'
+                      ? state.allocationPolicy
+                      : 'FIFO',
+                })
+              }}
+              value={state.trackingMode}
+            >
+              <SelectTrigger
+                aria-label={t('Tracking', 'স্টক ট্র্যাকিং')}
+                className="product-select"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="SIMPLE">
+                    {t('Simple', 'সাধারণ')}
+                  </SelectItem>
+                  <SelectItem value="SERIAL">
+                    {t('Serial', 'সিরিয়াল')}
+                  </SelectItem>
+                  <SelectItem value="BATCH_EXPIRY">
+                    {t('Batch & Expiry', 'ব্যাচ ও মেয়াদ')}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </label>
+
+          {state.trackingMode === 'BATCH_EXPIRY' ? (
+            <label className="product-field">
+              <BilingualLabel
+                en="Allocation Policy"
+                bn="স্টক বাছাই পদ্ধতি"
+              />
+              <Select
+                onValueChange={(value) =>
+                  patch({
+                    allocationPolicy: value as AllocationPolicy,
+                  })
+                }
+                value={state.allocationPolicy}
+              >
+                <SelectTrigger
+                  aria-label={t(
+                    'Allocation Policy',
+                    'স্টক বাছাই পদ্ধতি',
+                  )}
+                  className="product-select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="FIFO">
+                      {t('FIFO', 'আগে আসা আগে বিক্রি')}
+                    </SelectItem>
+                    <SelectItem value="FEFO">
+                      {t('FEFO', 'আগে মেয়াদ শেষ হবে আগে বিক্রি')}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </label>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="product-advanced-section">
+        <div className="product-advanced-heading">
+          <div>
+            <strong>
+              <BilingualLabel en="Warranty" bn="ওয়ারেন্টি" />
+            </strong>
+            <p>
+              <BilingualLabel
+                layout="stacked"
+                en="Enable only when this Product carries a warranty. Sale-time warranty details are preserved as history."
+                bn="এই পণ্যে ওয়ারেন্টি থাকলেই চালু করুন। বিক্রির সময়ের ওয়ারেন্টি তথ্য ইতিহাস হিসেবে সংরক্ষিত থাকবে।"
+              />
+            </p>
+          </div>
+        </div>
+
+        <label className="product-check-row">
+          <Checkbox
+            aria-label={t('Enable Warranty', 'ওয়ারেন্টি চালু করুন')}
+            checked={state.warrantyEnabled}
+            onCheckedChange={(checked) =>
+              patch({ warrantyEnabled: checked === true })
+            }
           />
-        </p>
-      </div>
+          <span>
+            <strong>
+              {t('Enable Warranty', 'ওয়ারেন্টি চালু করুন')}
+            </strong>
+            <small>
+              {t(
+                'Keep disabled for Products without warranty.',
+                'ওয়ারেন্টি না থাকলে বন্ধ রাখুন।',
+              )}
+            </small>
+          </span>
+        </label>
+
+        {state.warrantyEnabled ? (
+          <div className="product-inline-grid">
+            <label className="product-field">
+              <BilingualLabel
+                en="Warranty Duration"
+                bn="ওয়ারেন্টির সময়"
+              />
+              <Input
+                aria-label={t(
+                  'Warranty Duration',
+                  'ওয়ারেন্টির সময়',
+                )}
+                inputMode="numeric"
+                min="1"
+                onChange={(event) =>
+                  patch({
+                    warrantyDurationValue: event.target.value,
+                  })
+                }
+                value={state.warrantyDurationValue}
+              />
+            </label>
+
+            <label className="product-field">
+              <BilingualLabel
+                en="Duration Unit"
+                bn="সময়ের একক"
+              />
+              <Select
+                onValueChange={(value) =>
+                  patch({
+                    warrantyDurationUnit:
+                      value as WarrantyDurationUnit,
+                  })
+                }
+                value={state.warrantyDurationUnit}
+              >
+                <SelectTrigger
+                  aria-label={t(
+                    'Warranty Duration Unit',
+                    'ওয়ারেন্টি সময়ের একক',
+                  )}
+                  className="product-select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="DAY">
+                      {t('Days', 'দিন')}
+                    </SelectItem>
+                    <SelectItem value="MONTH">
+                      {t('Months', 'মাস')}
+                    </SelectItem>
+                    <SelectItem value="YEAR">
+                      {t('Years', 'বছর')}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </label>
+
+            <label className="product-field">
+              <BilingualLabel
+                en="Warranty Provider"
+                bn="ওয়ারেন্টি প্রদানকারী"
+              />
+              <Input
+                aria-label={t(
+                  'Warranty Provider',
+                  'ওয়ারেন্টি প্রদানকারী',
+                )}
+                onChange={(event) =>
+                  patch({ warrantyProvider: event.target.value })
+                }
+                value={state.warrantyProvider}
+              />
+            </label>
+
+            <label className="product-field product-field-wide">
+              <BilingualLabel
+                en="Warranty Terms"
+                bn="ওয়ারেন্টির শর্ত"
+              />
+              <Input
+                aria-label={t(
+                  'Warranty Terms',
+                  'ওয়ারেন্টির শর্ত',
+                )}
+                onChange={(event) =>
+                  patch({ warrantyText: event.target.value })
+                }
+                value={state.warrantyText}
+              />
+            </label>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="product-advanced-section">
+        <div className="product-advanced-heading">
+          <div>
+            <strong>
+              <BilingualLabel
+                en="Sale Capture Fields"
+                bn="বিক্রির অতিরিক্ত তথ্য"
+              />
+            </strong>
+            <p>
+              <BilingualLabel
+                layout="stacked"
+                en="Add only Product-specific information the cashier must capture during a sale."
+                bn="বিক্রির সময় ক্যাশিয়ারের যে পণ্য-নির্দিষ্ট তথ্য দরকার শুধু সেটিই যোগ করুন।"
+              />
+            </p>
+          </div>
+          <Button
+            onClick={() =>
+              patch({
+                captureFields: [
+                  ...state.captureFields,
+                  {
+                    key: rowKey(
+                      'capture',
+                      state.captureFields.length,
+                    ),
+                    fieldKey: '',
+                    label: '',
+                    type: 'text',
+                    selectOptionsText: '',
+                    required: false,
+                  },
+                ],
+              })
+            }
+            size="sm"
+            variant="secondary"
+          >
+            <Plus aria-hidden="true" data-icon="inline-start" />
+            {t('Add Capture Field', 'তথ্যের ঘর যোগ করুন')}
+          </Button>
+        </div>
+
+        {state.captureFields.map((field, index) => (
+          <div className="product-variant-row" key={field.key}>
+            <div className="product-inline-grid">
+              <label className="product-field">
+                <BilingualLabel en="Field Key" bn="ফিল্ড কী" />
+                <Input
+                  aria-label={t(
+                    `Capture Field Key ${index + 1}`,
+                    `তথ্যের ঘর কী ${index + 1}`,
+                  )}
+                  onChange={(event) => {
+                    const rows = [...state.captureFields]
+                    rows[index] = {
+                      ...field,
+                      fieldKey: event.target.value,
+                    }
+                    patch({ captureFields: rows })
+                  }}
+                  value={field.fieldKey}
+                />
+              </label>
+
+              <label className="product-field">
+                <BilingualLabel en="Label" bn="লেবেল" />
+                <Input
+                  aria-label={t(
+                    `Capture Field Label ${index + 1}`,
+                    `তথ্যের ঘর লেবেল ${index + 1}`,
+                  )}
+                  onChange={(event) => {
+                    const rows = [...state.captureFields]
+                    rows[index] = {
+                      ...field,
+                      label: event.target.value,
+                    }
+                    patch({ captureFields: rows })
+                  }}
+                  value={field.label}
+                />
+              </label>
+
+              <label className="product-field">
+                <BilingualLabel en="Type" bn="ধরন" />
+                <Select
+                  onValueChange={(value) => {
+                    const rows = [...state.captureFields]
+                    rows[index] = {
+                      ...field,
+                      type: value as ProductCaptureFieldType,
+                      selectOptionsText:
+                        value === 'select'
+                          ? field.selectOptionsText
+                          : '',
+                    }
+                    patch({ captureFields: rows })
+                  }}
+                  value={field.type}
+                >
+                  <SelectTrigger
+                    aria-label={t(
+                      `Capture Field Type ${index + 1}`,
+                      `তথ্যের ঘর ধরন ${index + 1}`,
+                    )}
+                    className="product-select"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="text">
+                        {t('Text', 'লেখা')}
+                      </SelectItem>
+                      <SelectItem value="number">
+                        {t('Number', 'সংখ্যা')}
+                      </SelectItem>
+                      <SelectItem value="date">
+                        {t('Date', 'তারিখ')}
+                      </SelectItem>
+                      <SelectItem value="select">
+                        {t('Select', 'তালিকা')}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </label>
+
+              {field.type === 'select' ? (
+                <label className="product-field">
+                  <BilingualLabel
+                    en="Options"
+                    bn="অপশন"
+                  />
+                  <Input
+                    aria-label={t(
+                      `Capture Field Options ${index + 1}`,
+                      `তথ্যের ঘর অপশন ${index + 1}`,
+                    )}
+                    onChange={(event) => {
+                      const rows = [...state.captureFields]
+                      rows[index] = {
+                        ...field,
+                        selectOptionsText: event.target.value,
+                      }
+                      patch({ captureFields: rows })
+                    }}
+                    placeholder={t(
+                      'Tablet, Syrup',
+                      'ট্যাবলেট, সিরাপ',
+                    )}
+                    value={field.selectOptionsText}
+                  />
+                </label>
+              ) : null}
+            </div>
+
+            <div className="product-check-row">
+              <Checkbox
+                aria-label={t(
+                  `Capture Field Required ${index + 1}`,
+                  `তথ্যের ঘর আবশ্যক ${index + 1}`,
+                )}
+                checked={field.required}
+                onCheckedChange={(checked) => {
+                  const rows = [...state.captureFields]
+                  rows[index] = {
+                    ...field,
+                    required: checked === true,
+                  }
+                  patch({ captureFields: rows })
+                }}
+              />
+              <span>
+                {t('Required during sale', 'বিক্রির সময় আবশ্যক')}
+              </span>
+              <Button
+                aria-label={t(
+                  `Remove Capture Field ${index + 1}`,
+                  `তথ্যের ঘর ${index + 1} সরান`,
+                )}
+                onClick={() =>
+                  patch({
+                    captureFields: state.captureFields.filter(
+                      (item) => item.key !== field.key,
+                    ),
+                  })
+                }
+                size="sm"
+                variant="ghost"
+              >
+                <Trash2 aria-hidden="true" data-icon="inline-start" />
+                {t('Remove', 'সরান')}
+              </Button>
+            </div>
+          </div>
+        ))}
+      </section>
 
       <section className="product-advanced-section">
         <div className="product-advanced-heading">

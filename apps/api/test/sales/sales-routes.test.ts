@@ -439,4 +439,163 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
     )
     expect(invoices.rows[0]?.count).toBe('0')
   })
+
+  it('quotes BATCH_EXPIRY stock against the requested business date', async () => {
+    const fixture = await createFixture('FEFO Quote Business Date')
+
+    await getPool().query(
+      `UPDATE products
+       SET tracking_mode = 'BATCH_EXPIRY',
+           allocation_policy = 'FEFO'
+       WHERE tenant_id = $1 AND id = $2`,
+      [fixture.tenant.id, fixture.product.id],
+    )
+
+    await addLot(fixture, {
+      qty: '1',
+      cost: '700',
+      selling: '1100',
+      date: '2026-01-01',
+    })
+
+    await getPool().query(
+      `UPDATE inventory_lots
+       SET batch_code = 'BACKDATED-VALID',
+           expires_on = '2026-02-01'
+       WHERE tenant_id = $1
+         AND variant_id = $2`,
+      [fixture.tenant.id, fixture.product.defaultVariantId],
+    )
+
+    const response = await privatePost(
+      fixture.cookie,
+      '/sales/quote-line',
+      {
+        variantId: fixture.product.defaultVariantId,
+        baseQty: '1',
+        businessDate: '2026-01-15',
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      automaticSalesTotalPaisa: '1100',
+      cogsPaisa: '700',
+    })
+  })
+
+  it('commits BATCH_EXPIRY FEFO sales from the earliest unexpired batch and leaves expired stock untouched', async () => {
+    const fixture = await createFixture('FEFO Commit')
+
+    await getPool().query(
+      `UPDATE products
+       SET tracking_mode = 'BATCH_EXPIRY',
+           allocation_policy = 'FEFO'
+       WHERE tenant_id = $1 AND id = $2`,
+      [fixture.tenant.id, fixture.product.id],
+    )
+
+    await addLot(fixture, {
+      qty: '5',
+      cost: '500',
+      selling: '900',
+      date: '2025-12-01',
+    })
+    await addLot(fixture, {
+      qty: '5',
+      cost: '700',
+      selling: '1100',
+      date: '2026-01-01',
+    })
+    await addLot(fixture, {
+      qty: '5',
+      cost: '1300',
+      selling: '2000',
+      date: '2026-06-01',
+    })
+
+    await getPool().query(
+      `UPDATE inventory_lots
+       SET batch_code = CASE received_on
+             WHEN '2025-12-01'::date THEN 'EXPIRED'
+             WHEN '2026-01-01'::date THEN 'LATER-EXPIRY'
+             WHEN '2026-06-01'::date THEN 'EARLIER-EXPIRY'
+           END,
+           expires_on = CASE received_on
+             WHEN '2025-12-01'::date THEN '2026-09-20'::date
+             WHEN '2026-01-01'::date THEN '2027-01-01'::date
+             WHEN '2026-06-01'::date THEN '2026-10-15'::date
+           END
+       WHERE tenant_id = $1
+         AND variant_id = $2`,
+      [fixture.tenant.id, fixture.product.defaultVariantId],
+    )
+
+    const before = await fixture.inventory.listLots(
+      fixture.tenant.id,
+      fixture.product.defaultVariantId,
+    )
+    const earliestValid = before.find(
+      (lot) => lot.batchCode === 'EARLIER-EXPIRY',
+    )
+    if (!earliestValid) {
+      throw new Error('Expected FEFO batch fixture')
+    }
+
+    const response = await privatePost(
+      fixture.cookie,
+      '/sales',
+      {
+        businessDate: '2026-09-24',
+        lines: [
+          {
+            variantId: fixture.product.defaultVariantId,
+            baseQty: '1',
+          },
+        ],
+      },
+    )
+    expect(response.status).toBe(201)
+
+    const sale = (await response.json()) as {
+      totalSalesPaisa: string
+      totalCogsPaisa: string
+      lines: Array<{
+        allocations: Array<{
+          lotId: string
+          baseQty: string
+          unitCostPaisa: string
+          lotSellingPricePaisa: string
+        }>
+      }>
+    }
+
+    expect(sale).toMatchObject({
+      totalSalesPaisa: '2000',
+      totalCogsPaisa: '1300',
+    })
+    expect(sale.lines[0]?.allocations).toEqual([
+      expect.objectContaining({
+        lotId: earliestValid.id,
+        baseQty: '1',
+        unitCostPaisa: '1300',
+        lotSellingPricePaisa: '2000',
+      }),
+    ])
+
+    const after = await fixture.inventory.listLots(
+      fixture.tenant.id,
+      fixture.product.defaultVariantId,
+    )
+    expect(
+      Object.fromEntries(
+        after.map((lot) => [lot.batchCode, lot.remainingBaseQty]),
+      ),
+    ).toEqual({
+      EXPIRED: '5',
+      'LATER-EXPIRY': '5',
+      'EARLIER-EXPIRY': '4',
+    })
+  })
+
 })

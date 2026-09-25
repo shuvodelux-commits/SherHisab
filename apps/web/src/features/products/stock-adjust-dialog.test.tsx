@@ -51,6 +51,7 @@ function simpleProduct(): ProductDetailDto {
     stockValuePaisa: '5250',
     minimumStockBaseQty: '1',
     trackingMode: 'SIMPLE',
+    allocationPolicy: 'FIFO',
     variantsEnabled: false,
     isActive: true,
     primaryBarcode: null,
