@@ -1,4 +1,10 @@
-import { useRef, useState, type ChangeEvent } from 'react'
+import {
+  useReducer,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type SetStateAction,
+} from 'react'
 import {
   useMutation,
   useQuery,
@@ -9,12 +15,9 @@ import {
   ChevronRight,
   Eye,
   RotateCcw,
-  Search,
   Trash2,
-  X,
 } from 'lucide-react'
 import { Badge } from '../../components/ui/badge'
-import { BilingualLabel } from '../../components/ui/bilingual-label'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Separator } from '../../components/ui/separator'
@@ -33,38 +36,28 @@ import {
 import type {
   CommittedSaleDto,
   CommitSalePayload,
-  PosLineQuoteDto,
   PosPaymentLineDraft,
   PosProductSearchDto,
   PosVendorSearchDto,
 } from './pos-types'
 import {
+  cartReducer,
+  type CartLineState,
+} from './pos-state'
+import {
   CustomerPanel,
   type PosCustomerDraft,
 } from './components/customer-panel'
 import { CheckoutSummary } from './components/checkout-summary'
+import { Cart } from './components/cart'
+import { CartLine } from './components/cart-line'
 import { ConversionEditor } from './components/conversion-editor'
 import { CostReveal } from './components/cost-reveal'
 import { InvoiceResult } from './components/invoice-result'
 import { PaymentLines } from './components/payment-lines'
+import { ProductCatalog } from './components/product-catalog'
 import { ShortageResolution } from './components/shortage-resolution'
 
-interface CartLineState {
-  product: PosProductSearchDto
-  quantity: string
-  quote: PosLineQuoteDto
-  priceInput: string
-  manualUnitSellingPricePaisa: string | null
-  showBreakdown: boolean
-  conversionExpanded: boolean
-  conversionComponents: Record<string, string>
-  shortageResolution: 'VENDOR' | 'NEGATIVE_STOCK' | null
-  vendorId: string | null
-  vendorName: string
-  vendorUnitCostInput: string
-  isQuoting: boolean
-  error: string
-}
 
 function todayLocalDate(): string {
   const now = new Date()
@@ -162,7 +155,10 @@ export function PosPage() {
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [activeResultIndex, setActiveResultIndex] = useState(-1)
-  const [cart, setCart] = useState<CartLineState[]>([])
+  const [cart, dispatchCart] = useReducer(cartReducer, [])
+  function setCart(value: SetStateAction<CartLineState[]>) {
+    dispatchCart({ type: 'set', value })
+  }
   const [customer, setCustomer] = useState<PosCustomerDraft>(
     emptyCustomerDraft,
   )
@@ -835,90 +831,28 @@ export function PosPage() {
       {completedSale ? <InvoiceResult sale={completedSale} /> : null}
 
       <div className="pos-workspace">
-        <section className="pos-panel pos-catalog-panel">
-          <div className="pos-panel-heading">
-            <BilingualLabel en="Add Product" bn="পণ্য যোগ করুন" />
-          </div>
+        <ProductCatalog
+          activeResultIndex={activeResultIndex}
+          errorMessage={
+            productsQuery.isError
+              ? productsQuery.error.message
+              : ''
+          }
+          isOpen={searchOpen}
+          isPending={productsQuery.isPending}
+          onAdd={(product) => {
+            setSearchOpen(false)
+            setActiveResultIndex(-1)
+            void addProduct(product)
+          }}
+          onClear={clearProductSearch}
+          onKeyDown={handleProductSearchKeyDown}
+          onSearchChange={changeProductSearch}
+          products={products}
+          search={search}
+        />
 
-          <div className="pos-search-wrap">
-            <Search aria-hidden="true" />
-            <Input
-              aria-label="Search products"
-              onChange={(event) =>
-                changeProductSearch(event.target.value)
-              }
-              onKeyDown={handleProductSearchKeyDown}
-              placeholder="Search name, barcode, SKU, variant, brand or category"
-              value={search}
-            />
-            {search ? (
-              <Button
-                aria-label="Clear product search"
-                onClick={clearProductSearch}
-                size="icon-xs"
-                type="button"
-                variant="ghost"
-              >
-                <X aria-hidden="true" />
-              </Button>
-            ) : null}
-          </div>
-
-          <div className="pos-product-list">
-            {!normalizedSearch || !searchOpen ? (
-              <p className="pos-muted">Search to find Products.</p>
-            ) : productsQuery.isPending ? (
-              <p className="pos-muted">Searching products…</p>
-            ) : productsQuery.isError ? (
-              <p className="pos-error" role="alert">
-                {productsQuery.error.message}
-              </p>
-            ) : products.length === 0 ? (
-              <p className="pos-muted">No matching Products.</p>
-            ) : (
-              products.map((product, index) => (
-                <Button
-                  aria-label={`Add ${product.productName}`}
-                  className="pos-product-card"
-                  data-active={
-                    activeResultIndex === index ? 'true' : undefined
-                  }
-                  key={product.variantId}
-                  onClick={() => {
-                    setSearchOpen(false)
-                    setActiveResultIndex(-1)
-                    void addProduct(product)
-                  }}
-                  variant="outline"
-                >
-                  <span className="pos-product-card-name">
-                    {product.productName}
-                  </span>
-                  <span className="pos-product-card-meta">
-                    {product.variantName
-                      ? `${product.categoryName ?? 'Uncategorized'} · ${product.variantName}`
-                      : product.categoryName ?? 'Uncategorized'}
-                  </span>
-                  <span className="pos-product-card-price">
-                    ৳
-                    {formatPaisaToTaka(
-                      product.currentSellingPricePaisa,
-                    )}
-                  </span>
-                  <span className="pos-product-card-stock">
-                    {formatNumber(product.availableOwnBaseQty, {
-                      maximumFractionDigits: 8,
-                    })}{' '}
-                    {product.unitSymbol ?? product.unitName}{' '}
-                    in stock
-                  </span>
-                </Button>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="pos-panel pos-cart-panel">
+        <Cart>
           <CustomerPanel
             onChange={setCustomer}
             value={customer}
@@ -961,7 +895,7 @@ export function PosPage() {
                 ) : (
                   cart.flatMap((line) => {
                     const row = (
-                      <tr key={line.product.variantId}>
+                      <CartLine key={line.product.variantId}>
                         <td>
                           <div className="pos-cart-product">
                             <span>{line.product.productName}</span>
@@ -1092,7 +1026,7 @@ export function PosPage() {
                             <Trash2 aria-hidden="true" />
                           </Button>
                         </td>
-                      </tr>
+                      </CartLine>
                     )
 
                     const detailRows = [row]
@@ -1272,7 +1206,7 @@ export function PosPage() {
                 : 'Complete Sale'}
             </Button>
           </div>
-        </section>
+        </Cart>
       </div>
     </main>
   )
