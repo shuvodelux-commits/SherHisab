@@ -240,6 +240,39 @@ describe('Mature POS Product search keyboard flow', () => {
     ).toBeInTheDocument()
   })
 
+  it('clears Product search without clearing the Cart', async () => {
+    installFetch()
+    renderPos()
+
+    const search = screen.getByRole('textbox', {
+      name: 'Search products',
+    })
+    fireEvent.change(search, { target: { value: 'hammer' } })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Add Alpha Hammer',
+      }),
+    )
+
+    expect(
+      await screen.findByRole('row', { name: /Alpha Hammer/i }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Clear product search',
+      }),
+    )
+
+    expect(search).toHaveValue('')
+    expect(
+      screen.queryByRole('button', { name: 'Add Beta Hammer' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('row', { name: /Alpha Hammer/i }),
+    ).toBeInTheDocument()
+  })
+
   it('exact barcode response can be added with Enter without a mouse', async () => {
     const fetchMock = installFetch()
     renderPos()
