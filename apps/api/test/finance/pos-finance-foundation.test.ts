@@ -1,5 +1,6 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { closePool, getPool } from '../../src/db/pool'
+import { CashSessionService } from '../../src/modules/finance/cash-session.service'
 import { FinanceRepository } from '../../src/modules/finance/finance.repository'
 import { PosSettingsService } from '../../src/modules/settings/pos-settings.service'
 import { VendorService } from '../../src/modules/vendors/vendor.service'
@@ -167,6 +168,115 @@ describe.skipIf(!hasDatabase)('POS settings foundation', () => {
       name: 'Shop bKash',
       isActive: true,
     })
+  })
+
+
+  it('opens one cash session and projects expected cash only from linked CASH movements', async () => {
+    const tenant = await createProductTestTenant('Cash Session Projection')
+    const user = await getPool().query<{ id: string }>(
+      `INSERT INTO users
+       (tenant_id, name, email, password_hash, role)
+       VALUES ($1, 'Cashier', $2, 'test-hash', 'STAFF')
+       RETURNING id`,
+      [tenant.id, `cashier-${tenant.id}@example.com`],
+    )
+    const actorUserId = user.rows[0]!.id
+    const service = new CashSessionService(tenant.id, getPool())
+
+    const opened = await service.open({
+      openingCashPaisa: '10000',
+      actorUserId,
+      notes: 'Morning drawer',
+    })
+
+    expect(opened).toMatchObject({
+      status: 'OPEN',
+      openingCashPaisa: '10000',
+      expectedCashPaisa: '10000',
+      notes: 'Morning drawer',
+    })
+
+    await expect(
+      service.open({
+        openingCashPaisa: '5000',
+        actorUserId,
+      }),
+    ).rejects.toThrow('A cash session is already open')
+
+    await getPool().query(
+      `INSERT INTO financial_movements
+       (
+         tenant_id,
+         channel,
+         cash_session_id,
+         business_date,
+         amount_paisa,
+         source_type
+       )
+       VALUES
+         ($1, 'CASH', $2, '2026-09-25', 5000, 'SALE'),
+         ($1, 'CASH', $2, '2026-09-25', -1200, 'EXPENSE'),
+         ($1, 'CASH', NULL, '2026-09-25', 9999, 'UNLINKED')`,
+      [tenant.id, opened.id],
+    )
+
+    await expect(service.getActive()).resolves.toMatchObject({
+      id: opened.id,
+      status: 'OPEN',
+      openingCashPaisa: '10000',
+      expectedCashPaisa: '13800',
+    })
+  })
+
+  it('closes a cash session with exact expected, counted and variance paisa', async () => {
+    const tenant = await createProductTestTenant('Cash Session Close')
+    const user = await getPool().query<{ id: string }>(
+      `INSERT INTO users
+       (tenant_id, name, email, password_hash, role)
+       VALUES ($1, 'Owner', $2, 'test-hash', 'OWNER')
+       RETURNING id`,
+      [tenant.id, `owner-${tenant.id}@example.com`],
+    )
+    const actorUserId = user.rows[0]!.id
+    const service = new CashSessionService(tenant.id, getPool())
+
+    const opened = await service.open({
+      openingCashPaisa: '20000',
+      actorUserId,
+    })
+
+    await getPool().query(
+      `INSERT INTO financial_movements
+       (
+         tenant_id,
+         channel,
+         cash_session_id,
+         business_date,
+         amount_paisa,
+         source_type
+       )
+       VALUES
+         ($1, 'CASH', $2, '2026-09-25', 7500, 'SALE'),
+         ($1, 'CASH', $2, '2026-09-25', -2500, 'VENDOR_PAYMENT')`,
+      [tenant.id, opened.id],
+    )
+
+    const closed = await service.close({
+      countedCashPaisa: '25250',
+      actorUserId,
+      notes: 'Counted at close',
+    })
+
+    expect(closed).toMatchObject({
+      id: opened.id,
+      status: 'CLOSED',
+      openingCashPaisa: '20000',
+      expectedCashPaisa: '25000',
+      countedCashPaisa: '25250',
+      variancePaisa: '250',
+      notes: 'Counted at close',
+    })
+    await expect(service.getActive()).resolves.toBeNull()
   })
 
 })
