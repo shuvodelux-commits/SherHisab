@@ -33,6 +33,10 @@ import {
   getPosBootstrap,
   quoteSaleLine,
   searchPosProducts,
+  getSalesDraft,
+  createSalesDraft,
+  updateSalesDraft,
+  postSalesDraft,
 } from './pos-api'
 import type {
   CommittedSaleDto,
@@ -40,6 +44,8 @@ import type {
   PosPaymentLineDraft,
   PosProductSearchDto,
   PosVendorSearchDto,
+  SalesDraftDto,
+  SalesDraftLineDto,
 } from './pos-types'
 import {
   cartReducer,
@@ -116,6 +122,8 @@ function newPaymentLine(): PosPaymentLineDraft {
     method: 'CASH',
     accountId: null,
     amountInput: '',
+    reference: '',
+    note: '',
   }
 }
 
@@ -151,6 +159,24 @@ function newOperationId(): string {
   return globalThis.crypto.randomUUID()
 }
 
+type DraftMutationInput = Pick<
+  SalesDraftDto,
+  'customer' | 'discountPaisa' | 'payments' | 'note' | 'lines'
+>
+
+function sameDraftState(
+  draft: SalesDraftDto,
+  input: DraftMutationInput,
+): boolean {
+  return JSON.stringify({
+    customer: draft.customer,
+    discountPaisa: draft.discountPaisa,
+    payments: draft.payments,
+    note: draft.note,
+    lines: draft.lines,
+  }) === JSON.stringify(input)
+}
+
 export function PosPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -166,6 +192,9 @@ export function PosPage() {
   const [payments, setPayments] = useState<PosPaymentLineDraft[]>(
     () => [newPaymentLine()],
   )
+  const [discountInput, setDiscountInput] = useState('')
+  const [saleNote, setSaleNote] = useState('')
+  const [activeDraft, setActiveDraft] = useState<Pick<SalesDraftDto, 'id' | 'version'> | null>(null)
   const [completedSale, setCompletedSale] =
     useState<CommittedSaleDto | null>(null)
   const submissionIntentRef = useRef<{
@@ -198,7 +227,7 @@ export function PosPage() {
   })
 
   const saleMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const committedPayments = payments.flatMap((payment) => {
         const amountPaisa = paymentAmountPaisa(payment.amountInput)
         if (BigInt(amountPaisa) <= 0n) {
@@ -219,6 +248,8 @@ export function PosPage() {
 
       const payload: CommitSalePayload = {
         businessDate: todayLocalDate(),
+        discountPaisa: paymentAmountPaisa(discountInput),
+        note: saleNote,
         ...(committedPayments.length > 0
           ? {
               customer: {
@@ -278,6 +309,35 @@ export function PosPage() {
         submissionIntentRef.current = intent
       }
 
+      if (activeDraft) {
+        const requestedDraft = buildDraftInput()
+        let stored = await getSalesDraft(activeDraft.id)
+        if (
+          stored.status !== 'POSTED' &&
+          stored.version !== activeDraft.version &&
+          !sameDraftState(stored, requestedDraft)
+        ) {
+          throw new Error(`This draft changed elsewhere. Current version is ${stored.version}. Reload it before completing the sale.`)
+        }
+        if (stored.status !== 'POSTED' && stored.version === activeDraft.version) {
+          try {
+            stored = await updateSalesDraft(
+              activeDraft.id,
+              activeDraft.version,
+              requestedDraft,
+            )
+          } catch (error) {
+            const latest = await getSalesDraft(activeDraft.id)
+            if (!sameDraftState(latest, requestedDraft)) throw error
+            stored = latest
+          }
+        }
+        return postSalesDraft(activeDraft.id, stored.version, {
+          operationId: intent.operationId,
+          businessDate: payload.businessDate,
+        })
+      }
+
       return commitSale({
         ...payload,
         operationId: intent.operationId,
@@ -289,6 +349,9 @@ export function PosPage() {
       setCart([])
       setCustomer(emptyCustomerDraft())
       setPayments([newPaymentLine()])
+      setDiscountInput('')
+      setSaleNote('')
+      setActiveDraft(null)
       setSearch('')
       setSearchOpen(false)
       setActiveResultIndex(-1)
@@ -310,11 +373,35 @@ export function PosPage() {
     },
   })
 
+  const draftMutation = useMutation({
+    mutationFn: () => {
+      const input = buildDraftInput()
+      return activeDraft
+        ? updateSalesDraft(activeDraft.id, activeDraft.version, input)
+        : createSalesDraft(input)
+    },
+    onSuccess: (draft) => {
+      setActiveDraft({ id: draft.id, version: draft.version })
+      setPageError('')
+      setSaleMessage(`Draft ${draft.draftNumber} saved`)
+      void queryClient.invalidateQueries({ queryKey: ['sales-drafts'] })
+    },
+    onError: (error) => {
+      setSaleMessage('')
+      setPageError(error instanceof Error ? error.message : 'Could not save the draft.')
+    },
+  })
+
   const products = productsQuery.data ?? []
 
   const cartTotalPaisa = sumPaisa(
     cart.map((line) => lineTotalPaisa(line)),
   )
+  const grandTotalPaisa = (
+    BigInt(cartTotalPaisa) > BigInt(paymentAmountPaisa(discountInput))
+      ? BigInt(cartTotalPaisa) - BigInt(paymentAmountPaisa(discountInput))
+      : 0n
+  ).toString()
 
   const paidPaisa = sumPaisa(
     payments.map((payment) =>
@@ -322,13 +409,142 @@ export function PosPage() {
     ),
   )
   const duePaisa = (
-    BigInt(cartTotalPaisa) > BigInt(paidPaisa)
-      ? BigInt(cartTotalPaisa) - BigInt(paidPaisa)
+    BigInt(grandTotalPaisa) > BigInt(paidPaisa)
+      ? BigInt(grandTotalPaisa) - BigInt(paidPaisa)
       : 0n
   ).toString()
 
   function addPayment() {
     setPayments((current) => [...current, newPaymentLine()])
+  }
+
+  function buildDraftInput() {
+    return {
+      customer: {
+        selectedCustomerId: customer.selectedCustomerId,
+        name: customer.name,
+        phone: customer.phone,
+        guardianName: customer.guardianName,
+        address: customer.address,
+      },
+      discountPaisa: paymentAmountPaisa(discountInput),
+      payments: payments.map((payment) => ({
+        clientLineId: payment.clientLineId,
+        method: payment.method,
+        accountId: payment.accountId,
+        amountPaisa: paymentAmountPaisa(payment.amountInput),
+        reference: payment.reference ?? '',
+        note: payment.note ?? '',
+      })),
+      note: saleNote,
+      lines: cart.map((line): SalesDraftLineDto => {
+        if (line.savedDraftLine) {
+          return line.savedDraftLine
+        }
+        const profile = line.quote.conversion.snapshot
+        const quantityInput = profile?.type === 'COMPOUND'
+          ? {
+              kind: 'COMPONENTS' as const,
+              profileId: profile.id,
+              profileVersion: profile.version,
+              components: line.conversionComponents,
+            }
+          : { kind: 'SIMPLE' as const, baseQty: line.quote.baseQty }
+        let shortageResolution: SalesDraftLineDto['shortageResolution'] = null
+        if (line.shortageResolution === 'NEGATIVE_STOCK') {
+          shortageResolution = { type: 'NEGATIVE_STOCK' }
+        } else if (line.shortageResolution === 'VENDOR' && line.vendorId) {
+          shortageResolution = {
+            type: 'VENDOR',
+            vendorId: line.vendorId,
+            unitCostPaisa: paymentAmountPaisa(line.vendorUnitCostInput),
+          }
+        }
+        return {
+          variantId: line.product.variantId,
+          quantityInput,
+          normalizedQuantitySnapshot: line.quote.conversion,
+          pricingMode: line.manualUnitSellingPricePaisa ? 'MANUAL' : 'AUTO',
+          manualUnitSellingPricePaisa: line.manualUnitSellingPricePaisa,
+          shortageResolution,
+          serialIds: [],
+          batchSelection: null,
+          warrantySnapshot: null,
+          captureValues: {},
+        }
+      }),
+    }
+  }
+
+  async function openDraft(draftId: string) {
+    try {
+      const draft = await getSalesDraft(draftId)
+      const restoredLines = await Promise.all(draft.lines.map(async (savedLine) => {
+        const [productResult, quote] = await Promise.all([
+          searchPosProducts(savedLine.variantId, 1),
+          // Requote with the original quantity input so an obsolete conversion
+          // profile is rejected instead of silently reinterpreting its base qty.
+          quoteSaleLine(
+            savedLine.variantId,
+            savedLine.quantityInput.kind === 'SIMPLE'
+              ? savedLine.quantityInput.baseQty
+              : undefined,
+            savedLine.quantityInput.kind === 'COMPONENTS'
+              ? savedLine.quantityInput
+              : undefined,
+          ),
+        ])
+        const product = productResult[0]
+        if (!product) throw new Error(`Product ${savedLine.variantId} is no longer available.`)
+        const vendor = savedLine.shortageResolution?.type === 'VENDOR'
+          ? savedLine.shortageResolution
+          : null
+        return {
+          product,
+          quantity: savedLine.normalizedQuantitySnapshot.displayQty,
+          quote,
+          priceInput: formatPaisaToTaka(
+            savedLine.manualUnitSellingPricePaisa ?? quote.effectiveUnitSellingPricePaisa,
+          ),
+          manualUnitSellingPricePaisa: savedLine.manualUnitSellingPricePaisa,
+          showBreakdown: false,
+          conversionExpanded: false,
+          conversionComponents: { ...savedLine.normalizedQuantitySnapshot.components },
+          shortageResolution: savedLine.shortageResolution?.type ?? null,
+          vendorId: vendor?.vendorId ?? null,
+          vendorName: '',
+          vendorUnitCostInput: vendor ? formatPaisaToTaka(vendor.unitCostPaisa) : '',
+          isQuoting: false,
+          error: '',
+          savedDraftLine: savedLine,
+        }
+      }))
+      setCart(restoredLines)
+      setCustomer({
+        ...emptyCustomerDraft(),
+        selectedCustomerId: draft.customer.selectedCustomerId,
+        name: draft.customer.name,
+        phone: draft.customer.phone,
+        guardianName: draft.customer.guardianName,
+        address: draft.customer.address,
+      })
+      setPayments(draft.payments.map((payment) => ({
+        clientLineId: payment.clientLineId,
+        method: payment.method,
+        accountId: payment.accountId,
+        amountInput: formatPaisaToTaka(payment.amountPaisa),
+        reference: payment.reference,
+        note: payment.note,
+      })))
+      setDiscountInput(formatPaisaToTaka(draft.discountPaisa))
+      setSaleNote(draft.note)
+      setActiveDraft({ id: draft.id, version: draft.version })
+      setCompletedSale(null)
+      setPageError('')
+      setSaleMessage(`Loaded ${draft.draftNumber} into POS`)
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : 'Could not load the draft.')
+    }
   }
 
   function changePayment(
@@ -484,6 +700,7 @@ export function PosPage() {
           ? {
               ...line,
               conversionComponents: components,
+              savedDraftLine: undefined,
               isQuoting: true,
               error: '',
             }
@@ -514,6 +731,7 @@ export function PosPage() {
             quote,
             quantity: quote.displayQty,
             conversionComponents: quote.conversion.components,
+            savedDraftLine: undefined,
             ...(Number(quote.shortfallBaseQty) <= 0
               ? {
                   shortageResolution: null,
@@ -581,6 +799,7 @@ export function PosPage() {
           ? {
               ...line,
               quantity,
+              savedDraftLine: undefined,
               isQuoting: true,
               error: '',
             }
@@ -622,6 +841,7 @@ export function PosPage() {
             ...line,
             quote,
             quantity,
+            savedDraftLine: undefined,
             ...(Number(quote.shortfallBaseQty) <= 0
               ? {
                   shortageResolution: null,
@@ -703,6 +923,7 @@ export function PosPage() {
           ? {
               ...line,
               shortageResolution: resolution,
+              savedDraftLine: undefined,
               ...(resolution === 'NEGATIVE_STOCK'
                 ? {
                     vendorId: null,
@@ -727,6 +948,7 @@ export function PosPage() {
               ...line,
               vendorId: vendor.id || null,
               vendorName: vendor.name,
+              savedDraftLine: undefined,
             }
           : line,
       ),
@@ -743,6 +965,7 @@ export function PosPage() {
           ? {
               ...line,
               vendorUnitCostInput: value,
+              savedDraftLine: undefined,
             }
           : line,
       ),
@@ -773,6 +996,7 @@ export function PosPage() {
             ...line,
             priceInput: value,
             manualUnitSellingPricePaisa,
+            savedDraftLine: undefined,
             error: '',
           }
         } catch {
@@ -780,6 +1004,7 @@ export function PosPage() {
             ...line,
             priceInput: value,
             manualUnitSellingPricePaisa: null,
+            savedDraftLine: undefined,
             error: 'Enter a valid selling price.',
           }
         }
@@ -832,7 +1057,7 @@ export function PosPage() {
       {completedSale ? <InvoiceResult sale={completedSale} /> : null}
 
       <div className="pos-workspace">
-        <ProductCatalog
+      <ProductCatalog
           activeResultIndex={activeResultIndex}
           errorMessage={
             productsQuery.isError
@@ -841,11 +1066,12 @@ export function PosPage() {
           }
           isOpen={searchOpen}
           isPending={productsQuery.isPending}
-          onAdd={(product) => {
+        onAdd={(product) => {
             setSearchOpen(false)
             setActiveResultIndex(-1)
             void addProduct(product)
-          }}
+        }}
+        onOpenDraft={(draftId) => void openDraft(draftId)}
           onClear={clearProductSearch}
           onKeyDown={handleProductSearchKeyDown}
           onSearchChange={changeProductSearch}
@@ -1180,11 +1406,38 @@ export function PosPage() {
               onChange={changePayment}
               onRemove={removePayment}
             />
+            <div className="pos-draft-fields">
+              <Input
+                aria-label="Discount"
+                inputMode="decimal"
+                onChange={(event) => setDiscountInput(event.target.value)}
+                placeholder="0.00"
+                value={discountInput}
+              />
+              <Input
+                aria-label="Sale note"
+                onChange={(event) => setSaleNote(event.target.value)}
+                placeholder="Sale note"
+                value={saleNote}
+              />
+            </div>
             <CheckoutSummary
               duePaisa={duePaisa}
-              grandTotalPaisa={cartTotalPaisa}
+              grandTotalPaisa={grandTotalPaisa}
               paidPaisa={paidPaisa}
             />
+            <Button
+              disabled={draftMutation.isPending || cart.length === 0}
+              onClick={() => draftMutation.mutate()}
+              type="button"
+              variant="outline"
+            >
+              {draftMutation.isPending
+                ? 'Saving Draft…'
+                : activeDraft
+                  ? 'Update Draft'
+                  : 'Save Draft'}
+            </Button>
             <Button
               disabled={
                 cart.length === 0 ||

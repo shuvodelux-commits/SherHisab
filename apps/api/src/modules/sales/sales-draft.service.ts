@@ -1,6 +1,9 @@
 import { getPool } from '../../db/pool'
 import type { DatabaseClient } from '../../db/request-database'
 import { withDatabaseTransaction } from '../../db/transaction'
+import Decimal from 'decimal.js'
+import { ConversionService } from '../products/conversion.service'
+import type { ConversionProfileSnapshot } from '../products/conversion.types'
 import { SalesDraftVersionConflictError } from './sales-draft.errors'
 import { SalesDraftRepository } from './sales-draft.repository'
 import { SalesRepository } from './sales.repository'
@@ -351,6 +354,8 @@ export class SalesDraftService {
       throw new SalesDraftVersionConflictError(draft.version)
     }
 
+    await this.validateConversionCompatibility(draft)
+
     const claimed = await repository.claimPost({
       tenantId: this.tenantId,
       draftId: id,
@@ -489,6 +494,51 @@ export class SalesDraftService {
     }
 
     return sale
+  }
+
+  private async validateConversionCompatibility(
+    draft: SalesDraftRecord,
+  ): Promise<void> {
+    const conversions = new ConversionService(
+      this.tenantId,
+      this.database,
+    )
+
+    for (const line of draft.lines) {
+      if (line.quantityInput.kind !== 'COMPONENTS') continue
+      const savedProfile = line.normalizedQuantitySnapshot
+        .snapshot as ConversionProfileSnapshot | null
+      if (!savedProfile) {
+        throw new Error('Draft conversion snapshot is missing; reload the Draft before posting.')
+      }
+
+      const activeProfile = await conversions.getActiveProfile(
+        savedProfile.productId,
+      )
+      if (!activeProfile) {
+        throw new Error('Draft conversion profile is no longer compatible with this Product.')
+      }
+
+      let currentQuantity
+      try {
+        currentQuantity = await conversions.normalize({
+          kind: 'COMPONENTS',
+          profileId: activeProfile.id,
+          profileVersion: activeProfile.version,
+          components: line.quantityInput.components,
+        })
+      } catch {
+        throw new Error('Draft conversion components are no longer compatible with this Product.')
+      }
+
+      if (
+        !new Decimal(currentQuantity.baseQty).eq(
+          line.normalizedQuantitySnapshot.baseQty,
+        )
+      ) {
+        throw new Error('Draft conversion changed; reload the Draft and review its quantity before posting.')
+      }
+    }
   }
 
 }

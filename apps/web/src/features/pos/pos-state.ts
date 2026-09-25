@@ -2,6 +2,7 @@ import type { SetStateAction } from 'react'
 import type {
   PosLineQuoteDto,
   PosProductSearchDto,
+  SalesDraftLineDto,
 } from './pos-types'
 
 export interface CartLineState {
@@ -19,6 +20,7 @@ export interface CartLineState {
   vendorUnitCostInput: string
   isQuoting: boolean
   error: string
+  savedDraftLine?: SalesDraftLineDto
 }
 
 export type CartAction =

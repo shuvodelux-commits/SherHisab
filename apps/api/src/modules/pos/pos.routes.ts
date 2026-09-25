@@ -88,6 +88,38 @@ export const posRoutes = new Hono<AppEnv>()
       )
     }
   })
+  .get('/pos/products/:variantId', async (c) => {
+    if (!canViewPos(c)) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
+    try {
+      return await withRequestDatabase(c.env, async (database) => {
+        const variantId = c.req.param('variantId')
+        const products = await new PosService(
+          c.get('tenantId'),
+          database,
+        ).searchProductsForClient(variantId, {
+          limit: 1,
+          permissions: c.get('permissions'),
+        })
+        const product = products.find((candidate) => candidate.variantId === variantId)
+        return product
+          ? c.json(product)
+          : c.json({ error: 'Product Variant is no longer available.' }, 404)
+      })
+    } catch (error) {
+      return c.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Invalid request',
+        },
+        400,
+      )
+    }
+  })
   .get('/pos/customers', async (c) => {
     if (!canViewPos(c)) {
       return c.json({ error: 'Forbidden' }, 403)

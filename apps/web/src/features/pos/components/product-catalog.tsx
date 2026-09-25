@@ -6,6 +6,7 @@ import { Input } from '../../../components/ui/input'
 import { formatNumber } from '../../../lib/format-number'
 import { formatPaisaToTaka } from '../../../lib/money'
 import type { PosProductSearchDto } from '../pos-types'
+import { RecentDrafts } from './recent-drafts'
 
 interface ProductCatalogProps {
   activeResultIndex: number
@@ -13,6 +14,7 @@ interface ProductCatalogProps {
   isOpen: boolean
   isPending: boolean
   onAdd: (product: PosProductSearchDto) => void
+  onOpenDraft: (draftId: string) => void
   onClear: () => void
   onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
   onSearchChange: (value: string) => void
@@ -26,6 +28,7 @@ export function ProductCatalog({
   isOpen,
   isPending,
   onAdd,
+  onOpenDraft,
   onClear,
   onKeyDown,
   onSearchChange,
@@ -39,6 +42,9 @@ export function ProductCatalog({
       <div className="pos-panel-heading">
         <BilingualLabel en="Add Product" bn="পণ্য যোগ করুন" />
       </div>
+
+      <RecentDrafts onOpen={onOpenDraft} />
+
 
       <div className="pos-search-wrap">
         <Search aria-hidden="true" />

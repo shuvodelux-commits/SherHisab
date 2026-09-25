@@ -158,6 +158,8 @@ export interface PosPaymentLineDraft {
   method: PosPaymentMethod
   accountId: string | null
   amountInput: string
+  reference?: string
+  note?: string
 }
 
 export interface CommitSalePaymentPayload {
@@ -179,6 +181,52 @@ export interface CommitSalePayload {
     address?: string
   }
   payments?: CommitSalePaymentPayload[]
+  discountPaisa?: string
+  note?: string
+}
+
+export interface SalesDraftLineDto {
+  variantId: string
+  quantityInput: PosQuantityInputDto
+  normalizedQuantitySnapshot: PosNormalizedQuantityDto
+  pricingMode: 'AUTO' | 'MANUAL'
+  manualUnitSellingPricePaisa: string | null
+  shortageResolution: PosShortageResolutionDto | null
+  serialIds: string[]
+  batchSelection: { lotId: string; batchCode: string; expiresOn: string } | null
+  warrantySnapshot: unknown | null
+  captureValues: Record<string, string>
+}
+
+export interface SalesDraftDto {
+  id: string
+  tenantId: string
+  draftNumber: string
+  version: number
+  status: 'ACTIVE' | 'ARCHIVED' | 'POSTED'
+  ownerUserId: string
+  postedSaleId: string | null
+  postedOperationId: string | null
+  customer: {
+    selectedCustomerId: string | null
+    name: string
+    phone: string
+    guardianName: string
+    address: string
+  }
+  discountPaisa: string
+  payments: Array<{
+    clientLineId: string
+    method: PosPaymentMethod
+    accountId: string | null
+    amountPaisa: string
+    reference: string
+    note: string
+  }>
+  note: string
+  lines: SalesDraftLineDto[]
+  createdAt: string
+  updatedAt: string
 }
 
 export interface CommittedSaleDto {

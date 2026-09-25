@@ -123,6 +123,7 @@ export class PosRepository {
            pv.default_purchase_price_paisa::text
              AS configured_purchase_price_paisa,
            CASE
+             WHEN pv.id::text = $2 THEN 0
              WHEN EXISTS (
                SELECT 1
                FROM product_barcodes exact_barcode
@@ -192,6 +193,7 @@ export class PosRepository {
              OR lower(u.name) LIKE '%' || lower($2) || '%'
              OR lower(COALESCE(u.symbol, ''))
                LIKE '%' || lower($2) || '%'
+             OR pv.id::text = $2
              OR EXISTS (
                SELECT 1
                FROM product_barcodes matching_barcode

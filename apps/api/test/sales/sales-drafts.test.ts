@@ -917,7 +917,7 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
     expect(posted.rows[0]?.posted_operation_id).toBe(operationId)
   })
 
-  it('posts the saved normalized base quantity after the active conversion profile changes', async () => {
+  it('rejects posting when the active conversion profile would reinterpret saved components', async () => {
     const tenant = await createProductTestTenant(
       'Draft Conversion Post',
     )
@@ -1069,24 +1069,21 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
     })
     expect(profileV2.version).toBe(2)
 
-    const sale = await service.post(
-      owner.id,
-      draft.id,
-      draft.version,
-      {
+    await expect(
+      service.post(owner.id, draft.id, draft.version, {
         operationId: randomUUID(),
         businessDate: '2026-09-25',
         canOverrideSellingPrice: true,
-      },
-    )
+      }),
+    ).rejects.toThrow(/conversion/i)
 
-    const line = await getPool().query<{ base_qty: string }>(
-      `SELECT trim_scale(base_qty)::text AS base_qty
-       FROM sales_lines
-       WHERE tenant_id = $1 AND sale_id = $2`,
-      [tenant.id, sale.id],
+    const invoices = await getPool().query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM sales_invoices
+       WHERE tenant_id = $1`,
+      [tenant.id],
     )
-    expect(line.rows).toEqual([{ base_qty: '37' }])
+    expect(invoices.rows[0]?.count).toBe('0')
   })
 
 

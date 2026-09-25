@@ -206,11 +206,18 @@ describe.skipIf(!hasDatabase)('POS Product search', () => {
     const scanned = await service.searchProducts('SCAN-001', {
       limit: 5,
     })
+    const byVariantId = await service.searchProducts(
+      direct.defaultVariantId,
+      { limit: 1 },
+    )
     const bounded = await service.searchProducts('Bounded', {
       limit: 3,
     })
 
     expect(scanned).toHaveLength(1)
+    expect(byVariantId).toMatchObject([
+      { productId: direct.id, variantId: direct.defaultVariantId },
+    ])
     expect(scanned[0]).toMatchObject({
       productId: direct.id,
       variantId: direct.defaultVariantId,
