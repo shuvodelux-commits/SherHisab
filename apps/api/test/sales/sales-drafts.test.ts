@@ -536,6 +536,22 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
     })
 
     await expect(service.get(created.id)).resolves.toEqual(updated)
+
+    const audit = await getPool().query<{
+      action: string
+      draft_version: number
+      actor_user_id: string
+    }>(
+      `SELECT action, draft_version, actor_user_id::text
+       FROM sales_draft_audit
+       WHERE tenant_id = $1 AND draft_id = $2
+       ORDER BY created_at, id`,
+      [tenant.id, created.id],
+    )
+    expect(audit.rows).toEqual([
+      { action: 'CREATED', draft_version: 1, actor_user_id: owner.id },
+      { action: 'UPDATED', draft_version: 2, actor_user_id: owner.id },
+    ])
   })
 
   it('loads the saved conversion profile snapshot unchanged after the Product profile advances', async () => {
@@ -915,6 +931,22 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
       [tenant.id, created.id],
     )
     expect(posted.rows[0]?.posted_operation_id).toBe(operationId)
+
+    const audit = await getPool().query<{
+      action: string
+      draft_version: number
+      actor_user_id: string
+    }>(
+      `SELECT action, draft_version, actor_user_id::text
+       FROM sales_draft_audit
+       WHERE tenant_id = $1 AND draft_id = $2
+       ORDER BY created_at, id`,
+      [tenant.id, created.id],
+    )
+    expect(audit.rows).toEqual([
+      { action: 'CREATED', draft_version: 1, actor_user_id: owner.id },
+      { action: 'POSTED', draft_version: 1, actor_user_id: owner.id },
+    ])
   })
 
   it('rejects posting when the active conversion profile would reinterpret saved components', async () => {
