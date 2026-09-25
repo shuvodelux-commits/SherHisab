@@ -11,6 +11,7 @@ import {
   SalesPermissionError,
   SalesValidationError,
 } from './sales.errors'
+import { SalesNumberingRepository } from './sales-numbering.repository'
 import { SalesRepository } from './sales.repository'
 import type {
   CommitSaleInput,
@@ -30,6 +31,32 @@ function businessDate(value: string): string {
   return normalized
 }
 
+function operationId(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  const normalized = value.trim().toLowerCase()
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+      normalized,
+    )
+  ) {
+    throw new SalesValidationError('Operation ID must be a UUID.')
+  }
+
+  return normalized
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === '23505'
+  )
+}
+
 function validateInput(input: CommitSaleInput): CommitSaleInput {
   if (!Array.isArray(input.lines) || input.lines.length === 0) {
     throw new SalesValidationError(
@@ -47,6 +74,7 @@ function validateInput(input: CommitSaleInput): CommitSaleInput {
   }
 
   return {
+    operationId: operationId(input.operationId),
     businessDate: businessDate(input.businessDate),
     lines: input.lines.map((line) => ({
       variantId: line.variantId.trim(),
@@ -83,13 +111,32 @@ export class SalesService {
       throw new SalesPermissionError()
     }
 
-    return withDatabaseTransaction(
-      this.database,
-      async (database) => {
+    try {
+      return await withDatabaseTransaction(
+        this.database,
+        async (database) => {
         const salesRepository = new SalesRepository(database)
         const inventoryRepository = new InventoryRepository(database)
+
+        if (input.operationId) {
+          const existing =
+            await salesRepository.findCommittedSaleByOperationId(
+              tenantId,
+              input.operationId,
+            )
+          if (existing) {
+            return existing
+          }
+        }
+
+        const invoiceNumber =
+          await new SalesNumberingRepository(
+            database,
+          ).allocateInvoiceNumber(tenantId)
         const invoice = await salesRepository.createInvoice({
           tenantId,
+          invoiceNumber,
+          operationId: input.operationId ?? null,
           businessDate: input.businessDate,
           createdByUserId: actorUserId,
         })
@@ -227,13 +274,30 @@ export class SalesService {
 
         return {
           id: invoice.id,
+          invoiceNumber,
           businessDate: input.businessDate,
           totalSalesPaisa: totalSales.toFixed(0),
           totalCogsPaisa: totalCogs.toFixed(0),
           grossProfitPaisa: totalSales.minus(totalCogs).toFixed(0),
           lines: committedLines,
         }
-      },
-    )
+        },
+      )
+    } catch (error) {
+      if (input.operationId && isUniqueViolation(error)) {
+        const existing =
+          await new SalesRepository(
+            this.database,
+          ).findCommittedSaleByOperationId(
+            tenantId,
+            input.operationId,
+          )
+        if (existing) {
+          return existing
+        }
+      }
+
+      throw error
+    }
   }
 }

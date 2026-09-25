@@ -36,6 +36,7 @@ export interface CommitSaleLineInput {
 }
 
 export interface CommitSaleInput {
+  operationId?: string
   businessDate: string
   lines: CommitSaleLineInput[]
 }
@@ -57,6 +58,7 @@ export interface CommittedSaleLine {
 
 export interface CommittedSale {
   id: string
+  invoiceNumber: string
   businessDate: string
   totalSalesPaisa: string
   totalCogsPaisa: string

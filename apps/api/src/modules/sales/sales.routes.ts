@@ -53,6 +53,7 @@ function commitInput(body: Record<string, unknown>): CommitSaleInput {
   }
 
   return {
+    operationId: optionalStringField(body, 'operationId'),
     businessDate: stringField(body, 'businessDate'),
     lines: body.lines.map((rawLine) => {
       const line = objectBody(rawLine)
