@@ -92,6 +92,23 @@ async function createFixture(name: string) {
   }
 }
 
+
+async function ownStock(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+): Promise<string> {
+  const lots = await fixture.inventory.listLots(
+    fixture.tenant.id,
+    fixture.product.defaultVariantId,
+  )
+
+  return lots
+    .reduce(
+      (total, lot) => total + Number(lot.remainingBaseQty),
+      0,
+    )
+    .toString()
+}
+
 function payload(
   fixture: Awaited<ReturnType<typeof createFixture>>,
   operationId: string,
@@ -271,10 +288,7 @@ describe.skipIf(!hasDatabase)('mature sales numbering and idempotency', () => {
       invoiceNumber: string
     }
     const afterFirst = await countRows(fixture.tenant.id)
-    const stockAfterFirst = await fixture.inventory.getVariantBalance(
-      fixture.tenant.id,
-      fixture.product.defaultVariantId,
-    )
+    const stockAfterFirst = await ownStock(fixture)
 
     const retry = await postSale(fixture.cookie, request)
     expect(retry.status).toBe(201)
@@ -288,12 +302,7 @@ describe.skipIf(!hasDatabase)('mature sales numbering and idempotency', () => {
       invoiceNumber: firstBody.invoiceNumber,
     })
     expect(await countRows(fixture.tenant.id)).toEqual(afterFirst)
-    expect(
-      await fixture.inventory.getVariantBalance(
-        fixture.tenant.id,
-        fixture.product.defaultVariantId,
-      ),
-    ).toBe(stockAfterFirst)
+    expect(await ownStock(fixture)).toBe(stockAfterFirst)
     expect(afterFirst).toMatchObject({
       invoices: '1',
       lines: '1',
