@@ -300,6 +300,12 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
     await fixture.authService.grantPermission({
       tenantId: fixture.tenant.id,
       userId: fixture.user.id,
+      permission: 'POS_SELL',
+      grantedByUserId: owner.id,
+    })
+    await fixture.authService.grantPermission({
+      tenantId: fixture.tenant.id,
+      userId: fixture.user.id,
       permission: 'SALES_OVERRIDE_SELLING_PRICE',
       grantedByUserId: owner.id,
     })
