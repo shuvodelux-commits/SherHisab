@@ -1,8 +1,5 @@
 import type { DatabaseClient } from '../../db/request-database'
-import type {
-  CustomerRecord,
-  CreateCustomerInput,
-} from './customer.types'
+import type { CustomerRecord } from './customer.types'
 
 interface CustomerRow {
   id: string
