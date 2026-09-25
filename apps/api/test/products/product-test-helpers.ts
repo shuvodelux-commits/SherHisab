@@ -37,6 +37,18 @@ export async function cleanupProductTestTenants(): Promise<void> {
     [tenantIds],
   )
   await getPool().query(
+    'DELETE FROM sales_draft_audit WHERE tenant_id = ANY($1::uuid[])',
+    [tenantIds],
+  )
+  await getPool().query(
+    'DELETE FROM sales_draft_lines WHERE tenant_id = ANY($1::uuid[])',
+    [tenantIds],
+  )
+  await getPool().query(
+    'DELETE FROM sales_drafts WHERE tenant_id = ANY($1::uuid[])',
+    [tenantIds],
+  )
+  await getPool().query(
     'DELETE FROM sales_line_lot_allocations WHERE tenant_id = ANY($1::uuid[])',
     [tenantIds],
   )
