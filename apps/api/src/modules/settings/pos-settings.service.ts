@@ -22,4 +22,9 @@ export class PosSettingsService {
   get(): Promise<PosSettingsRecord> {
     return this.repository.getOrCreate(this.tenantId)
   }
+
+  update(settings: PosSettingsRecord): Promise<PosSettingsRecord> {
+    return this.repository.update(this.tenantId, settings)
+  }
+
 }

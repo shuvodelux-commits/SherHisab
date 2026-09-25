@@ -75,6 +75,30 @@ function requiredName(value: string): string {
 export class FinanceRepository {
   constructor(private readonly db: DatabaseClient) {}
 
+
+
+  async listAccounts(
+    tenantId: string,
+    includeInactive = false,
+  ): Promise<FinancialAccountRecord[]> {
+    const result = await this.db.query<FinancialAccountRow>(
+      `SELECT
+         id,
+         account_type,
+         name,
+         provider,
+         account_reference,
+         is_active
+       FROM financial_accounts
+       WHERE tenant_id = $1
+         AND ($2::boolean OR is_active)
+       ORDER BY account_type, lower(name), id`,
+      [tenantId, includeInactive],
+    )
+
+    return result.rows.map(mapAccount)
+  }
+
   async createAccount(
     input: CreateFinancialAccountInput,
   ): Promise<FinancialAccountRecord> {
