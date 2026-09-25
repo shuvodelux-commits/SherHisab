@@ -311,6 +311,7 @@ function installFetch() {
       ) {
         const body = JSON.parse(String(init.body)) as {
           variantId: string
+          baseQty?: string
           quantity?: {
             kind: 'COMPONENTS'
             profileId: string
