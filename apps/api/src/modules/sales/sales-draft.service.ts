@@ -5,7 +5,7 @@ import Decimal from 'decimal.js'
 import { PosRepository } from '../pos/pos.repository'
 import { ConversionService } from '../products/conversion.service'
 import type { ConversionProfileSnapshot } from '../products/conversion.types'
-import { SalesDraftVersionConflictError } from './sales-draft.errors'
+import { SalesDraftAccessError, SalesDraftVersionConflictError } from './sales-draft.errors'
 import { SalesDraftRepository } from './sales-draft.repository'
 import { SalesRepository } from './sales.repository'
 import { SalesService } from './sales.service'
@@ -84,6 +84,7 @@ export class SalesDraftService {
   async create(
     actorUserId: string,
     input: SalesDraftInput,
+    canManageAll = false,
   ): Promise<SalesDraftRecord> {
     const userId = actorUserId.trim()
     if (!userId) {
@@ -130,7 +131,11 @@ export class SalesDraftService {
     )
   }
 
-  async get(draftId: string): Promise<SalesDraftRecord> {
+  async get(
+    draftId: string,
+    actorUserId: string,
+    canManageAll = false,
+  ): Promise<SalesDraftRecord> {
     const id = draftId.trim()
     if (!id) {
       throw new Error('Draft id is required')
@@ -141,18 +146,29 @@ export class SalesDraftService {
     if (!draft) {
       throw new Error('Draft not found')
     }
+    this.requireAccess(draft, actorUserId, canManageAll)
     return draft
   }
 
-  async listRecent(limit = 5): Promise<SalesDraftRecord[]> {
+  async listRecent(
+    actorUserId: string,
+    limit = 5,
+    canManageAll = false,
+  ): Promise<SalesDraftRecord[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
       throw new Error('Recent Draft limit must be between 1 and 20')
     }
 
     const repository = new SalesDraftRepository(this.database)
+    const userId = actorUserId.trim()
+    if (!userId) {
+      throw new Error('Actor user is required')
+    }
     const ids = await repository.listRecentActiveIds(
       this.tenantId,
+      userId,
       limit,
+      canManageAll,
     )
     const drafts: SalesDraftRecord[] = []
 
@@ -170,6 +186,7 @@ export class SalesDraftService {
     actorUserId: string,
     draftId: string,
     expectedVersion: number,
+    canManageAll = false,
   ): Promise<SalesDraftRecord> {
     const userId = actorUserId.trim()
     const id = draftId.trim()
@@ -193,6 +210,7 @@ export class SalesDraftService {
         if (!current) {
           throw new Error('Draft not found')
         }
+        this.requireAccess(current, userId, canManageAll)
         if (current.version !== expectedVersion) {
           throw new SalesDraftVersionConflictError(current.version)
         }
@@ -260,6 +278,11 @@ export class SalesDraftService {
       this.database,
       async (database) => {
         const repository = new SalesDraftRepository(database)
+        const current = await repository.findById(this.tenantId, id)
+        if (!current) {
+          throw new Error('Draft not found')
+        }
+        this.requireAccess(current, userId, canManageAll)
         const header = await repository.replaceState({
           tenantId: this.tenantId,
           draftId: id,
@@ -289,6 +312,15 @@ export class SalesDraftService {
           })
         }
 
+        await repository.insertAudit({
+          tenantId: this.tenantId,
+          draftId: id,
+          version: header.version,
+          actorUserId: userId,
+          state,
+          action: 'UPDATED',
+        })
+
         const loaded = await repository.findById(this.tenantId, id)
         if (!loaded) {
           throw new Error('Updated Draft disappeared')
@@ -304,6 +336,7 @@ export class SalesDraftService {
     draftId: string,
     expectedVersion: number,
     input: SalesDraftPostInput,
+    canManageAll = false,
   ): Promise<CommittedSale> {
     const userId = actorUserId.trim()
     const id = draftId.trim()
@@ -331,6 +364,7 @@ export class SalesDraftService {
     if (!draft) {
       throw new Error('Draft not found')
     }
+    this.requireAccess(draft, userId, canManageAll)
 
     if (draft.status === 'POSTED') {
       if (draft.postedOperationId !== operationId) {
@@ -369,6 +403,7 @@ export class SalesDraftService {
       if (!draft) {
         throw new Error('Draft not found')
       }
+      this.requireAccess(draft, userId, canManageAll)
       if (
         draft.status === 'POSTED' &&
         draft.postedOperationId === operationId
@@ -475,26 +510,58 @@ export class SalesDraftService {
       }
     }
 
-    const marked = await repository.markPosted({
-      tenantId: this.tenantId,
-      draftId: id,
-      expectedVersion,
-      operationId,
-      saleId: sale.id,
+    await withDatabaseTransaction(this.database, async (database) => {
+      const postingRepository = new SalesDraftRepository(database)
+      const marked = await postingRepository.markPosted({
+        tenantId: this.tenantId,
+        draftId: id,
+        expectedVersion,
+        operationId,
+        saleId: sale.id,
+      })
+
+      if (!marked) {
+        const current = await postingRepository.findById(this.tenantId, id)
+        if (
+          current?.status !== 'POSTED' ||
+          current.postedOperationId !== operationId ||
+          current.postedSaleId !== sale.id
+        ) {
+          throw new Error('Draft could not be linked to its posted Invoice')
+        }
+        return
+      }
+
+      await postingRepository.insertAudit({
+        tenantId: this.tenantId,
+        draftId: id,
+        version: draft.version,
+        actorUserId: userId,
+        state: {
+          customer: draft.customer,
+          discountPaisa: draft.discountPaisa,
+          payments: draft.payments,
+          note: draft.note,
+          lines: draft.lines,
+        },
+        action: 'POSTED',
+      })
     })
 
-    if (!marked) {
-      const current = await repository.findById(this.tenantId, id)
-      if (
-        current?.status !== 'POSTED' ||
-        current.postedOperationId !== operationId ||
-        current.postedSaleId !== sale.id
-      ) {
-        throw new Error('Draft could not be linked to its posted Invoice')
-      }
-    }
-
     return sale
+  }
+
+  private requireAccess(
+    draft: SalesDraftRecord,
+    actorUserId: string,
+    canManageAll: boolean,
+  ): void {
+    if (!actorUserId.trim()) {
+      throw new Error('Actor user is required')
+    }
+    if (draft.ownerUserId !== actorUserId && !canManageAll) {
+      throw new SalesDraftAccessError()
+    }
   }
 
   private async validateConversionCompatibility(
