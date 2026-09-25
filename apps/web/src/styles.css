@@ -2490,3 +2490,120 @@ p {
     grid-template-columns: 1fr;
   }
 }
+
+
+.pos-qty-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.pos-conversion-row td,
+.pos-shortage-row td {
+  background: var(--surface-muted);
+}
+
+.pos-conversion-editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 180px));
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.pos-conversion-field,
+.pos-vendor-cost {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pos-shortage-resolution {
+  display: grid;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.pos-shortage-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.pos-shortage-heading strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.pos-shortage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pos-vendor-source {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 180px);
+  gap: 8px;
+  align-items: end;
+}
+
+.pos-vendor-picker {
+  position: relative;
+}
+
+.pos-vendor-results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.pos-vendor-results .ui-button {
+  justify-content: space-between;
+}
+
+.pos-vendor-results small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pos-vendor-summary {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-new-vendor {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(140px, 180px) auto;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .pos-vendor-source,
+  .pos-new-vendor {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-vendor-summary {
+    grid-column: 1;
+  }
+}

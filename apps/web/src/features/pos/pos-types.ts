@@ -113,6 +113,23 @@ export interface PosBootstrapDto {
   }
 }
 
+export interface PosVendorSearchDto {
+  id: string
+  vendorCode: string
+  name: string
+  phone: string
+  address: string
+  isActive: boolean
+}
+
+export type PosShortageResolutionDto =
+  | { type: 'NEGATIVE_STOCK' }
+  | {
+      type: 'VENDOR'
+      vendorId: string
+      unitCostPaisa: string
+    }
+
 export interface PosCustomerSearchDto {
   id: string
   customerCode: string
@@ -127,6 +144,7 @@ export interface CommitSaleLinePayload {
   variantId: string
   baseQty: string
   manualUnitSellingPricePaisa?: string
+  shortageResolution?: PosShortageResolutionDto
 }
 
 export interface CommitSalePayload {

@@ -45,6 +45,18 @@ export class VendorService {
     )
   }
 
+  search(rawQuery: string, limit = 20): Promise<VendorRecord[]> {
+    const query = rawQuery.trim()
+    if (!query) {
+      return Promise.resolve([])
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new Error('Vendor search limit must be between 1 and 50')
+    }
+
+    return this.repository.search(this.tenantId, query, limit)
+  }
+
   async get(vendorId: string): Promise<VendorRecord> {
     const vendor = await this.repository.findById(
       this.tenantId,

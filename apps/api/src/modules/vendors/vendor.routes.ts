@@ -53,6 +53,36 @@ export const vendorRoutes = new Hono<AppEnv>()
       )
     }
   })
+  .get('/vendors', async (c) => {
+    if (!c.get('permissions').includes('POS_VIEW')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+
+    try {
+      const rawLimit = c.req.query('limit')
+      const limit =
+        rawLimit === undefined ? 20 : Number(rawLimit)
+
+      return await withRequestDatabase(c.env, async (database) =>
+        c.json(
+          await new VendorService(
+            c.get('tenantId'),
+            database,
+          ).search(c.req.query('search') ?? '', limit),
+        ),
+      )
+    } catch (error) {
+      return c.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Invalid request',
+        },
+        400,
+      )
+    }
+  })
   .get('/vendors/:vendorId', async (c) => {
     if (!c.get('permissions').includes('POS_VIEW')) {
       return c.json({ error: 'Forbidden' }, 403)

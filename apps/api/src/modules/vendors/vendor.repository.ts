@@ -78,6 +78,43 @@ export class VendorRepository {
     return mapVendor(row)
   }
 
+  async search(
+    tenantId: string,
+    query: string,
+    limit: number,
+  ): Promise<VendorRecord[]> {
+    const result = await this.db.query<VendorRow>(
+      `SELECT
+         id,
+         vendor_code,
+         name,
+         phone,
+         address,
+         is_active
+       FROM vendors
+       WHERE tenant_id = $1
+         AND is_active
+         AND (
+           lower(vendor_code) LIKE '%' || lower($2) || '%'
+           OR lower(name) LIKE '%' || lower($2) || '%'
+           OR lower(phone) LIKE '%' || lower($2) || '%'
+         )
+       ORDER BY
+         CASE
+           WHEN lower(vendor_code) = lower($2) THEN 0
+           WHEN lower(name) = lower($2) THEN 1
+           WHEN lower(name) LIKE lower($2) || '%' THEN 2
+           ELSE 3
+         END,
+         lower(name),
+         id
+       LIMIT $3`,
+      [tenantId, query, limit],
+    )
+
+    return result.rows.map(mapVendor)
+  }
+
   async findById(
     tenantId: string,
     vendorId: string,

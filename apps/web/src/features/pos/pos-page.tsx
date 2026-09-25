@@ -32,12 +32,14 @@ import {
 import type {
   PosLineQuoteDto,
   PosProductSearchDto,
+  PosVendorSearchDto,
 } from './pos-types'
 import {
   CustomerPanel,
   type PosCustomerDraft,
 } from './components/customer-panel'
 import { ConversionEditor } from './components/conversion-editor'
+import { ShortageResolution } from './components/shortage-resolution'
 
 interface CartLineState {
   product: PosProductSearchDto
@@ -48,6 +50,10 @@ interface CartLineState {
   showBreakdown: boolean
   conversionExpanded: boolean
   conversionComponents: Record<string, string>
+  shortageResolution: 'VENDOR' | 'NEGATIVE_STOCK' | null
+  vendorId: string | null
+  vendorName: string
+  vendorUnitCostInput: string
   isQuoting: boolean
   error: string
 }
@@ -142,6 +148,25 @@ export function PosPage() {
                   line.manualUnitSellingPricePaisa,
               }
             : {}),
+          ...(line.shortageResolution === 'NEGATIVE_STOCK'
+            ? {
+                shortageResolution: {
+                  type: 'NEGATIVE_STOCK' as const,
+                },
+              }
+            : line.shortageResolution === 'VENDOR' &&
+                line.vendorId &&
+                line.vendorUnitCostInput.trim()
+              ? {
+                  shortageResolution: {
+                    type: 'VENDOR' as const,
+                    vendorId: line.vendorId,
+                    unitCostPaisa: parseTakaToPaisa(
+                      line.vendorUnitCostInput,
+                    ),
+                  },
+                }
+              : {}),
         })),
       }),
     onSuccess: async () => {
@@ -260,6 +285,10 @@ export function PosPage() {
           showBreakdown: false,
           conversionExpanded: false,
           conversionComponents: quote.conversion.components,
+          shortageResolution: null,
+          vendorId: null,
+          vendorName: '',
+          vendorUnitCostInput: '',
           isQuoting: false,
           error: '',
         },
@@ -328,6 +357,14 @@ export function PosPage() {
             quote,
             quantity: quote.displayQty,
             conversionComponents: quote.conversion.components,
+            ...(Number(quote.shortfallBaseQty) <= 0
+              ? {
+                  shortageResolution: null,
+                  vendorId: null,
+                  vendorName: '',
+                  vendorUnitCostInput: '',
+                }
+              : {}),
             priceInput: line.manualUnitSellingPricePaisa
               ? line.priceInput
               : formatPaisaToTaka(
@@ -428,6 +465,14 @@ export function PosPage() {
             ...line,
             quote,
             quantity,
+            ...(Number(quote.shortfallBaseQty) <= 0
+              ? {
+                  shortageResolution: null,
+                  vendorId: null,
+                  vendorName: '',
+                  vendorUnitCostInput: '',
+                }
+              : {}),
             priceInput: line.manualUnitSellingPricePaisa
               ? line.priceInput
               : formatPaisaToTaka(
@@ -454,6 +499,97 @@ export function PosPage() {
         ),
       )
     }
+  }
+
+  async function chooseOwnStock(variantId: string) {
+    const target = cart.find(
+      (line) => line.product.variantId === variantId,
+    )
+    if (!target) {
+      return
+    }
+
+    const ownBaseQty = target.quote.availableOwnBaseQty
+    if (Number(ownBaseQty) <= 0) {
+      setCart((lines) =>
+        lines.filter(
+          (line) => line.product.variantId !== variantId,
+        ),
+      )
+      setPageError('No own stock available. Product removed from cart.')
+      return
+    }
+
+    setCart((lines) =>
+      lines.map((line) =>
+        line.product.variantId === variantId
+          ? {
+              ...line,
+              shortageResolution: null,
+              vendorId: null,
+              vendorName: '',
+              vendorUnitCostInput: '',
+            }
+          : line,
+      ),
+    )
+    await updateQuantity(variantId, ownBaseQty)
+  }
+
+  function chooseShortageResolution(
+    variantId: string,
+    resolution: 'VENDOR' | 'NEGATIVE_STOCK',
+  ) {
+    setCart((lines) =>
+      lines.map((line) =>
+        line.product.variantId === variantId
+          ? {
+              ...line,
+              shortageResolution: resolution,
+              ...(resolution === 'NEGATIVE_STOCK'
+                ? {
+                    vendorId: null,
+                    vendorName: '',
+                    vendorUnitCostInput: '',
+                  }
+                : {}),
+            }
+          : line,
+      ),
+    )
+  }
+
+  function selectShortageVendor(
+    variantId: string,
+    vendor: PosVendorSearchDto,
+  ) {
+    setCart((lines) =>
+      lines.map((line) =>
+        line.product.variantId === variantId
+          ? {
+              ...line,
+              vendorId: vendor.id || null,
+              vendorName: vendor.name,
+            }
+          : line,
+      ),
+    )
+  }
+
+  function changeVendorUnitCost(
+    variantId: string,
+    value: string,
+  ) {
+    setCart((lines) =>
+      lines.map((line) =>
+        line.product.variantId === variantId
+          ? {
+              ...line,
+              vendorUnitCostInput: value,
+            }
+          : line,
+      ),
+    )
   }
 
   function changeSellingPrice(
@@ -825,6 +961,78 @@ export function PosPage() {
                       )
                     }
 
+                    if (Number(line.quote.shortfallBaseQty) > 0) {
+                      let vendorTotalPaisa = '0'
+                      try {
+                        const vendorCostPaisa =
+                          line.vendorUnitCostInput.trim()
+                            ? parseTakaToPaisa(
+                                line.vendorUnitCostInput,
+                              )
+                            : '0'
+                        vendorTotalPaisa = quantityTimesPaisa(
+                          line.quote.shortfallBaseQty,
+                          vendorCostPaisa,
+                        )
+                      } catch {
+                        vendorTotalPaisa = '0'
+                      }
+
+                      detailRows.push(
+                        <tr
+                          aria-label={`Shortage resolution for ${line.product.productName}`}
+                          className="pos-shortage-row"
+                          key={`${line.product.variantId}-shortage`}
+                        >
+                          <td colSpan={6}>
+                            <ShortageResolution
+                              onOwnStock={() =>
+                                void chooseOwnStock(
+                                  line.product.variantId,
+                                )
+                              }
+                              onResolutionChange={(resolution) =>
+                                chooseShortageResolution(
+                                  line.product.variantId,
+                                  resolution,
+                                )
+                              }
+                              onVendorCostChange={(value) =>
+                                changeVendorUnitCost(
+                                  line.product.variantId,
+                                  value,
+                                )
+                              }
+                              onVendorSelect={(vendor) =>
+                                selectShortageVendor(
+                                  line.product.variantId,
+                                  vendor,
+                                )
+                              }
+                              ownBaseQty={
+                                line.quote.availableOwnBaseQty
+                              }
+                              productName={line.product.productName}
+                              resolution={line.shortageResolution}
+                              shortfallBaseQty={
+                                line.quote.shortfallBaseQty
+                              }
+                              unitLabel={
+                                line.product.unitSymbol ??
+                                line.product.unitName
+                              }
+                              vendorId={line.vendorId}
+                              vendorName={line.vendorName}
+                              vendorTotalPaisa={vendorTotalPaisa}
+                              vendorUnitCostInput={
+                                line.vendorUnitCostInput
+                              }
+                            />
+                          </td>
+                        </tr>,
+                      )
+                    }
+
                     if (line.showBreakdown) {
                       detailRows.push(
                         <tr
@@ -872,7 +1080,12 @@ export function PosPage() {
                 cart.some(
                   (line) =>
                     line.isQuoting ||
-                    Boolean(line.error),
+                    Boolean(line.error) ||
+                    (Number(line.quote.shortfallBaseQty) > 0 &&
+                      (line.shortageResolution === null ||
+                        (line.shortageResolution === 'VENDOR' &&
+                          (!line.vendorId ||
+                            !line.vendorUnitCostInput.trim())))),
                 ) ||
                 saleMutation.isPending
               }
