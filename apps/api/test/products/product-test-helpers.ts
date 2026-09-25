@@ -21,6 +21,22 @@ export async function cleanupProductTestTenants(): Promise<void> {
   const tenantIds = createdTenantIds.splice(0)
 
   await getPool().query(
+    'DELETE FROM inventory_shortfall_reconciliations WHERE tenant_id = ANY($1::uuid[])',
+    [tenantIds],
+  )
+  await getPool().query(
+    'DELETE FROM inventory_shortfalls WHERE tenant_id = ANY($1::uuid[])',
+    [tenantIds],
+  )
+  await getPool().query(
+    'DELETE FROM sales_line_vendor_allocations WHERE tenant_id = ANY($1::uuid[])',
+    [tenantIds],
+  )
+  await getPool().query(
+    'DELETE FROM vendor_sourcing WHERE tenant_id = ANY($1::uuid[])',
+    [tenantIds],
+  )
+  await getPool().query(
     'DELETE FROM sales_line_lot_allocations WHERE tenant_id = ANY($1::uuid[])',
     [tenantIds],
   )
