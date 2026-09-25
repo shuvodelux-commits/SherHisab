@@ -46,10 +46,10 @@ const baseSession: AuthSession = {
   expiresAt: '2026-09-25T00:00:00.000Z',
 }
 
-function safeQuote(baseQty: string) {
+function safeQuote(baseQty: string, variantId = 'variant-1') {
   const two = baseQty === '2'
   return {
-    variantId: 'variant-1',
+    variantId,
     baseQty,
     pricingQty: baseQty,
     displayQty: baseQty,
@@ -75,7 +75,7 @@ function safeQuote(baseQty: string) {
   }
 }
 
-function installFetch() {
+function installFetch(products = [product]) {
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url =
@@ -87,7 +87,7 @@ function installFetch() {
 
       if (url.startsWith('/api/private/pos/products?')) {
         const params = new URLSearchParams(url.split('?')[1])
-        return jsonResponse(params.get('search') ? [product] : [])
+        return jsonResponse(params.get('search') ? products : [])
       }
 
       if (
@@ -95,9 +95,12 @@ function installFetch() {
         init?.method === 'POST'
       ) {
         const body = JSON.parse(String(init.body)) as {
+          variantId: string
           baseQty: string
         }
-        return jsonResponse(safeQuote(body.baseQty))
+        return jsonResponse(
+          safeQuote(body.baseQty, body.variantId),
+        )
       }
 
       if (
@@ -320,4 +323,55 @@ describe('PosPage lot pricing', () => {
       await screen.findByText('Sale completed'),
     ).toBeInTheDocument()
   })
+
+  it('keeps zero, negative and explicit Variant search results selectable', async () => {
+    const zeroStock = {
+      ...product,
+      productId: 'product-zero',
+      variantId: 'variant-zero',
+      productName: 'Zero Stock Product',
+      availableOwnBaseQty: '0',
+    }
+    const negativeStock = {
+      ...product,
+      productId: 'product-negative',
+      variantId: 'variant-negative',
+      productName: 'Negative Stock Product',
+      availableOwnBaseQty: '-2',
+    }
+    const explicitVariant = {
+      ...product,
+      productId: 'product-variant',
+      variantId: 'variant-blue',
+      productName: 'Variant Product',
+      variantName: 'Blue',
+      variantsEnabled: true,
+      availableOwnBaseQty: '4',
+    }
+
+    installFetch([zeroStock, negativeStock, explicitVariant])
+    renderPos()
+
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Search products' }),
+      { target: { value: 'stock' } },
+    )
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'Add Zero Stock Product',
+      }),
+    ).not.toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: 'Add Negative Stock Product',
+      }),
+    ).not.toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: 'Add Variant Product',
+      }),
+    ).not.toBeDisabled()
+  })
+
 })
