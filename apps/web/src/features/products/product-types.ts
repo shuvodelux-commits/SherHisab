@@ -1,4 +1,7 @@
-export type TrackingMode = 'SIMPLE' | 'LOT' | 'BATCH'
+export type TrackingMode = 'SIMPLE' | 'SERIAL' | 'BATCH_EXPIRY'
+export type AllocationPolicy = 'FIFO' | 'FEFO'
+export type WarrantyDurationUnit = 'DAY' | 'MONTH' | 'YEAR'
+export type ProductCaptureFieldType = 'text' | 'number' | 'date' | 'select'
 export type ProductStatusFilter = 'active' | 'inactive' | 'all'
 export type ProductSortBy =
   | 'name'
@@ -62,6 +65,38 @@ export interface ConversionProfileDto {
   components: ConversionComponentDto[]
 }
 
+export interface WarrantyPolicyInput {
+  enabled: boolean
+  durationValue?: number | null
+  durationUnit?: WarrantyDurationUnit | null
+  provider?: string
+  text?: string
+}
+
+export interface WarrantyPolicyDto {
+  id: string
+  productId: string
+  enabled: boolean
+  durationValue: number | null
+  durationUnit: WarrantyDurationUnit | null
+  provider: string
+  text: string
+}
+
+export interface ProductCaptureFieldInput {
+  key: string
+  label: string
+  type: ProductCaptureFieldType
+  selectOptions?: string[]
+  required: boolean
+}
+
+export interface ProductCaptureFieldDto extends ProductCaptureFieldInput {
+  id: string
+  selectOptions: string[]
+  sortOrder: number
+}
+
 export interface ProductCategoryDto {
   id: string
   name: string
@@ -90,6 +125,7 @@ export interface ProductListItemDto {
   stockValuePaisa: string
   minimumStockBaseQty: string
   trackingMode: TrackingMode
+  allocationPolicy: AllocationPolicy
   variantsEnabled: boolean
   isActive: boolean
 }
@@ -144,6 +180,8 @@ export interface ProductAdvancedConfigurationDto {
   specifications: ProductSpecificationDto[]
   variants: ProductVariantDto[]
   conversionProfile?: ConversionProfileDto | null
+  warrantyPolicy?: WarrantyPolicyDto | null
+  captureFields?: ProductCaptureFieldDto[]
 }
 
 export interface AlternativeUnitInput {
@@ -183,6 +221,8 @@ export interface AdvancedProductConfigurationInput {
   specifications?: SpecificationInput[]
   variantConfiguration?: ReplaceVariantConfigurationInput
   conversionProfile?: ConversionProfileInput | null
+  warrantyPolicy?: WarrantyPolicyInput
+  captureFields?: ProductCaptureFieldInput[]
 }
 
 export interface CreateProductPayload {
@@ -196,6 +236,7 @@ export interface CreateProductPayload {
   openingStockBaseQty: string
   minimumStockBaseQty: string
   trackingMode: TrackingMode
+  allocationPolicy: AllocationPolicy
   advanced?: AdvancedProductConfigurationInput
 }
 

@@ -35,6 +35,7 @@ function createdProduct(): ProductDetailDto {
     stockValuePaisa: '3125',
     minimumStockBaseQty: '0.125',
     trackingMode: 'SIMPLE',
+    allocationPolicy: 'FIFO',
     variantsEnabled: false,
     isActive: true,
     primaryBarcode: '123456',
