@@ -440,6 +440,50 @@ describe.skipIf(!hasDatabase)('sales routes', () => {
     expect(invoices.rows[0]?.count).toBe('0')
   })
 
+  it('quotes BATCH_EXPIRY stock against the requested business date', async () => {
+    const fixture = await createFixture('FEFO Quote Business Date')
+
+    await getPool().query(
+      `UPDATE products
+       SET tracking_mode = 'BATCH_EXPIRY',
+           allocation_policy = 'FEFO'
+       WHERE tenant_id = $1 AND id = $2`,
+      [fixture.tenant.id, fixture.product.id],
+    )
+
+    await addLot(fixture, {
+      qty: '1',
+      cost: '700',
+      selling: '1100',
+      date: '2026-01-01',
+    })
+
+    await getPool().query(
+      `UPDATE inventory_lots
+       SET batch_code = 'BACKDATED-VALID',
+           expires_on = '2026-02-01'
+       WHERE tenant_id = $1
+         AND variant_id = $2`,
+      [fixture.tenant.id, fixture.product.defaultVariantId],
+    )
+
+    const response = await privatePost(
+      fixture.cookie,
+      '/sales/quote-line',
+      {
+        variantId: fixture.product.defaultVariantId,
+        baseQty: '1',
+        businessDate: '2026-01-15',
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      automaticSalesTotalPaisa: '1100',
+      cogsPaisa: '700',
+    })
+  })
+
   it('commits BATCH_EXPIRY FEFO sales from the earliest unexpired batch and leaves expired stock untouched', async () => {
     const fixture = await createFixture('FEFO Commit')
 
