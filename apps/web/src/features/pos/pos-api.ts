@@ -8,6 +8,7 @@ import type {
   PosProductSearchDto,
   PosQuantityInputDto,
   PosVendorSearchDto,
+  SalesDraftDto,
 } from './pos-types'
 
 const API_ROOT = '/api/private'
@@ -27,6 +28,14 @@ export function searchPosProducts(
 
   return apiRequest<PosProductSearchDto[]>(
     `${API_ROOT}/pos/products?${params.toString()}`,
+  )
+}
+
+export function getPosProductByVariant(
+  variantId: string,
+): Promise<PosProductSearchDto> {
+  return apiRequest<PosProductSearchDto>(
+    `${API_ROOT}/pos/products/${encodeURIComponent(variantId)}`,
   )
 }
 
@@ -91,4 +100,64 @@ export function commitSale(
     method: 'POST',
     body: JSON.stringify(input),
   })
+}
+
+export function listSalesDrafts(): Promise<SalesDraftDto[]> {
+  return apiRequest<SalesDraftDto[]>(`${API_ROOT}/sales/drafts?limit=10`)
+}
+
+export function getSalesDraft(draftId: string): Promise<SalesDraftDto> {
+  return apiRequest<SalesDraftDto>(
+    `${API_ROOT}/sales/drafts/${encodeURIComponent(draftId)}`,
+  )
+}
+
+export function createSalesDraft(
+  input: Pick<SalesDraftDto, 'customer' | 'discountPaisa' | 'payments' | 'note' | 'lines'>,
+): Promise<SalesDraftDto> {
+  return apiRequest<SalesDraftDto>(`${API_ROOT}/sales/drafts`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function archiveSalesDraft(
+  draftId: string,
+  expectedVersion: number,
+): Promise<SalesDraftDto> {
+  return apiRequest<SalesDraftDto>(
+    `${API_ROOT}/sales/drafts/${encodeURIComponent(draftId)}/archive`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ expectedVersion }),
+    },
+  )
+}
+
+export function updateSalesDraft(
+  draftId: string,
+  expectedVersion: number,
+  input: Pick<SalesDraftDto, 'customer' | 'discountPaisa' | 'payments' | 'note' | 'lines'>,
+): Promise<SalesDraftDto> {
+  return apiRequest<SalesDraftDto>(
+    `${API_ROOT}/sales/drafts/${encodeURIComponent(draftId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ expectedVersion, ...input }),
+    },
+  )
+}
+
+export function postSalesDraft(
+  draftId: string,
+  expectedVersion: number,
+  input: { operationId: string; businessDate: string },
+): Promise<CommittedSaleDto> {
+  return apiRequest<CommittedSaleDto>(
+    `${API_ROOT}/sales/drafts/${encodeURIComponent(draftId)}/post`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ expectedVersion, ...input }),
+    },
+  )
 }

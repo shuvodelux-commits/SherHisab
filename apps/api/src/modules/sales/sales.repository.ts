@@ -10,6 +10,15 @@ import type {
 export class SalesRepository {
   constructor(private readonly db: DatabaseClient) {}
 
+  async lockOperationId(tenantId: string, operationId: string): Promise<void> {
+    await this.db.query(
+      `SELECT pg_advisory_xact_lock(
+         hashtextextended($1 || ':' || $2, 0)
+       )`,
+      [tenantId, operationId],
+    )
+  }
+
   private async listLots(
     tenantId: string,
     variantId: string,
@@ -160,6 +169,7 @@ export class SalesRepository {
     operationId: string | null
     businessDate: string
     createdByUserId: string
+    sourceDraft?: { id: string; version: number }
   }): Promise<{ id: string }> {
     const result = await this.db.query<{ id: string }>(
       `INSERT INTO sales_invoices
@@ -168,9 +178,11 @@ export class SalesRepository {
          invoice_number,
          operation_id,
          business_date,
-         created_by_user_id
+         created_by_user_id,
+         source_draft_id,
+         source_draft_version
        )
-       VALUES ($1, $2, $3, $4, $5)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
       [
         input.tenantId,
@@ -178,6 +190,8 @@ export class SalesRepository {
         input.operationId,
         input.businessDate,
         input.createdByUserId,
+        input.sourceDraft?.id ?? null,
+        input.sourceDraft?.version ?? null,
       ],
     )
     const row = result.rows[0]
@@ -187,6 +201,25 @@ export class SalesRepository {
     }
 
     return row
+  }
+
+  async findDraftSourceByOperationId(
+    tenantId: string,
+    operationId: string,
+  ): Promise<{ id: string; version: number } | null> {
+    const result = await this.db.query<{
+      source_draft_id: string | null
+      source_draft_version: number | null
+    }>(
+      `SELECT source_draft_id, source_draft_version
+       FROM sales_invoices
+       WHERE tenant_id = $1 AND operation_id = $2`,
+      [tenantId, operationId],
+    )
+    const row = result.rows[0]
+    return row?.source_draft_id && row.source_draft_version
+      ? { id: row.source_draft_id, version: row.source_draft_version }
+      : null
   }
 
   async finalizeMatureInvoice(input: {

@@ -33,13 +33,21 @@ import {
   getPosBootstrap,
   quoteSaleLine,
   searchPosProducts,
+  getPosProductByVariant,
+  getSalesDraft,
+  createSalesDraft,
+  updateSalesDraft,
+  postSalesDraft,
 } from './pos-api'
 import type {
   CommittedSaleDto,
   CommitSalePayload,
   PosPaymentLineDraft,
+  PosLineQuoteDto,
   PosProductSearchDto,
   PosVendorSearchDto,
+  SalesDraftDto,
+  SalesDraftLineDto,
 } from './pos-types'
 import {
   cartReducer,
@@ -116,6 +124,8 @@ function newPaymentLine(): PosPaymentLineDraft {
     method: 'CASH',
     accountId: null,
     amountInput: '',
+    reference: '',
+    note: '',
   }
 }
 
@@ -151,6 +161,48 @@ function newOperationId(): string {
   return globalThis.crypto.randomUUID()
 }
 
+type DraftMutationInput = Pick<
+  SalesDraftDto,
+  'customer' | 'discountPaisa' | 'payments' | 'note' | 'lines'
+>
+
+function sameDraftState(
+  draft: SalesDraftDto,
+  input: DraftMutationInput,
+): boolean {
+  const stableJson = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(stableJson)
+    if (value !== null && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, item]) => [key, stableJson(item)]),
+      )
+    }
+    return value
+  }
+  return JSON.stringify(stableJson({
+    customer: draft.customer,
+    discountPaisa: draft.discountPaisa,
+    payments: draft.payments,
+    note: draft.note,
+    lines: draft.lines,
+  })) === JSON.stringify(stableJson(input))
+}
+
+function sameBaseQuantity(left: string, right: string): boolean {
+  const canonical = (value: string) => {
+    if (!/^\d+(?:\.\d+)?$/.test(value)) return null
+    const [whole, fraction = ''] = value.split('.')
+    const normalizedWhole = whole!.replace(/^0+(?=\d)/, '')
+    const normalizedFraction = fraction.replace(/0+$/, '')
+    return normalizedFraction
+      ? `${normalizedWhole}.${normalizedFraction}`
+      : normalizedWhole
+  }
+  const normalizedLeft = canonical(left)
+  return normalizedLeft !== null && normalizedLeft === canonical(right)
+}
+
 export function PosPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -166,6 +218,9 @@ export function PosPage() {
   const [payments, setPayments] = useState<PosPaymentLineDraft[]>(
     () => [newPaymentLine()],
   )
+  const [discountInput, setDiscountInput] = useState('')
+  const [saleNote, setSaleNote] = useState('')
+  const [activeDraft, setActiveDraft] = useState<Pick<SalesDraftDto, 'id' | 'version'> | null>(null)
   const [completedSale, setCompletedSale] =
     useState<CommittedSaleDto | null>(null)
   const submissionIntentRef = useRef<{
@@ -198,7 +253,7 @@ export function PosPage() {
   })
 
   const saleMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const committedPayments = payments.flatMap((payment) => {
         const amountPaisa = paymentAmountPaisa(payment.amountInput)
         if (BigInt(amountPaisa) <= 0n) {
@@ -219,6 +274,8 @@ export function PosPage() {
 
       const payload: CommitSalePayload = {
         businessDate: todayLocalDate(),
+        discountPaisa: paymentAmountPaisa(discountInput),
+        note: saleNote,
         ...(committedPayments.length > 0
           ? {
               customer: {
@@ -278,6 +335,37 @@ export function PosPage() {
         submissionIntentRef.current = intent
       }
 
+      if (activeDraft) {
+        const requestedDraft = buildDraftInput()
+        let stored = await getSalesDraft(activeDraft.id)
+        const isSameState = sameDraftState(stored, requestedDraft)
+        if (
+          stored.status !== 'POSTED' &&
+          stored.version !== activeDraft.version &&
+          !isSameState
+        ) {
+          throw new Error(`This draft changed elsewhere. Current version is ${stored.version}. Reload it before completing the sale.`)
+        }
+        if (stored.status !== 'POSTED' && !isSameState) {
+          try {
+            stored = await updateSalesDraft(
+              activeDraft.id,
+              activeDraft.version,
+              requestedDraft,
+            )
+          } catch (error) {
+            const latest = await getSalesDraft(activeDraft.id)
+            if (!sameDraftState(latest, requestedDraft)) throw error
+            stored = latest
+          }
+        }
+        setActiveDraft({ id: stored.id, version: stored.version })
+        return postSalesDraft(activeDraft.id, stored.version, {
+          operationId: intent.operationId,
+          businessDate: payload.businessDate,
+        })
+      }
+
       return commitSale({
         ...payload,
         operationId: intent.operationId,
@@ -289,12 +377,16 @@ export function PosPage() {
       setCart([])
       setCustomer(emptyCustomerDraft())
       setPayments([newPaymentLine()])
+      setDiscountInput('')
+      setSaleNote('')
+      setActiveDraft(null)
       setSearch('')
       setSearchOpen(false)
       setActiveResultIndex(-1)
       setPageError('')
       setSaleMessage('Sale completed')
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['sales-drafts'] }),
         queryClient.invalidateQueries({ queryKey: ['products'] }),
         queryClient.invalidateQueries({ queryKey: ['pos-products'] }),
         queryClient.invalidateQueries({ queryKey: ['product-lots'] }),
@@ -310,11 +402,35 @@ export function PosPage() {
     },
   })
 
+  const draftMutation = useMutation({
+    mutationFn: () => {
+      const input = buildDraftInput()
+      return activeDraft
+        ? updateSalesDraft(activeDraft.id, activeDraft.version, input)
+        : createSalesDraft(input)
+    },
+    onSuccess: (draft) => {
+      setActiveDraft({ id: draft.id, version: draft.version })
+      setPageError('')
+      setSaleMessage(`Draft ${draft.draftNumber} saved`)
+      void queryClient.invalidateQueries({ queryKey: ['sales-drafts'] })
+    },
+    onError: (error) => {
+      setSaleMessage('')
+      setPageError(error instanceof Error ? error.message : 'Could not save the draft.')
+    },
+  })
+
   const products = productsQuery.data ?? []
 
   const cartTotalPaisa = sumPaisa(
     cart.map((line) => lineTotalPaisa(line)),
   )
+  const grandTotalPaisa = (
+    BigInt(cartTotalPaisa) > BigInt(paymentAmountPaisa(discountInput))
+      ? BigInt(cartTotalPaisa) - BigInt(paymentAmountPaisa(discountInput))
+      : 0n
+  ).toString()
 
   const paidPaisa = sumPaisa(
     payments.map((payment) =>
@@ -322,13 +438,194 @@ export function PosPage() {
     ),
   )
   const duePaisa = (
-    BigInt(cartTotalPaisa) > BigInt(paidPaisa)
-      ? BigInt(cartTotalPaisa) - BigInt(paidPaisa)
+    BigInt(grandTotalPaisa) > BigInt(paidPaisa)
+      ? BigInt(grandTotalPaisa) - BigInt(paidPaisa)
       : 0n
   ).toString()
 
   function addPayment() {
     setPayments((current) => [...current, newPaymentLine()])
+  }
+
+  function buildDraftInput() {
+    return {
+      customer: {
+        selectedCustomerId: customer.selectedCustomerId,
+        name: customer.name,
+        phone: customer.phone,
+        guardianName: customer.guardianName,
+        address: customer.address,
+      },
+      discountPaisa: paymentAmountPaisa(discountInput),
+      payments: payments.map((payment) => ({
+        clientLineId: payment.clientLineId,
+        method: payment.method,
+        accountId: payment.accountId,
+        amountPaisa: paymentAmountPaisa(payment.amountInput),
+        reference: payment.reference ?? '',
+        note: payment.note ?? '',
+      })),
+      note: saleNote,
+      lines: cart.map((line): SalesDraftLineDto => {
+        const savedLine = line.savedDraftLine
+        if (savedLine && !line.draftLineEdited) {
+          return savedLine
+        }
+        const profile = line.quote.conversion.snapshot
+        const quantityInput = profile?.type === 'COMPOUND'
+          ? {
+              kind: 'COMPONENTS' as const,
+              profileId: profile.id,
+              profileVersion: profile.version,
+              components: line.conversionComponents,
+            }
+          : { kind: 'SIMPLE' as const, baseQty: line.quote.baseQty }
+        let shortageResolution: SalesDraftLineDto['shortageResolution'] = null
+        if (line.shortageResolution === 'NEGATIVE_STOCK') {
+          shortageResolution = { type: 'NEGATIVE_STOCK' }
+        } else if (line.shortageResolution === 'VENDOR' && line.vendorId) {
+          shortageResolution = {
+            type: 'VENDOR',
+            vendorId: line.vendorId,
+            unitCostPaisa: paymentAmountPaisa(line.vendorUnitCostInput),
+          }
+        }
+        return {
+          ...(savedLine ?? {}),
+          variantId: line.product.variantId,
+          quantityInput,
+          normalizedQuantitySnapshot: line.quote.conversion,
+          pricingMode: line.manualUnitSellingPricePaisa ? 'MANUAL' : 'AUTO',
+          manualUnitSellingPricePaisa: line.manualUnitSellingPricePaisa,
+          shortageResolution,
+          serialIds: savedLine?.serialIds ?? [],
+          batchSelection: savedLine?.batchSelection ?? null,
+          warrantySnapshot: savedLine?.warrantySnapshot ?? null,
+          captureValues: savedLine?.captureValues ?? {},
+        }
+      }),
+    }
+  }
+
+  async function openDraft(draftId: string) {
+    try {
+      const draft = await getSalesDraft(draftId)
+      const restoredLines = await Promise.all(draft.lines.map(async (savedLine) => {
+        const product = await getPosProductByVariant(savedLine.variantId)
+        let conversionError = ''
+        let currentConversionProfile: CartLineState['currentConversionProfile']
+        let quote: PosLineQuoteDto
+        try {
+          // Validate the stored components against the current Product profile.
+          quote = await quoteSaleLine(
+            savedLine.variantId,
+            savedLine.quantityInput.kind === 'SIMPLE'
+              ? savedLine.quantityInput.baseQty
+              : undefined,
+            savedLine.quantityInput.kind === 'COMPONENTS'
+              ? savedLine.quantityInput
+              : undefined,
+          )
+        } catch (error) {
+          if (savedLine.quantityInput.kind !== 'COMPONENTS') throw error
+          conversionError = error instanceof Error
+            ? error.message
+            : 'Conversion profile changed. Review this quantity before posting.'
+          // Keep the old component snapshot visible and block posting. The
+          // fallback quote only paints the last normalized base quantity.
+          const fallback = await quoteSaleLine(
+            savedLine.variantId,
+            savedLine.normalizedQuantitySnapshot.baseQty,
+          )
+          quote = {
+            ...fallback,
+            conversion: savedLine.normalizedQuantitySnapshot,
+          }
+        }
+        if (savedLine.quantityInput.kind === 'COMPONENTS') {
+          try {
+            const activeQuote = await quoteSaleLine(
+              savedLine.variantId,
+              savedLine.normalizedQuantitySnapshot.baseQty,
+            )
+            const activeProfile = activeQuote.conversion.snapshot
+            if (!activeProfile || activeProfile.productId !== product.productId) {
+              throw new Error('Draft conversion profile is no longer compatible with this Product.')
+            }
+            currentConversionProfile = activeProfile
+            const currentQuote = await quoteSaleLine(
+              savedLine.variantId,
+              undefined,
+              {
+                kind: 'COMPONENTS',
+                profileId: activeProfile.id,
+                profileVersion: activeProfile.version,
+                components: savedLine.quantityInput.components,
+              },
+            )
+            if (!sameBaseQuantity(
+              currentQuote.conversion.baseQty,
+              savedLine.normalizedQuantitySnapshot.baseQty,
+            )) {
+              throw new Error('Draft conversion changed; reload the Draft and review its quantity before posting.')
+            }
+            if (!conversionError) currentConversionProfile = undefined
+          } catch (error) {
+            conversionError ||= error instanceof Error
+              ? error.message
+              : 'Draft conversion components are no longer compatible with this Product.'
+          }
+        }
+        const vendor = savedLine.shortageResolution?.type === 'VENDOR'
+          ? savedLine.shortageResolution
+          : null
+        return {
+          product,
+          quantity: savedLine.normalizedQuantitySnapshot.displayQty,
+          quote,
+          priceInput: formatPaisaToTaka(
+            savedLine.manualUnitSellingPricePaisa ?? quote.effectiveUnitSellingPricePaisa,
+          ),
+          manualUnitSellingPricePaisa: savedLine.manualUnitSellingPricePaisa,
+          showBreakdown: false,
+          conversionExpanded: false,
+          conversionComponents: { ...savedLine.normalizedQuantitySnapshot.components },
+          shortageResolution: savedLine.shortageResolution?.type ?? null,
+          vendorId: vendor?.vendorId ?? null,
+          vendorName: '',
+          vendorUnitCostInput: vendor ? formatPaisaToTaka(vendor.unitCostPaisa) : '',
+          isQuoting: false,
+          error: conversionError,
+          currentConversionProfile,
+          savedDraftLine: savedLine,
+        }
+      }))
+      setCart(restoredLines)
+      setCustomer({
+        ...emptyCustomerDraft(),
+        selectedCustomerId: draft.customer.selectedCustomerId,
+        name: draft.customer.name,
+        phone: draft.customer.phone,
+        guardianName: draft.customer.guardianName,
+        address: draft.customer.address,
+      })
+      setPayments(draft.payments.map((payment) => ({
+        clientLineId: payment.clientLineId,
+        method: payment.method,
+        accountId: payment.accountId,
+        amountInput: formatPaisaToTaka(payment.amountPaisa),
+        reference: payment.reference,
+        note: payment.note,
+      })))
+      setDiscountInput(formatPaisaToTaka(draft.discountPaisa))
+      setSaleNote(draft.note)
+      setActiveDraft({ id: draft.id, version: draft.version })
+      setCompletedSale(null)
+      setPageError('')
+      setSaleMessage(`Loaded ${draft.draftNumber} into POS`)
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : 'Could not load the draft.')
+    }
   }
 
   function changePayment(
@@ -484,6 +781,7 @@ export function PosPage() {
           ? {
               ...line,
               conversionComponents: components,
+              draftLineEdited: true,
               isQuoting: true,
               error: '',
             }
@@ -514,6 +812,7 @@ export function PosPage() {
             quote,
             quantity: quote.displayQty,
             conversionComponents: quote.conversion.components,
+            draftLineEdited: true,
             ...(Number(quote.shortfallBaseQty) <= 0
               ? {
                   shortageResolution: null,
@@ -550,6 +849,51 @@ export function PosPage() {
     }
   }
 
+  async function adoptCurrentConversionProfile(variantId: string) {
+    const target = cart.find((line) => line.product.variantId === variantId)
+    if (!target?.currentConversionProfile) return
+    setCart((lines) => lines.map((line) => line.product.variantId === variantId
+      ? { ...line, isQuoting: true }
+      : line))
+    try {
+      const active = await quoteSaleLine(variantId, target.quote.baseQty)
+      const profile = active.conversion.snapshot
+      if (!profile || profile.type !== 'COMPOUND' || profile.productId !== target.product.productId) {
+        throw new Error('Current conversion profile is unavailable. Reload the Draft.')
+      }
+      const components = Object.fromEntries(
+        profile.components.map(({ key }) => [
+          key,
+          target.conversionComponents[key] ?? '0',
+        ]),
+      )
+      try {
+        const quote = await quoteSaleLine(variantId, undefined, {
+          kind: 'COMPONENTS', profileId: profile.id,
+          profileVersion: profile.version, components,
+        })
+        setCart((lines) => lines.map((line) => line.product.variantId === variantId
+          ? { ...line, quote, quantity: quote.displayQty,
+              conversionComponents: quote.conversion.components,
+              currentConversionProfile: undefined, draftLineEdited: true,
+              conversionExpanded: true, isQuoting: false, error: '' }
+          : line))
+      } catch {
+        // Keep the entered components visible while the cashier corrects them.
+        setCart((lines) => lines.map((line) => line.product.variantId === variantId
+          ? { ...line, quote: { ...line.quote, conversion: { ...line.quote.conversion, snapshot: profile } },
+              conversionComponents: components,
+              currentConversionProfile: undefined, conversionExpanded: true,
+              isQuoting: false, error: 'Review quantity details under the current conversion profile.' }
+          : line))
+      }
+    } catch (error) {
+      setCart((lines) => lines.map((line) => line.product.variantId === variantId
+        ? { ...line, isQuoting: false, error: error instanceof Error ? error.message : 'Could not load current conversion profile.' }
+        : line))
+    }
+  }
+
   function toggleConversionEditor(variantId: string) {
     setCart((lines) =>
       lines.map((line) =>
@@ -581,6 +925,7 @@ export function PosPage() {
           ? {
               ...line,
               quantity,
+              draftLineEdited: true,
               isQuoting: true,
               error: '',
             }
@@ -622,6 +967,7 @@ export function PosPage() {
             ...line,
             quote,
             quantity,
+            draftLineEdited: true,
             ...(Number(quote.shortfallBaseQty) <= 0
               ? {
                   shortageResolution: null,
@@ -703,6 +1049,7 @@ export function PosPage() {
           ? {
               ...line,
               shortageResolution: resolution,
+              draftLineEdited: true,
               ...(resolution === 'NEGATIVE_STOCK'
                 ? {
                     vendorId: null,
@@ -727,6 +1074,7 @@ export function PosPage() {
               ...line,
               vendorId: vendor.id || null,
               vendorName: vendor.name,
+              draftLineEdited: true,
             }
           : line,
       ),
@@ -743,6 +1091,7 @@ export function PosPage() {
           ? {
               ...line,
               vendorUnitCostInput: value,
+              draftLineEdited: true,
             }
           : line,
       ),
@@ -773,6 +1122,7 @@ export function PosPage() {
             ...line,
             priceInput: value,
             manualUnitSellingPricePaisa,
+            draftLineEdited: true,
             error: '',
           }
         } catch {
@@ -780,6 +1130,7 @@ export function PosPage() {
             ...line,
             priceInput: value,
             manualUnitSellingPricePaisa: null,
+            draftLineEdited: true,
             error: 'Enter a valid selling price.',
           }
         }
@@ -832,7 +1183,7 @@ export function PosPage() {
       {completedSale ? <InvoiceResult sale={completedSale} /> : null}
 
       <div className="pos-workspace">
-        <ProductCatalog
+      <ProductCatalog
           activeResultIndex={activeResultIndex}
           errorMessage={
             productsQuery.isError
@@ -841,14 +1192,21 @@ export function PosPage() {
           }
           isOpen={searchOpen}
           isPending={productsQuery.isPending}
-          onAdd={(product) => {
+        onAdd={(product) => {
             setSearchOpen(false)
             setActiveResultIndex(-1)
             void addProduct(product)
-          }}
-          onClear={clearProductSearch}
-          onKeyDown={handleProductSearchKeyDown}
-          onSearchChange={changeProductSearch}
+        }}
+        onOpenDraft={(draftId) => void openDraft(draftId)}
+        onArchiveDraft={(draftId) => {
+          if (activeDraft?.id === draftId) {
+            setActiveDraft(null)
+            submissionIntentRef.current = null
+          }
+        }}
+        onClear={clearProductSearch}
+        onKeyDown={handleProductSearchKeyDown}
+        onSearchChange={changeProductSearch}
           products={products}
           search={search}
         />
@@ -1009,6 +1367,18 @@ export function PosPage() {
                               <span className="pos-line-error">
                                 {line.error}
                               </span>
+                            ) : null}
+                            {line.currentConversionProfile ? (
+                              <Button
+                                aria-label={`Use current conversion profile for ${line.product.productName}`}
+                                disabled={line.isQuoting}
+                                onClick={() => void adoptCurrentConversionProfile(line.product.variantId)}
+                                size="xs"
+                                type="button"
+                                variant="link"
+                              >
+                                Use current conversion profile
+                              </Button>
                             ) : null}
                           </div>
                         </td>
@@ -1180,11 +1550,38 @@ export function PosPage() {
               onChange={changePayment}
               onRemove={removePayment}
             />
+            <div className="pos-draft-fields">
+              <Input
+                aria-label="Discount"
+                inputMode="decimal"
+                onChange={(event) => setDiscountInput(event.target.value)}
+                placeholder="0.00"
+                value={discountInput}
+              />
+              <Input
+                aria-label="Sale note"
+                onChange={(event) => setSaleNote(event.target.value)}
+                placeholder="Sale note"
+                value={saleNote}
+              />
+            </div>
             <CheckoutSummary
               duePaisa={duePaisa}
-              grandTotalPaisa={cartTotalPaisa}
+              grandTotalPaisa={grandTotalPaisa}
               paidPaisa={paidPaisa}
             />
+            <Button
+              disabled={draftMutation.isPending || cart.length === 0}
+              onClick={() => draftMutation.mutate()}
+              type="button"
+              variant="outline"
+            >
+              {draftMutation.isPending
+                ? 'Saving Draft…'
+                : activeDraft
+                  ? 'Update Draft'
+                  : 'Save Draft'}
+            </Button>
             <Button
               disabled={
                 cart.length === 0 ||
