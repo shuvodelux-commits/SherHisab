@@ -20,6 +20,7 @@ async function createSearchFixture(name: string) {
   if (!unit) {
     throw new Error('Default Piece unit not found')
   }
+  const unitId = unit.id
 
   async function createProduct(input: {
     name: string
@@ -32,7 +33,7 @@ async function createSearchFixture(name: string) {
       {
         name: input.name,
         brand: input.brand ?? '',
-        baseUnitId: unit.id,
+        baseUnitId: unitId,
         defaultPurchasePricePaisa: '1000',
         defaultSellingPricePaisa: '1500',
         openingStockBaseQty: '0',
