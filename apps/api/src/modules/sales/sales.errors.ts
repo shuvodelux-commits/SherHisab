@@ -5,6 +5,13 @@ export class SalesValidationError extends Error {
   }
 }
 
+export class SalesConflictError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SalesConflictError'
+  }
+}
+
 export class InsufficientStockError extends SalesValidationError {
   constructor(
     public readonly requestedBaseQty: string,
