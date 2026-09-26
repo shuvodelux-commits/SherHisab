@@ -9,6 +9,10 @@ import type {
   PosQuantityInputDto,
   PosVendorSearchDto,
   SalesDraftDto,
+  SalesTemplateLineInputDto,
+  SalesTemplateLoadedDto,
+  SalesTemplateRecordDto,
+  SalesTemplateSummaryDto,
 } from './pos-types'
 
 const API_ROOT = '/api/private'
@@ -159,5 +163,58 @@ export function postSalesDraft(
       method: 'POST',
       body: JSON.stringify({ expectedVersion, ...input }),
     },
+  )
+}
+
+export function listSalesTemplates(): Promise<SalesTemplateSummaryDto[]> {
+  return apiRequest<SalesTemplateSummaryDto[]>(`${API_ROOT}/sales/templates`)
+}
+
+export function getSalesTemplate(templateId: string): Promise<SalesTemplateLoadedDto> {
+  return apiRequest<SalesTemplateLoadedDto>(
+    `${API_ROOT}/sales/templates/${encodeURIComponent(templateId)}`,
+  )
+}
+
+export function createSalesTemplate(input: {
+  name: string
+  lines: SalesTemplateLineInputDto[]
+}): Promise<SalesTemplateRecordDto> {
+  return apiRequest<SalesTemplateRecordDto>(`${API_ROOT}/sales/templates`, {
+    method: 'POST', body: JSON.stringify(input),
+  })
+}
+
+export function updateSalesTemplate(
+  templateId: string,
+  input: {
+    expectedVersion: number
+    name?: string
+    lines?: SalesTemplateLineInputDto[]
+  },
+): Promise<SalesTemplateRecordDto> {
+  return apiRequest<SalesTemplateRecordDto>(
+    `${API_ROOT}/sales/templates/${encodeURIComponent(templateId)}`,
+    { method: 'PATCH', body: JSON.stringify(input) },
+  )
+}
+
+export function duplicateSalesTemplate(
+  templateId: string,
+  name?: string,
+): Promise<SalesTemplateRecordDto> {
+  return apiRequest<SalesTemplateRecordDto>(
+    `${API_ROOT}/sales/templates/${encodeURIComponent(templateId)}/duplicate`,
+    { method: 'POST', body: JSON.stringify(name ? { name } : {}) },
+  )
+}
+
+export function archiveSalesTemplate(
+  templateId: string,
+  expectedVersion: number,
+): Promise<SalesTemplateRecordDto> {
+  return apiRequest<SalesTemplateRecordDto>(
+    `${API_ROOT}/sales/templates/${encodeURIComponent(templateId)}/archive`,
+    { method: 'POST', body: JSON.stringify({ expectedVersion }) },
   )
 }
