@@ -1,7 +1,7 @@
 # Simple Product Unit Conversion Design
 
 **Date:** 2026-09-26
-**Status:** Proposed for written review
+**Status:** Approved for implementation planning
 **Base:** SherHisab Mature POS v1 design and merged Task 8
 **Order:** Complete this conversion improvement before Task 9 templates.
 
@@ -18,7 +18,7 @@ The Product's existing base unit is the inventory unit. Advanced → Quantity Co
 1. **Single unit or package:** Add any number of fixed alternatives. Each row reads `1 [alternative unit] = [positive quantity] [base unit]`. A piece-based Product may have both `1 carton = 24 pieces` and `1 bag = 50 pieces`.
 2. **Mixed units:** Choose a larger unit and a smaller base unit, then enter `1 [larger unit] = [positive whole number] [smaller unit]`. The common cashier form has those two named fields. For Gauge/Gira, Gira is the base inventory unit and Gauge can be the pricing unit.
 
-Unit selectors in this Advanced section have **Add Unit** and **Edit Unit** actions. Add creates a reusable tenant Unit and selects it without closing the Product form. Edit changes the selected shared Unit's name or symbol across products; the dialog says this clearly before saving. Editing a Unit does not change any product-specific conversion ratio. These actions use the existing Unit master permission and tenant rules.
+Unit selectors in this Advanced section have **Add Unit** and **Edit Unit** actions. Add creates a reusable tenant Unit and selects it without closing the Product form. Edit changes the selected shared Unit's name or symbol across products; the dialog says this clearly before saving. Editing a Unit does not change any product-specific conversion ratio. These actions use the existing authenticated Unit routes and tenant rules.
 
 The ordinary setup does not expose component keys, fraction numerators/denominators, sort order, or remainder settings. Existing profiles that need those settings remain editable in an explicit **Advanced conversion settings** section. No existing product is silently converted or rewritten.
 
