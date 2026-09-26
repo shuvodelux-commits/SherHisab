@@ -771,6 +771,23 @@ export const salesRoutes = new Hono<AppEnv>()
       throw error
     }
   })
+  .get('/sales/templates/:templateId/edit', async (c) => {
+    if (!c.get('permissions').includes('SALES_TEMPLATE_MANAGE')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    try {
+      return await withRequestDatabase(c.env, async (database) =>
+        c.json(await new SalesTemplateService(c.get('tenantId'), database).getSaved(
+          c.req.param('templateId'),
+        )),
+      )
+    } catch (error) {
+      if (knownTemplateError(error)) {
+        return c.json({ error: error.message }, templateErrorStatus(error))
+      }
+      throw error
+    }
+  })
   .get('/sales/templates/:templateId', async (c) => {
     if (!c.get('permissions').includes('SALES_TEMPLATE_VIEW')) {
       return c.json({ error: 'Forbidden' }, 403)
