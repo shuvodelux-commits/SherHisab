@@ -154,6 +154,33 @@ describe.skipIf(!hasDatabase)('reusable sales templates', () => {
     expect(counts.rows[0]).toEqual({ sales: '0', drafts: '0' })
   })
 
+  it('allows management of a saved template after its Product becomes inactive', async () => {
+    const f = await fixture('Template Inactive Management')
+    const createdResponse = await f.request(f.ownerCookie, '', 'POST', {
+      name: 'Old package', lines: [f.line],
+    })
+    expect(createdResponse.status).toBe(201)
+    const created = await createdResponse.json() as { id: string; version: number }
+    await getPool().query(
+      'UPDATE products SET is_active = FALSE WHERE tenant_id = $1 AND id = $2',
+      [f.tenant.id, f.product.id],
+    )
+    expect((await f.request(f.ownerCookie, `/${created.id}`)).status).toBe(400)
+    const editResponse = await f.request(f.ownerCookie, `/${created.id}/edit`)
+    expect(editResponse.status).toBe(200)
+    const edit = await editResponse.json() as { lines: unknown[] }
+    expect(edit.lines).toHaveLength(1)
+    const renamed = await f.request(f.ownerCookie, `/${created.id}`, 'PATCH', {
+      expectedVersion: created.version, name: 'Renamed package',
+    })
+    expect(renamed.status).toBe(200)
+    const updated = await renamed.json() as { version: number; name: string }
+    expect(updated.name).toBe('Renamed package')
+    expect((await f.request(f.ownerCookie, `/${created.id}/archive`, 'POST', {
+      expectedVersion: updated.version,
+    })).status).toBe(200)
+  })
+
   it('keeps duplicates independent and archives templates with version checks', async () => {
     const f = await fixture('Template Lifecycle')
     const create = await f.request(f.ownerCookie, '', 'POST', {
