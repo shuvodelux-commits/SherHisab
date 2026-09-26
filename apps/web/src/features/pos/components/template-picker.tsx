@@ -295,8 +295,9 @@ export function TemplatePicker({
                         onChange={(event) => updateLine(index, {
                           ...line,
                           quantityInput: line.quantityInput.kind === 'FIXED_UNIT'
-                            ? { ...line.quantityInput, quantity: event.target.value }
-                            : { ...line.quantityInput, baseQty: event.target.value },
+                            ? { kind: 'FIXED_UNIT', unitId: line.quantityInput.unitId,
+                                quantity: event.target.value }
+                            : { kind: 'SIMPLE', baseQty: event.target.value },
                         })}
                         value={quantityLabel(line)} />
                     )}
