@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LanguageProvider } from '../../app/language'
 import { PosPage } from './pos-page'
 import { TemplatePicker } from './components/template-picker'
+import type { SalesTemplateLineInputDto } from './pos-types'
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -44,7 +45,12 @@ const loaded = {
   }],
 }
 
-function renderPicker(cartHasLines: boolean, canView = true, canOverrideSellingPrice = false) {
+function renderPicker(
+  cartHasLines: boolean,
+  canView = true,
+  canOverrideSellingPrice = false,
+  currentLines: SalesTemplateLineInputDto[] = [],
+) {
   const onLoad = vi.fn()
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -56,7 +62,7 @@ function renderPicker(cartHasLines: boolean, canView = true, canOverrideSellingP
         canManage
         canOverrideSellingPrice={canOverrideSellingPrice}
         cartHasLines={cartHasLines}
-        currentLines={[]}
+        currentLines={currentLines}
         onLoad={onLoad}
       />
     </QueryClientProvider>,
@@ -190,6 +196,41 @@ describe('TemplatePicker', () => {
       expectedVersion: 1,
       lines: [{ pricingStrategy: 'FIXED_MANUAL',
         manualUnitSellingPricePaisa: '1950' }],
+    }))
+  })
+
+  it('saves only Product and quantity defaults from the current cart', async () => {
+    let createBody: unknown = null
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input
+        : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/private/sales/templates' && init?.method === 'POST') {
+        createBody = JSON.parse(String(init.body))
+        return jsonResponse({ ...saved, status: 'ACTIVE',
+          createdByUserId: 'user-1', lines: [] }, 201)
+      }
+      if (url === '/api/private/sales/templates') return jsonResponse([])
+      return jsonResponse({ error: `Unexpected request: ${url}` }, 404)
+    }))
+    renderPicker(true, true, false, [{
+      variantId: 'variant-1', productName: 'Pipe',
+      quantityInput: { kind: 'SIMPLE', baseQty: '2' },
+      pricingStrategy: 'CURRENT_AUTO',
+      manualUnitSellingPricePaisa: '1800',
+    }])
+    fireEvent.click(screen.getByRole('button', { name: 'Templates' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save Cart as Template' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Template name' }), {
+      target: { value: 'Pipe package' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Template' }))
+    await waitFor(() => expect(createBody).toEqual({
+      name: 'Pipe package',
+      lines: [{
+        variantId: 'variant-1',
+        quantityInput: { kind: 'SIMPLE', baseQty: '2' },
+        pricingStrategy: 'CURRENT_AUTO',
+      }],
     }))
   })
 
