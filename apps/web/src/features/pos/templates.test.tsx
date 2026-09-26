@@ -234,6 +234,42 @@ describe('TemplatePicker', () => {
     }))
   })
 
+  it('renames an inactive Product Template without resubmitting its lines', async () => {
+    let updateBody: unknown = null
+    const editable = {
+      ...loaded, status: 'ACTIVE', createdByUserId: 'user-1',
+      createdAt: saved.createdAt, updatedAt: saved.updatedAt,
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input
+        : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/private/sales/templates' && !init?.method) {
+        return jsonResponse([saved])
+      }
+      if (url === '/api/private/sales/templates/template-1/edit') {
+        return jsonResponse(editable)
+      }
+      if (url === '/api/private/sales/templates/template-1' &&
+          init?.method === 'PATCH') {
+        updateBody = JSON.parse(String(init.body))
+        return jsonResponse({ ...editable, version: 2 })
+      }
+      return jsonResponse({ error: `Unexpected request: ${url}` }, 404)
+    }))
+    renderPicker(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Templates' }))
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Manage Bathroom package',
+    }))
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Template name' }), {
+      target: { value: 'Renamed package' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() => expect(updateBody).toEqual({
+      expectedVersion: 1, name: 'Renamed package',
+    }))
+  })
+
   it('loads without a warning when the cart is empty', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input
