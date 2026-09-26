@@ -745,7 +745,8 @@ export const salesRoutes = new Hono<AppEnv>()
     }
   })
   .get('/sales/templates', async (c) => {
-    if (!c.get('permissions').includes('SALES_TEMPLATE_VIEW')) {
+    if (!c.get('permissions').includes('SALES_TEMPLATE_VIEW') &&
+        !c.get('permissions').includes('SALES_TEMPLATE_MANAGE')) {
       return c.json({ error: 'Forbidden' }, 403)
     }
     return withRequestDatabase(c.env, async (database) =>
