@@ -12,7 +12,8 @@ import {
 } from '../../../components/ui/dialog'
 import {
   archiveSalesTemplate, createSalesTemplate, duplicateSalesTemplate,
-  getSalesTemplate, listSalesTemplates, searchPosProducts, updateSalesTemplate,
+  getSalesTemplate, getSalesTemplateForEdit, listSalesTemplates,
+  searchPosProducts, updateSalesTemplate,
 } from '../pos-api'
 import type {
   SalesTemplateLineInputDto, SalesTemplateLoadedDto, SalesTemplateSummaryDto,
@@ -110,11 +111,13 @@ export function TemplatePicker({
     setBusy(true)
     setError('')
     try {
-      const loaded = await getSalesTemplate(template.id)
+      const loaded = await getSalesTemplateForEdit(template.id)
       setEditor({
         id: loaded.id, version: loaded.version, name: loaded.name,
         lines: loaded.lines.map((line) => ({
           variantId: line.variantId,
+          productName: line.productName,
+          variantName: line.variantName,
           quantityInput: line.quantityInput,
           pricingStrategy: line.pricingStrategy,
           ...(line.manualUnitSellingPricePaisa === null ? {}
@@ -133,7 +136,9 @@ export function TemplatePicker({
     setSearch('')
     setEditor({
       id: null, version: null, name: '',
-      lines: fromCart ? cleanLines(currentLines) : [],
+      lines: fromCart ? currentLines.map((line) => ({
+        ...line, pricingStrategy: 'CURRENT_AUTO',
+      })) : [],
     })
   }
 
@@ -287,7 +292,9 @@ export function TemplatePicker({
               <div className="pos-template-editor-lines">
                 {editor.lines.map((line, index) => (
                   <div className="pos-template-edit-line" key={line.variantId}>
-                    <span>{line.variantId}</span>
+                    <span>{line.productName
+                      ? `${line.productName}${line.variantName ? ` · ${line.variantName}` : ''}`
+                      : line.variantId}</span>
                     {line.quantityInput.kind === 'COMPONENTS' ? (
                       <span>{quantityLabel(line)}</span>
                     ) : (
@@ -340,6 +347,8 @@ export function TemplatePicker({
                     <Button key={product.variantId}
                       onClick={() => { setEditor({ ...editor, lines: [
                         ...editor.lines, { variantId: product.variantId,
+                          productName: product.productName,
+                          variantName: product.variantName,
                           quantityInput: { kind: 'SIMPLE', baseQty: '1' },
                           pricingStrategy: 'CURRENT_AUTO' },
                       ] }); setSearch('') }}
@@ -350,7 +359,9 @@ export function TemplatePicker({
                 </div>
               ) : null}
               {cartHasLines && editor.id ? (
-                <Button onClick={() => setEditor({ ...editor, lines: cleanLines(currentLines) })}
+                <Button onClick={() => setEditor({ ...editor, lines: currentLines.map((line) => ({
+                  ...line, pricingStrategy: 'CURRENT_AUTO',
+                })) })}
                   size="sm" type="button" variant="outline">
                   Replace lines with current cart
                 </Button>
