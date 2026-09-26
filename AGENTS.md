@@ -2,19 +2,26 @@
 
 These rules apply to every coding agent working in this repository.
 
-## Mandatory Project Skill Gate
+## Focused Project Reading Gate
 
 Before writing or modifying any implementation code, every agent/subagent must follow `instruction.md`.
 
-That means, at minimum, reading:
+Read the project workflow and the requirements relevant to the task:
 
 - `.agents/skills/README.md`
-- `.agents/skills/DESIGN.md`
-- every `.agents/skills/**/SKILL.md`
-- the approved Superpowers spec/plan and execution skill
-- `SHERHISAB_UI_CODING_INSTRUCTIONS.md` for UI work
+- the approved spec/plan's global constraints and current task/dependency sections
+- the applicable execution/verification skill and skills needed for the actual changes
+- `AI_UI_DESIGN_RULES.md` for UI work
+
+Do not bulk-read every installed skill. Use `.agents/skills/README.md` to select relevant guidance; read additional files when the work requires them. Do not re-read unchanged guidance already available in the current context. `SHERHISAB_UI_CODING_INSTRUCTIONS.md` is an on-demand component reference.
 
 If any required instruction/skill file cannot be read, stop before implementation and report the blocker.
+
+## UI Quality Gate
+
+SherHisab must be a compact, polished upgrade of the user's Google Apps Script ERP. Preserve proven business workflows and improve the presentation. The current UI is not an accepted visual baseline.
+
+Follow `AI_UI_DESIGN_RULES.md` for density, typography, layout, and rendered-screen acceptance. Show a concrete POS preview for the UI reset before broad rollout. Verify realistic populated screens, responsive behavior, languages, and keyboard use. Passing tests or reading skills does not establish visual quality.
 
 ## Core Rule
 

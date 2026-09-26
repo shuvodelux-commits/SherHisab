@@ -4,6 +4,27 @@ These project-level agent skills are intentionally curated for the SherHisab ERP
 
 The rule is simple: keep only skills that directly help the approved stack and product workflow. Do not add skills just because they exist.
 
+## Read Only What the Task Needs
+
+Follow [instruction.md](../../instruction.md). Read this index once to select skills; adding a skill to the folder does not make it required for every task. Reuse guidance already read and still available in context. Load additional references when a concrete question needs them.
+
+| Work being done | Relevant guidance |
+| --- | --- |
+| UI layout or visual polish | [AI UI rules](../../AI_UI_DESIGN_RULES.md); applicable design skill, with a concrete reference and rendered review. |
+| shadcn component composition | `shadcn`; the relevant section of the [component reference](../../SHERHISAB_UI_CODING_INSTRUCTIONS.md). |
+| React rendering or component changes | `vercel-react-best-practices`. |
+| Fetching, mutations, or cache behavior | `tanstack-query`. |
+| Table behavior or state | `tanstack-table`. |
+| Routes or URL state | `tanstack-router`. |
+| SQL, schema, migrations, or database queries | `postgres-best-practices`. |
+| Domain terms or module interfaces | `domain-modeling` or `codebase-design`, as applicable. |
+| Requested architecture audit | `improve-codebase-architecture`. |
+| Accessibility/UI review | `web-design-guidelines`. |
+
+Use the applicable process skill for planning, execution, debugging, or verification. Follow the user's execution preference; currently work without subagents. Skill instructions support the task; the number of files read is never evidence that a UI is good.
+
+The UI rules are the visual authority. `DESIGN.md` is a reference map; the long component manual is consulted by section. Neither requires a separate full read before each edit.
+
 ## Installed Skills
 
 | Skill | Source | Pinned upstream commit | SherHisab use |

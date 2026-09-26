@@ -1,7 +1,8 @@
 # SherHisab Mature POS v1 Design
 
 **Date:** 2026-09-24  
-**Status:** Draft for written review  
+**Status:** Business implementation in progress; compact UI reset requested 2026-09-26; new visual baseline pending review.
+
 **Source of truth:** `shuvodelux-commits/sherERP_Mohim` `main` at `955ed448fbe3f8d37bd89d474490b776ee2c42f2`  
 **Approach:** Preserve mature SherERP business behavior, rebuild it as explicit SherHisab domains with PostgreSQL transactions, tenant isolation, audit history, and a cleaner compact UI.
 
@@ -39,9 +40,9 @@ Approved major improvements over legacy:
 - Idempotency keys for sale and return submission.
 - Server-side Product search instead of loading only a small first page and filtering locally.
 
-## 3. Legacy UI Contract to Preserve
+## 3. Workflow to Preserve; Presentation to Improve
 
-The mature desktop POS remains a two-workspace screen inspired by the current SherERP POS.
+The mature desktop POS retains the two-workspace counter flow from SherERP. Its old styling and the current SherHisab implementation are not accepted visual targets. The new interface must be a visibly polished, compact upgrade.
 
 ### Left: Add Product
 
@@ -87,7 +88,25 @@ Contains:
 - Save Draft;
 - Complete Sale.
 
-The new UI uses SherHisab compact shadcn/TanStack conventions and brand tokens, but should not change the counter workflow merely for visual novelty.
+Use [AI_UI_DESIGN_RULES.md](../../../AI_UI_DESIGN_RULES.md) as the visual authority. Keep these capabilities available while improving grouping, alignment, density, and progressive disclosure. This inventory does not require every secondary action or optional editor to remain expanded.
+
+### 3A. Compact UI Reset and Acceptance
+
+**User direction, 2026-09-26:** the existing visual result is unsatisfactory. SherHisab must be the compact, polished successor to the Google Apps Script ERP. Completing Tasks 1–9 functionally does not establish visual acceptance.
+
+Task 9A in the implementation plan now precedes Task 10. Its first deliverable is a representative, populated POS preview for visual review. After that baseline is accepted, apply its shared patterns to POS and the Products table/form before extending them to later modules.
+
+Required improvements:
+
+- One compact page heading/toolbar and useful working space; remove repeated headings, unnecessary wrappers, and permanently expanded optional controls.
+- Readable 14px operational text, 34–36px desktop controls, and 36–40px ordinary table rows, with the responsive/content exceptions defined in the UI rules.
+- Clear Product search, Customer selection, aligned Cart columns, grouped payments/totals, and one primary Complete Sale action.
+- Compact Draft/Template entry points; management on demand. Keep Guardian/Address optional and required conversion/tracking/shortage work beside the affected line.
+- Consistent shared primitives, Geist/SolaimanLipi typography, neutral surfaces, restrained blue, keyboard access, and all existing language/theme modes.
+
+Acceptance follows the UI rulebook: comparable before/after screenshots, realistic ordinary and complex sales, desktop/tablet/mobile and zoom checks, and correction of visible defects. Never hide required information or shrink text to meet a viewport target. Record functional verification and the user's acceptance of the visual baseline separately.
+
+Business rules in the remaining sections are unchanged by this presentation update.
 
 ## 4. POS Product Search
 

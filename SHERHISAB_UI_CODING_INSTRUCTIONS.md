@@ -1,13 +1,15 @@
-# SherHisab UI Coding Instructions
+# SherHisab UI Component Reference
+
+> **Updated reading policy — 2026-09-26:** Read [AI_UI_DESIGN_RULES.md](AI_UI_DESIGN_RULES.md) first. This long manual is an on-demand component reference. Read only the section needed for the task. The AI UI rules supersede conflicting visual prescriptions here; this manual does not require a full read.
 
 > Professional multi-tenant ERP SaaS for Bangladesh  
 > Product principle: **DON'T COMPLICATE. MAKE IT EASY FOR ALL.**
 
 ## 1. Purpose
 
-This file is the implementation authority for SherHisab UI work.
+This file supplies component details under the visual authority of `AI_UI_DESIGN_RULES.md`.
 
-Use it whenever creating or modifying:
+Consult the relevant section when creating or modifying:
 
 - application shell
 - sidebar/navigation
@@ -33,46 +35,11 @@ Preserve familiar workflows where they are proven, but make the new SaaS cleaner
 
 ---
 
-# 2. Required Design References
+# 2. Design Reference Roles
 
-Before implementing UI, read these files when available:
+Use [AI_UI_DESIGN_RULES.md](AI_UI_DESIGN_RULES.md) for compact layout, typography, density, and visual acceptance. Use the latest user-accepted preview as the concrete screen target and the corresponding legacy feature as the business workflow reference.
 
-```text
-DESIGN.md
-Tailark_DESIGN.md
-```
-
-Reference roles:
-
-### Primary reference: `Tailark_DESIGN.md`
-
-Use Tailark as the primary source for:
-
-- compact typography
-- 4px spacing rhythm
-- 6px controls
-- hairline borders
-- white / near-white surfaces
-- restrained visual hierarchy
-- shadcn-like component treatment
-- dense professional UI
-- low-noise layout
-- precise table/filter/form styling
-
-### Secondary reference: `DESIGN.md`
-
-Use Dub selectively for:
-
-- blue accent discipline
-- border-first surfaces
-- minimal shadows
-- soft active navigation state
-- restrained semantic color
-- flat professional SaaS appearance
-
-Do **not** copy either reference literally.
-
-SherHisab must remain its own ERP product.
+[.agents/skills/DESIGN.md](.agents/skills/DESIGN.md) is a short reference map. Tailark/Dub examples are optional inspiration for specific component details; they are not the ERP layout authority. Do not import marketing/gallery spacing or require a missing `Tailark_DESIGN.md` file.
 
 ---
 
@@ -3534,8 +3501,8 @@ Before completing UI work, verify:
 
 For every UI implementation:
 
-1. Read this file.
-2. Review `DESIGN.md` and `Tailark_DESIGN.md` when available.
+1. Read `AI_UI_DESIGN_RULES.md`; consult only relevant sections of this manual.
+2. Follow the focused reading gate in `instruction.md` and compare with the accepted visual target.
 3. Inspect the existing SherHisab shared components before adding new ones.
 4. Reuse shadcn/ui primitives.
 5. Reuse shared SherHisab components.
@@ -3551,20 +3518,20 @@ For every UI implementation:
    - `pnpm build`
    - `git diff --check`
    - `git status --short`
-13. Do not push unverified code.
-14. Report all changed files.
+13. Follow GitHub-first development: tests and implementation on the branch, green CI and diff review before merge, then local verification before deployment.
+14. Report changed files, rendered visual evidence, and any pending visual acceptance.
 
 ---
 
 # 43. Visual QA Checklist
 
-Before marking any UI task complete, compare the rendered screen against this design system.
+Before marking any UI task complete, perform the rendered checks in `AI_UI_DESIGN_RULES.md` and compare with the accepted screen target. Use this checklist for the relevant components.
 
 Check:
 
 ### Typography
-- Inter used consistently
-- Bangla helper smaller and muted
+- Geist Variable used consistently for English; Inter is fallback only
+- SolaimanLipi Bangla helpers remain readable at 14px with sufficient contrast
 - page titles not oversized
 - table text compact
 - numeric columns aligned
@@ -3613,18 +3580,18 @@ Check:
 
 # 44. Reference Lock
 
-Use this as the final visual reference lock for SherHisab.
+This summary is subordinate to `AI_UI_DESIGN_RULES.md` and the latest user-accepted preview.
 
 ```text
 Primary design foundation:
-Tailark Pro compact component system
+SherHisab compact ERP rules and user-accepted screen preview
 
-Secondary visual influence:
-Dub border-first SaaS system
+Supporting references:
+Legacy business workflow and existing accessible shared components
 
 Typography:
-Inter for English/UI
-SolaimanLipi for Bangla
+Geist Variable for English/UI; Inter fallback
+SolaimanLipi for Bangla; Noto Sans Bengali fallback
 Geist Mono / JetBrains Mono only for technical IDs
 
 Brand accent:
@@ -3678,9 +3645,9 @@ When design references conflict with proven SherERP business workflow:
 
 > **Preserve the workflow. Improve the presentation.**
 
-When Tailark and Dub conflict:
+When older component or gallery guidance conflicts:
 
-> **Use Tailark for structure and typography. Use Dub for blue accent discipline and flatter border-first surfaces.**
+> **Follow `AI_UI_DESIGN_RULES.md` and the accepted screen target.**
 
 When a design choice makes the UI prettier but slower or harder for ordinary shop owners:
 

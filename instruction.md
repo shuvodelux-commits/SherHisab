@@ -35,102 +35,30 @@ For every feature, bug fix, refactor, business-rule change, API change, database
 
 The local workstation is primarily the verification, database, deployment, and runtime environment. Do not create an alternate implementation locally and push it later unless GitHub editing is unavailable or the user explicitly approves an exception.
 
-## Mandatory Pre-Code Skill Gate
+## Focused Pre-Code Reading Gate
 
-**Before writing, modifying, generating, or applying any implementation code, the agent MUST read the SherHisab project skills first.**
+Before implementation, read `AGENTS.md`, this file, and `.agents/skills/README.md`. Then read the approved spec/plan's global constraints, the current task, and the business/dependency sections needed to implement it correctly.
 
-This gate applies to:
+Select skills for the work being changed: database guidance for SQL, query guidance for fetching, table guidance for table behavior, and so on. Read a selected skill's instructions and follow its applicable references. Do not load every installed skill or unrelated reference directory as a ritual. Adding a skill does not expand mandatory reading for unrelated tasks.
 
-- application code;
-- tests;
-- database migrations;
-- API routes/services/repositories;
-- React components;
-- CSS and UI code;
-- runtime/deployment configuration;
-- refactors;
-- bug fixes;
-- generated code that will be committed.
+Read unchanged guidance once while it remains available in context. Re-read when it changed, context was lost, or a specific question needs it. A task spanning domains needs the relevant guidance for each affected domain.
 
-Documentation-only work may be performed before this gate when it does not change executable behavior.
+This gate applies to application code, tests, migrations, UI, configuration, generated code, and refactors. Documentation-only work may be performed before the implementation gate when it does not change executable behavior.
 
-### Required reading order
+If a file genuinely required for the task cannot be read, report the exact missing file before implementation. An unavailable optional design gallery or unrelated skill is not a blocker.
 
-Before implementation begins, read all of the following in full:
+## UI Direction and Acceptance
 
-1. `AGENTS.md`
-2. this file: `instruction.md`
-3. `.agents/skills/README.md`
-4. `.agents/skills/DESIGN.md`
-5. **every** project skill file matching:
-   ```text
-   .agents/skills/**/SKILL.md
-   ```
-6. the approved Superpowers design/spec and implementation plan for the current task;
-7. the Superpowers skill required for the current execution phase;
-8. for frontend/UI work, `SHERHISAB_UI_CODING_INSTRUCTIONS.md`.
+Read [AI_UI_DESIGN_RULES.md](AI_UI_DESIGN_RULES.md) for UI work. It is the single visual rulebook: compact, readable, polished ERP screens that improve the user's Google Apps Script ERP workflows.
 
-The repository folder is **`.agents/skills/`**. Use this exact path and casing.
-
-### "Read all skills" means all skills
-
-Do not read only the skill that appears immediately relevant.
-
-Before code is written, discover and read every current `SKILL.md` under `.agents/skills/`.
-
-At the time this rule was added, the curated skill set includes:
-
-- `.agents/skills/codebase-design/SKILL.md`
-- `.agents/skills/domain-modeling/SKILL.md`
-- `.agents/skills/frontend-design/SKILL.md`
-- `.agents/skills/improve-codebase-architecture/SKILL.md`
-- `.agents/skills/postgres-best-practices/SKILL.md`
-- `.agents/skills/tanstack-query/SKILL.md`
-- `.agents/skills/tanstack-router/SKILL.md`
-- `.agents/skills/tanstack-table/SKILL.md`
-- `.agents/skills/vercel-react-best-practices/SKILL.md`
-- `.agents/skills/web-design-guidelines/SKILL.md`
-
-This list is descriptive, not exhaustive. If another `SKILL.md` is added later, it automatically becomes mandatory reading before implementation.
-
-## Skill Application Rule
-
-Reading every project skill does not mean forcing every technique into every task.
-
-After reading all skills:
-
-1. identify which rules are relevant to the current task;
-2. apply those relevant rules;
-3. do not introduce unnecessary architecture, packages, abstraction, or UI complexity merely because a skill describes them;
-4. keep SherHisab product decisions and approved design documents authoritative.
-
-The purpose of the skill gate is to improve implementation quality and consistency, not to complicate the product.
-
-## DESIGN.md Is Mandatory for UI
-
-Before any UI, layout, component styling, typography, table, form, modal, navigation, responsive behavior, theme, or visual change:
-
-**Read `.agents/skills/DESIGN.md` again for the task, even if it was already read earlier in the session.**
-
-Also read:
-
-`SHERHISAB_UI_CODING_INSTRUCTIONS.md`
-
-UI implementation must preserve SherHisab's approved direction:
-
-- Inter for English/UI;
-- Noto Sans Bengali for Bangla;
-- compact information density;
-- sharp typography;
-- restrained SherHisab blue;
-- neutral surfaces;
-- hairline borders;
-- minimal shadows;
-- shadcn/Radix-style primitives;
-- TanStack Table for operational tables;
-- English + Bangla helper as the default language mode;
-- no generic AI-dashboard decoration;
-- no unnecessary large cards, gradients, excessive rounding, or wasted whitespace.
+- `.agents/skills/DESIGN.md` maps references; it is not another visual specification.
+- `SHERHISAB_UI_CODING_INSTRUCTIONS.md` is a component reference. Read the needed section only.
+- Use Geist Variable for English and SolaimanLipi for Bangla, with the fallbacks defined in the UI rules.
+- Inspect existing shared components and the corresponding legacy workflow before changing them.
+- Keep the design brief short and specific to the user's work. Preserve required business information while reducing repeated labels, padding, wrappers, and permanently expanded optional controls.
+- For the UI reset, show a concrete populated POS preview and record visual acceptance before broad rollout. Reuse that accepted pattern for later screens.
+- Inspect rendered screens at the defined viewports, with real or representative data, language modes, themes, keyboard use, and error states. Capture comparable before/after evidence and correct visible defects.
+- Report functional verification and visual acceptance separately. Reading skills and passing automated tests do not prove the screen looks good.
 
 ## Existing SherERP Feature Rule
 
@@ -159,50 +87,17 @@ For approved implementation plans:
 - use systematic debugging for failures;
 - use verification-before-completion before reporting success.
 
-No agent may skip the project skill gate because a Superpowers plan already exists.
+Use the focused reading gate above. Follow the user's current execution preference: continue without subagents unless they change it.
 
-Both are required:
-
-```text
-Project skills + DESIGN.md
-        ↓
-Approved Superpowers spec/plan
-        ↓
-TDD implementation
-        ↓
-Task review
-        ↓
-Full verification
-```
-
-## Pre-Code Confirmation
-
-Before the first implementation edit of a task/session, the implementing agent must be able to state that it has read:
-
-- `AGENTS.md`;
-- `instruction.md`;
-- `.agents/skills/README.md`;
-- `.agents/skills/DESIGN.md`;
-- every `.agents/skills/**/SKILL.md`;
-- the approved task spec;
-- the approved implementation plan;
-- the required Superpowers execution skill;
-- `SHERHISAB_UI_CODING_INSTRUCTIONS.md` when UI is involved.
-
-If any required file cannot be read, **do not write implementation code**. Report the blocker first.
+Before the first implementation edit, identify the task's requirements, relevant guidance, affected files, and verification needed. Keep this brief; do not narrate a long reading inventory.
 
 ## Instruction Precedence Inside the Repository
 
-When project guidance conflicts, use this order:
+The user's explicit current requirement takes precedence over repository guidance. `AGENTS.md` and this file govern the development workflow; the approved feature spec governs business behavior; `AI_UI_DESIGN_RULES.md` governs visual design. Relevant plan steps implement those requirements.
 
-1. the user's explicit approved requirement for the current task;
-2. the approved SherHisab design/spec and implementation plan;
-3. `AGENTS.md` and `instruction.md`;
-4. `.agents/skills/DESIGN.md` and `SHERHISAB_UI_CODING_INSTRUCTIONS.md` for UI decisions;
-5. project `SKILL.md` guidance;
-6. generic framework/library conventions.
+The UI rules supersede older visual prescriptions in plans, gallery references, and the component manual. They do not silently change business behavior. Surface an actual business/design conflict before changing the workflow.
 
-Third-party skill files are guidance. They must not override an explicit SherHisab product decision.
+Third-party skills and generic framework conventions support these decisions. They must not override explicit SherHisab product requirements.
 
 ## Verification Gate
 
