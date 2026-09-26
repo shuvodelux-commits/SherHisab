@@ -81,6 +81,9 @@ describe.skipIf(!hasDatabase)('reusable sales templates', () => {
 
   it('separates view and manage permissions for Staff', async () => {
     const f = await fixture('Template Permissions')
+    expect((await f.request(f.ownerCookie, '/not-a-uuid/archive', 'POST', {
+      expectedVersion: 1,
+    })).status).toBe(400)
     const savedResponse = await f.request(f.ownerCookie, '', 'POST', {
       name: 'Standard package', lines: [f.line],
     })
