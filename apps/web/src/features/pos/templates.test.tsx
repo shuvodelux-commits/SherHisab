@@ -44,7 +44,7 @@ const loaded = {
   }],
 }
 
-function renderPicker(cartHasLines: boolean) {
+function renderPicker(cartHasLines: boolean, canView = true) {
   const onLoad = vi.fn()
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -52,6 +52,7 @@ function renderPicker(cartHasLines: boolean) {
   render(
     <QueryClientProvider client={queryClient}>
       <TemplatePicker
+        canView={canView}
         canManage
         cartHasLines={cartHasLines}
         currentLines={[]}
@@ -132,6 +133,23 @@ describe('TemplatePicker', () => {
     expect(screen.getByRole('textbox', { name: 'Customer Name' })).toHaveValue('')
     expect(screen.getByRole('textbox', { name: 'Payment amount 1' })).toHaveValue('')
     expect(screen.getByText('Pipe')).toBeInTheDocument()
+  })
+
+  it('shows management without offering cart load to a manager-only user', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input
+        : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/private/sales/templates') return jsonResponse([saved])
+      return jsonResponse({ error: 'Unexpected request' }, 404)
+    }))
+    renderPicker(false, false)
+    fireEvent.click(screen.getByRole('button', { name: 'Templates' }))
+    expect(await screen.findByRole('button', {
+      name: 'Manage Bathroom package',
+    })).toBeInTheDocument()
+    expect(screen.queryByRole('button', {
+      name: 'Bathroom package · 1 items',
+    })).not.toBeInTheDocument()
   })
 
   it('loads without a warning when the cart is empty', async () => {
