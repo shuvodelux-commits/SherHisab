@@ -4,7 +4,7 @@ import { withDatabaseTransaction } from '../../db/transaction'
 import Decimal from 'decimal.js'
 import { PosRepository } from '../pos/pos.repository'
 import { ConversionService } from '../products/conversion.service'
-import type { ConversionProfileSnapshot } from '../products/conversion.types'
+import type { ConversionProfileSnapshot, FixedUnitSnapshot } from '../products/conversion.types'
 import { SalesDraftAccessError, SalesDraftVersionConflictError } from './sales-draft.errors'
 import { SalesDraftRepository } from './sales-draft.repository'
 import { SalesRepository } from './sales.repository'
@@ -452,6 +452,7 @@ export class SalesDraftService {
               baseQty: line.quantityInput.kind === 'SIMPLE'
                 ? line.quantityInput.baseQty
                 : line.normalizedQuantitySnapshot.baseQty,
+              quantityInput: line.quantityInput,
               ...(line.pricingMode === 'MANUAL'
                 ? { manualUnitSellingPricePaisa: line.manualUnitSellingPricePaisa! }
                 : {}),
@@ -537,16 +538,28 @@ export class SalesDraftService {
         validateSimpleQuantity(line)
         continue
       }
+      const variant = await products.findVariantContext(this.tenantId, line.variantId)
+      if (!variant) throw new Error('Draft Product Variant is unavailable.')
+      if (line.quantityInput.kind === 'FIXED_UNIT') {
+        const saved = line.normalizedQuantitySnapshot.fixedUnitSnapshot as FixedUnitSnapshot | null
+        if (!saved || saved.productId !== variant.productId || saved.unitId !== line.quantityInput.unitId) {
+          throw new Error('Draft fixed-unit conversion snapshot does not match this Product.')
+        }
+        const activeProfile = await conversions.getActiveProfile(variant.productId)
+        const current = await conversions.normalize(line.quantityInput, activeProfile ?? undefined, variant.productId)
+        if (!new Decimal(current.fixedUnitSnapshot!.conversionToBase).eq(saved.conversionToBase) ||
+            !new Decimal(current.baseQty).eq(line.normalizedQuantitySnapshot.baseQty) ||
+            !new Decimal(current.pricingQty).eq(line.normalizedQuantitySnapshot.pricingQty)) {
+          throw new Error('Draft fixed-unit conversion ratio changed; review the quantity before posting.')
+        }
+        continue
+      }
       const savedProfile = line.normalizedQuantitySnapshot
         .snapshot as ConversionProfileSnapshot | null
       if (!savedProfile) {
         throw new Error('Draft conversion snapshot is missing; reload the Draft before posting.')
       }
 
-      const variant = await products.findVariantContext(
-        this.tenantId,
-        line.variantId,
-      )
       if (!variant || savedProfile.productId !== variant.productId) {
         throw new Error('Draft conversion snapshot does not match this Product Variant.')
       }
@@ -556,6 +569,9 @@ export class SalesDraftService {
       )
       if (!activeProfile) {
         throw new Error('Draft conversion profile is no longer compatible with this Product.')
+      }
+      if (activeProfile.id !== savedProfile.id || activeProfile.version !== savedProfile.version) {
+        throw new Error('Draft conversion profile changed; review the quantity before posting.')
       }
 
       let currentQuantity
@@ -573,7 +589,7 @@ export class SalesDraftService {
       if (
         !new Decimal(currentQuantity.baseQty).eq(
           line.normalizedQuantitySnapshot.baseQty,
-        )
+        ) || !new Decimal(currentQuantity.pricingQty).eq(line.normalizedQuantitySnapshot.pricingQty)
       ) {
         throw new Error('Draft conversion changed; reload the Draft and review its quantity before posting.')
       }

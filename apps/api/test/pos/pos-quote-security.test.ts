@@ -211,6 +211,30 @@ describe.skipIf(!hasDatabase)('POS cost privacy', () => {
     await closePool()
   })
 
+  it('quotes a fixed alternative using the Product ratio and rejects an unrelated unit', async () => {
+    const fixture = await createSecurityFixture('POS Fixed Quote')
+    const products = new ProductMasterService(fixture.tenant.id, getPool())
+    const carton = await products.createUnit({ name: 'Carton', symbol: 'ctn' })
+    const unrelated = await products.createUnit({ name: 'Unrelated', symbol: 'other' })
+    await products.replaceAlternativeUnits(fixture.product.id, [
+      { unitId: carton.id, conversionMode: 'FIXED', conversionToBase: '24' },
+    ])
+    const quote = async (unitId: string) => app.request(
+      'http://localhost/api/private/pos/quote-line',
+      { method: 'POST', headers: { cookie: fixture.staffCookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ variantId: fixture.product.defaultVariantId, quantity: {
+          kind: 'FIXED_UNIT', unitId, quantity: '2', conversionToBase: '1',
+        } }),
+      },
+    )
+    const valid = await quote(carton.id)
+    expect(valid.status).toBe(200)
+    expect(await valid.json()).toMatchObject({
+      baseQty: '48', fixedUnitOptions: [expect.objectContaining({ unitId: carton.id, conversionToBase: '24' })],
+    })
+    expect((await quote(unrelated.id)).status).toBe(400)
+  })
+
   it('omits every cost field when both cost-reveal gates are absent', async () => {
     const fixture = await createSecurityFixture('POS Cost Neither')
     const payloads = await readPosPayloads(

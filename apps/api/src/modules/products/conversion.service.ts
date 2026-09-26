@@ -375,7 +375,43 @@ export class ConversionService {
   async normalize(
     input: QuantityInput,
     snapshotOverride?: ConversionProfileSnapshot,
+    productId?: string,
   ): Promise<NormalizedQuantity> {
+    if (input.kind === 'FIXED_UNIT') {
+      if (!productId) {
+        throw new ProductValidationError('Product is required for fixed-unit quantity')
+      }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.unitId)) {
+        throw new ProductValidationError('Fixed unit ID is invalid')
+      }
+      const quantity = decimalQuantity(input.quantity, 'Quantity')
+      if (quantity.lte(0)) {
+        throw new ProductValidationError('Quantity must be greater than zero')
+      }
+      const unit = await new ConversionRepository(this.database).findFixedUnit(
+        this.tenantId, productId, input.unitId,
+      )
+      if (!unit) {
+        throw new ProductValidationError('Fixed unit is not active for this Product')
+      }
+      const baseQty = quantity.times(unit.conversionToBase)
+      const pricingQty = snapshotOverride
+        ? baseQty.times(snapshotOverride.pricingBaseFactorDenominator)
+            .div(snapshotOverride.pricingBaseFactorNumerator)
+        : baseQty
+      return {
+        baseQty: decimalString(baseQty),
+        pricingQty: decimalString(pricingQty),
+        displayQty: decimalString(quantity),
+        components: {},
+        snapshot: snapshotOverride ?? null,
+        fixedUnitSnapshot: {
+          productId, unitId: input.unitId, unitName: unit.unitName,
+          unitSymbol: unit.unitSymbol, quantity: decimalString(quantity),
+          conversionToBase: unit.conversionToBase,
+        },
+      }
+    }
     if (input.kind === 'SIMPLE') {
       const baseQty = decimalQuantity(
         input.baseQty,

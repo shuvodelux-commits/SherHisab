@@ -98,6 +98,9 @@ export interface ProductAdvancedFormState {
   warrantyText: string
   captureFields: CaptureFieldFormRow[]
   conversionEnabled: boolean
+  conversionEditorMode: 'GUIDED' | 'ADVANCED'
+  conversionGuidedUnitId: string
+  conversionGuidedRatio: string
   conversionType: ConversionProfileType
   conversionPricingUnitId: string
   conversionPricingFactorNumerator: string
@@ -137,6 +140,9 @@ export function emptyAdvancedFormState(
     warrantyText: '',
     captureFields: [],
     conversionEnabled: false,
+    conversionEditorMode: 'GUIDED',
+    conversionGuidedUnitId: '',
+    conversionGuidedRatio: '',
     conversionType: 'COMPOUND',
     conversionPricingUnitId: '',
     conversionPricingFactorNumerator: '1',
@@ -177,6 +183,20 @@ export function advancedFormStateFromProduct(
   }
 
   const conversion = advanced.conversionProfile
+  const orderedComponents = [...(conversion?.components ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
+  const larger = orderedComponents[0]
+  const smaller = orderedComponents[1]
+  const guidedConversion = Boolean(conversion?.type === 'COMPOUND' &&
+    orderedComponents.length === 2 && larger && smaller &&
+    larger.unitId === conversion.pricingUnitId && smaller.unitId === conversion.baseUnitId &&
+    larger.baseFactorDenominator === '1' && smaller.baseFactorDenominator === '1' &&
+    larger.baseFactorNumerator === conversion.pricingBaseFactorNumerator &&
+    smaller.baseFactorNumerator === '1' &&
+    conversion.pricingBaseFactorDenominator === '1' &&
+    larger.minValue === '0' && smaller.minValue === '0' &&
+    larger.maxExclusive === null && smaller.maxExclusive === larger.baseFactorNumerator &&
+    !larger.allowFraction && !smaller.allowFraction &&
+    !larger.autoNormalizeRemainder && !smaller.autoNormalizeRemainder)
 
   const warranty = advanced.warrantyPolicy
 
@@ -200,6 +220,9 @@ export function advancedFormStateFromProduct(
         required: field.required,
       })) ?? [],
     conversionEnabled: Boolean(conversion),
+    conversionEditorMode: conversion && !guidedConversion ? 'ADVANCED' : 'GUIDED',
+    conversionGuidedUnitId: guidedConversion ? larger!.unitId : '',
+    conversionGuidedRatio: guidedConversion ? larger!.baseFactorNumerator : '',
     conversionType: conversion?.type ?? 'COMPOUND',
     conversionPricingUnitId: conversion?.pricingUnitId ?? '',
     conversionPricingFactorNumerator:
@@ -263,6 +286,7 @@ export function advancedFormStateFromProduct(
 export function buildAdvancedPayload(
   state: ProductAdvancedFormState,
   baseUnitId: string,
+  units: ProductUnitDto[] = [],
 ): AdvancedProductConfigurationInput {
   const options: VariantOptionInput[] = state.variantOptions
     .filter((option) => option.name.trim() || option.valuesText.trim())
@@ -289,6 +313,14 @@ export function buildAdvancedPayload(
     state.conversionDisplayPrecision || '2',
     10,
   )
+
+  const guidedUnitIds = [state.conversionGuidedUnitId, baseUnitId]
+  const guidedKeys = guidedUnitIds.map((unitId) => {
+    const unit = units.find((item) => item.id === unitId)
+    return (unit?.symbol ?? unit?.name ?? '').trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+  })
+  const useNamedGuidedKeys = guidedKeys.every(Boolean) && guidedKeys[0] !== guidedKeys[1]
 
   const warrantyDurationValue = Number.parseInt(
     state.warrantyDurationValue || '0',
@@ -319,17 +351,33 @@ export function buildAdvancedPayload(
     })),
     conversionProfile: state.conversionEnabled
       ? {
-          type: state.conversionType,
+          type: state.conversionEditorMode === 'GUIDED' ? 'COMPOUND' : state.conversionType,
           baseUnitId,
-          pricingUnitId: state.conversionPricingUnitId,
+          pricingUnitId: state.conversionEditorMode === 'GUIDED'
+            ? state.conversionGuidedUnitId : state.conversionPricingUnitId,
           pricingBaseFactorNumerator:
-            state.conversionPricingFactorNumerator,
+            state.conversionEditorMode === 'GUIDED'
+              ? state.conversionGuidedRatio : state.conversionPricingFactorNumerator,
           pricingBaseFactorDenominator:
-            state.conversionPricingFactorDenominator,
+            state.conversionEditorMode === 'GUIDED'
+              ? '1' : state.conversionPricingFactorDenominator,
           displayPrecision: Number.isFinite(displayPrecision)
             ? displayPrecision
             : 2,
-          components: state.conversionComponents.map(
+          components: state.conversionEditorMode === 'GUIDED'
+            ? guidedUnitIds.map((unitId, index) => {
+                const unit = units.find((item) => item.id === unitId)
+                const label = unit?.name ?? (index === 0 ? 'Larger unit' : 'Base unit')
+                return {
+                  key: useNamedGuidedKeys ? guidedKeys[index]! : (index === 0 ? 'larger' : 'base'),
+                  label, unitId,
+                  baseFactorNumerator: index === 0 ? state.conversionGuidedRatio : '1',
+                  baseFactorDenominator: '1', sortOrder: index, minValue: '0',
+                  maxExclusive: index === 0 ? null : state.conversionGuidedRatio,
+                  allowFraction: false, autoNormalizeRemainder: false,
+                }
+              })
+            : state.conversionComponents.map(
             (component, index) => ({
               key: component.componentKey.trim(),
               label: component.label.trim(),
@@ -376,6 +424,8 @@ interface ProductAdvancedFieldsProps {
   onChange: (state: ProductAdvancedFormState) => void
   units: ProductUnitDto[]
   baseUnitId: string
+  onAddUnit?: (target: 'conversion' | number) => void
+  onEditUnit?: (unitId: string) => void
 }
 
 export function ProductAdvancedFields({
@@ -383,6 +433,8 @@ export function ProductAdvancedFields({
   onChange,
   units,
   baseUnitId,
+  onAddUnit,
+  onEditUnit,
 }: ProductAdvancedFieldsProps) {
   const { mode } = useLanguageMode()
   const t = (en: string, bn: string) => (mode === 'bn' ? bn : en)
@@ -879,7 +931,52 @@ export function ProductAdvancedFields({
         </label>
 
         {state.conversionEnabled ? (
+          <>
+          {state.conversionEditorMode === 'GUIDED' ? (
+            <div className="product-variant-editor">
+              <div className="product-inline-grid">
+                <label className="product-field">
+                  <BilingualLabel en="Larger unit" bn="বড় একক" />
+                  <Select value={state.conversionGuidedUnitId || SELECT_NONE}
+                    onValueChange={(value) => {
+                      if (value) patch({ conversionGuidedUnitId: value === SELECT_NONE ? '' : value })
+                    }}>
+                    <SelectTrigger aria-label={t('Larger unit', 'বড় একক')} className="product-select"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectGroup>
+                      <SelectItem value={SELECT_NONE}>{t('Select unit', 'একক নির্বাচন করুন')}</SelectItem>
+                      {units.filter((unit) => unit.isActive && unit.id !== baseUnitId).map((unit) => (
+                        <SelectItem key={unit.id} value={unit.id}>{unit.name}{unit.symbol ? ` (${unit.symbol})` : ''}</SelectItem>
+                      ))}
+                    </SelectGroup></SelectContent>
+                  </Select>
+                </label>
+                <label className="product-field">
+                  <BilingualLabel en="Units per larger unit" bn="বড় এককে ছোট এককের সংখ্যা" />
+                  <Input aria-label={t('Units per larger unit', 'বড় এককে ছোট এককের সংখ্যা')}
+                    inputMode="numeric" min="1" value={state.conversionGuidedRatio}
+                    onChange={(event) => patch({ conversionGuidedRatio: event.target.value })} />
+                </label>
+              </div>
+              <p>1 {units.find((unit) => unit.id === state.conversionGuidedUnitId)?.name ?? t('larger unit', 'বড় একক')} = {state.conversionGuidedRatio || '…'} {units.find((unit) => unit.id === baseUnitId)?.name ?? t('base unit', 'মূল একক')}</p>
+              <div className="product-inline-grid">
+                <Button size="sm" variant="secondary" onClick={() => onAddUnit?.('conversion')}>
+                  {t('Add Unit for conversion', 'রূপান্তরের জন্য একক যোগ করুন')}
+                </Button>
+                {state.conversionGuidedUnitId ? (
+                  <Button size="sm" variant="ghost" onClick={() => onEditUnit?.(state.conversionGuidedUnitId)}>
+                    {t('Edit selected Unit', 'নির্বাচিত একক সম্পাদনা করুন')}
+                  </Button>
+                ) : null}
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => patch({ conversionEditorMode: 'ADVANCED' })}>
+                {t('Advanced conversion settings', 'উন্নত রূপান্তর সেটিংস')}
+              </Button>
+            </div>
+          ) : (
           <div className="product-variant-editor">
+            <Button size="sm" variant="ghost" onClick={() => patch({ conversionEditorMode: 'GUIDED' })}>
+              {t('Use simple mixed setup', 'সহজ মিশ্র একক ব্যবহার করুন')}
+            </Button>
             <div className="product-inline-grid">
               <label className="product-field">
                 <BilingualLabel
@@ -1359,6 +1456,8 @@ export function ProductAdvancedFields({
               </div>
             ))}
           </div>
+          )}
+          </>
         ) : null}
       </section>
 
@@ -1371,8 +1470,8 @@ export function ProductAdvancedFields({
             <p>
               <BilingualLabel
                 layout="stacked"
-                en="Use a fixed conversion or record the actual quantity later."
-                bn="নির্দিষ্ট রূপান্তর ব্যবহার করুন অথবা পরে প্রকৃত পরিমাণ লিখুন।"
+                en="For example, 1 carton = 24 pieces. Add as many package sizes as this Product needs."
+                bn="যেমন ১ কার্টন = ২৪ পিস। প্রয়োজনমতো একাধিক প্যাকের একক যোগ করুন।"
               />
             </p>
           </div>
@@ -1397,12 +1496,13 @@ export function ProductAdvancedFields({
             variant="secondary"
           >
             <Plus aria-hidden="true" data-icon="inline-start" />
-            {t('Add Unit', 'একক যোগ করুন')}
+            {t('Add alternative unit', 'বিকল্প একক যোগ করুন')}
           </Button>
         </div>
 
         {state.alternativeUnits.map((row, index) => (
           <div className="product-inline-grid" key={row.key}>
+            <span className="product-variable-unit-note">1 {units.find((unit) => unit.id === row.unitId)?.name ?? t('unit', 'একক')} = {row.conversionToBase || '…'} {units.find((unit) => unit.id === baseUnitId)?.name ?? t('base unit', 'মূল একক')}</span>
             <label className="product-field">
               <BilingualLabel en="Unit" bn="একক" />
               <Select
@@ -1446,6 +1546,15 @@ export function ProductAdvancedFields({
                 </SelectContent>
               </Select>
             </label>
+
+            <Button size="sm" variant="ghost" onClick={() => onAddUnit?.(index)}>
+              {t(`Add Unit for alternative ${index + 1}`, `বিকল্প ${index + 1} একক যোগ করুন`)}
+            </Button>
+            {row.unitId ? (
+              <Button size="sm" variant="ghost" onClick={() => onEditUnit?.(row.unitId)}>
+                {t(`Edit alternative Unit ${index + 1}`, `বিকল্প ${index + 1} একক সম্পাদনা করুন`)}
+              </Button>
+            ) : null}
 
             <label className="product-field">
               <BilingualLabel en="Conversion" bn="রূপান্তর" />

@@ -15,6 +15,7 @@ export class SalesPricingService {
     variantId: string,
     baseQty: string,
     businessDate = new Date().toISOString().slice(0, 10),
+    pricingBaseFactor = '1',
   ): Promise<FifoLineQuote> {
     const lots = await this.repository.listAvailableLotsForSale(
       tenantId,
@@ -22,6 +23,6 @@ export class SalesPricingService {
       businessDate,
     )
 
-    return buildFifoLineQuote(variantId, baseQty, lots)
+    return buildFifoLineQuote(variantId, baseQty, lots, pricingBaseFactor)
   }
 }

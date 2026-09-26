@@ -6,6 +6,7 @@ import { CustomerService } from '../customers/customer.service'
 import { CashSessionService } from '../finance/cash-session.service'
 import { FinanceRepository } from '../finance/finance.repository'
 import { ConversionService } from '../products/conversion.service'
+import { ConversionRepository } from '../products/conversion.repository'
 import type { QuantityInput } from '../products/conversion.types'
 import { InsufficientStockError } from '../sales/sales.errors'
 import { SalesPricingService } from '../sales/sales-pricing.service'
@@ -214,13 +215,11 @@ export class PosService {
       throw new Error('Quantity is required')
     }
 
-    const conversion =
-      quantity.kind === 'SIMPLE'
-        ? await conversionService.normalize(
-            quantity,
-            activeProfile ?? undefined,
-          )
-        : await conversionService.normalize(quantity)
+    const conversion = await conversionService.normalize(
+      quantity,
+      quantity.kind === 'COMPONENTS' ? undefined : activeProfile ?? undefined,
+      variant.productId,
+    )
 
     if (
       conversion.snapshot &&
@@ -237,6 +236,10 @@ export class PosService {
       | null = null
     let availableOwnBaseQty: string
     let shortfallBaseQty = '0'
+    const pricingBaseFactor = conversion.snapshot
+      ? new Decimal(conversion.snapshot.pricingBaseFactorNumerator)
+          .div(conversion.snapshot.pricingBaseFactorDenominator).toFixed()
+      : '1'
 
     try {
       internalQuote = await pricing.quoteFifoLine(
@@ -244,6 +247,7 @@ export class PosService {
         variantId,
         conversion.baseQty,
         input.businessDate,
+        pricingBaseFactor,
       )
       availableOwnBaseQty = internalQuote.availableBaseQty
     } catch (error) {
@@ -264,6 +268,7 @@ export class PosService {
           variantId,
           error.availableBaseQty,
           input.businessDate,
+          pricingBaseFactor,
         )
       }
     }
@@ -281,8 +286,12 @@ export class PosService {
       automaticSalesTotalPaisa:
         internalQuote?.automaticSalesTotalPaisa ?? '0',
       effectiveUnitSellingPricePaisa:
-        internalQuote?.effectiveUnitSellingPricePaisa ??
-        variant.configuredSellingPricePaisa,
+        internalQuote
+          ? new Decimal(internalQuote.automaticSalesTotalPaisa)
+              .times(pricingBaseFactor)
+              .div(internalQuote.requestedBaseQty)
+              .toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toFixed(0)
+          : variant.configuredSellingPricePaisa,
       sellingSegments:
         internalQuote?.allocations.map((allocation) => ({
           lotId: allocation.lotId,
@@ -299,6 +308,9 @@ export class PosService {
           }
         : {}),
       conversion,
+      fixedUnitOptions: await new ConversionRepository(this.database).listFixedUnits(
+        this.tenantId, variant.productId,
+      ),
     }
   }
 }

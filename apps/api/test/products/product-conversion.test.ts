@@ -9,6 +9,8 @@ import type {
 } from '../../src/modules/products/conversion.types'
 import { ProductValidationError } from '../../src/modules/products/product.errors'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
+import { InventoryService } from '../../src/modules/products/inventory.service'
+import { PosService } from '../../src/modules/pos/pos.service'
 import {
   cleanupProductTestTenants,
   createProductTestTenant,
@@ -112,6 +114,54 @@ describe.skipIf(!hasDatabase)('product conversion profiles', () => {
     await closePool()
   })
 
+  it('normalizes only active fixed alternatives belonging to the product and tenant', async () => {
+    const fixture = await createConversionFixture('Fixed Alternatives')
+    const carton = await fixture.products.createUnit({ name: 'Carton', symbol: 'ctn' })
+    const bag = await fixture.products.createUnit({ name: 'Bag', symbol: 'bag' })
+    await fixture.products.replaceAlternativeUnits(fixture.product.id, [
+      { unitId: carton.id, conversionMode: 'FIXED', conversionToBase: '24' },
+      { unitId: bag.id, conversionMode: 'FIXED', conversionToBase: '50' },
+    ])
+
+    const twoCartons = await fixture.conversion.normalize({
+      kind: 'FIXED_UNIT', unitId: carton.id, quantity: '2',
+    }, undefined, fixture.product.id)
+    expect(twoCartons).toMatchObject({
+      baseQty: '48', pricingQty: '48',
+      fixedUnitSnapshot: {
+        productId: fixture.product.id, unitId: carton.id,
+        unitName: 'Carton', unitSymbol: 'ctn', quantity: '2', conversionToBase: '24',
+      },
+    })
+    expect((await fixture.conversion.normalize({
+      kind: 'FIXED_UNIT', unitId: bag.id, quantity: '1',
+    }, undefined, fixture.product.id)).baseQty).toBe('50')
+
+    await expect(fixture.conversion.normalize({
+      kind: 'FIXED_UNIT', unitId: carton.id, quantity: '0',
+    }, undefined, fixture.product.id)).rejects.toBeInstanceOf(ProductValidationError)
+    await expect(fixture.conversion.normalize({
+      kind: 'FIXED_UNIT', unitId: 'not-a-uuid', quantity: '1',
+    }, undefined, fixture.product.id)).rejects.toBeInstanceOf(ProductValidationError)
+    await expect(fixture.conversion.normalize({
+      kind: 'FIXED_UNIT', unitId: fixture.gauge.id, quantity: '1',
+    }, undefined, fixture.product.id)).rejects.toBeInstanceOf(ProductValidationError)
+    const otherTenant = await createConversionFixture('Other Tenant Fixed')
+    const otherCarton = await otherTenant.products.createUnit({ name: 'Other Carton', symbol: 'octn' })
+    await otherTenant.products.replaceAlternativeUnits(otherTenant.product.id, [
+      { unitId: otherCarton.id, conversionMode: 'FIXED', conversionToBase: '20' },
+    ])
+    await expect(fixture.conversion.normalize({
+      kind: 'FIXED_UNIT', unitId: otherCarton.id, quantity: '1',
+    }, undefined, fixture.product.id)).rejects.toBeInstanceOf(ProductValidationError)
+    await fixture.products.replaceAlternativeUnits(fixture.product.id, [
+      { unitId: bag.id, conversionMode: 'FIXED', conversionToBase: '50' },
+    ])
+    await expect(fixture.conversion.normalize({
+      kind: 'FIXED_UNIT', unitId: carton.id, quantity: '1',
+    }, undefined, fixture.product.id)).rejects.toBeInstanceOf(ProductValidationError)
+  })
+
   it('stores an exact compound Gauge/Gira profile and increments versions', async () => {
     const fixture = await createConversionFixture('Compound Conversion')
 
@@ -194,6 +244,26 @@ describe.skipIf(!hasDatabase)('product conversion profiles', () => {
     })
     expect(quantity.snapshot?.id).toBe(profile.id)
     expect(quantity.snapshot?.version).toBe(1)
+  })
+
+  it('quotes 35 Gira as 2.1875 Gauge with a Gauge selling price', async () => {
+    const fixture = await createConversionFixture('Gauge Sale Quote')
+    const profile = await replaceFabricProfile(fixture)
+    await new InventoryService(getPool()).adjustStock(
+      fixture.tenant.id, fixture.owner.id, fixture.product.defaultVariantId,
+      { deltaBaseQty: '40', note: 'Gauge quote stock', unitCostPaisa: '500',
+        sellingPricePaisa: '30000', businessDate: '2026-09-25' },
+    )
+    const quote = await new PosService(fixture.tenant.id, getPool()).quoteLine({
+      variantId: fixture.product.defaultVariantId,
+      businessDate: '2026-09-25',
+      quantity: { kind: 'COMPONENTS', profileId: profile.id,
+        profileVersion: profile.version, components: { gauge: '2', gira: '3' } },
+    }, ['POS_VIEW'])
+    expect(quote).toMatchObject({
+      baseQty: '35', pricingQty: '2.1875', automaticSalesTotalPaisa: '65625',
+      effectiveUnitSellingPricePaisa: '30000',
+    })
   })
 
   it('normalizes Pipe/Feet and generic Carton/Piece profiles from configuration', async () => {

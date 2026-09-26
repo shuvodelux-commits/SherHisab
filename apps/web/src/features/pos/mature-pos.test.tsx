@@ -61,12 +61,31 @@ function product(
 
 const alpha = product('variant-a', 'Alpha Hammer', '111111')
 const beta = product('variant-b', 'Beta Hammer', '222222')
+const rice = product('variant-rice', 'Rice', 'RICE-001')
+
+function riceQuote(quantity?: { kind: string; unitId?: string; quantity?: string }, simpleBaseQty = '1') {
+  const cartons = quantity?.kind === 'FIXED_UNIT' ? Number(quantity.quantity) : 0
+  const baseQty = cartons ? String(cartons * 24) : simpleBaseQty
+  return {
+    ...safeQuote('variant-rice'), baseQty, pricingQty: baseQty, displayQty: cartons ? String(cartons) : baseQty,
+    automaticSalesTotalPaisa: String(Number(baseQty) * 1000),
+    fixedUnitOptions: [{ unitId: 'unit-carton', unitName: 'Carton', unitSymbol: 'ctn', conversionToBase: '24' }],
+    conversion: {
+      baseQty, pricingQty: baseQty, displayQty: cartons ? String(cartons) : baseQty,
+      components: {}, snapshot: null,
+      fixedUnitSnapshot: cartons ? {
+        productId: rice.productId, unitId: 'unit-carton', unitName: 'Carton',
+        unitSymbol: 'ctn', quantity: String(cartons), conversionToBase: '24',
+      } : null,
+    },
+  }
+}
 
 const fabric: PosProductSearchDto = {
   ...product('variant-fabric', 'Muslin Fabric Black', 'FAB-001'),
   productId: 'product-fabric',
-  unitName: 'Gauge',
-  unitSymbol: 'Gauge',
+  unitName: 'Gira',
+  unitSymbol: 'Gira',
   currentSellingPricePaisa: '30000',
   availableOwnBaseQty: '100',
 }
@@ -318,6 +337,7 @@ function installFetch(options: {
         if (search.toLowerCase().includes('muslin')) {
           return jsonResponse([fabric])
         }
+        if (search.toLowerCase().includes('rice')) return jsonResponse([rice])
         if (search.toLowerCase().includes('shortage')) {
           return jsonResponse([shortageProduct])
         }
@@ -364,12 +384,15 @@ function installFetch(options: {
           variantId: string
           baseQty?: string
           quantity?: {
-            kind: 'COMPONENTS'
-            profileId: string
-            profileVersion: number
-            components: Record<string, string>
+            kind: 'COMPONENTS' | 'FIXED_UNIT'
+            profileId?: string
+            profileVersion?: number
+            components?: Record<string, string>
+            unitId?: string
+            quantity?: string
           }
         }
+        if (body.variantId === 'variant-rice') return jsonResponse(riceQuote(body.quantity, body.baseQty))
         if (body.variantId === 'variant-fabric') {
           return jsonResponse(
             fabricQuote(body.quantity?.components ?? {}),
@@ -783,6 +806,33 @@ describe('Mature POS Customer panel', () => {
 
 
 describe('Mature POS compound conversion row', () => {
+  it('enters two cartons in the expanded row and shows 48 pieces when collapsed', async () => {
+    const fetchMock = installFetch()
+    renderPos()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search products' }), { target: { value: 'rice' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Rice' }))
+    const row = (await screen.findByLabelText('Quantity for Rice')).closest('tr')!
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit quantity details for Rice' }))
+    const detail = screen.getByRole('row', { name: 'Quantity details for Rice' })
+    fireEvent.click(within(detail).getByRole('combobox', { name: 'Unit for Rice' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Carton/ }))
+    fireEvent.change(within(detail).getByLabelText('Entered quantity for Rice'), { target: { value: '2' } })
+    await waitFor(() => expect(within(row).getByLabelText('Quantity for Rice')).toHaveValue('48'))
+    expect(within(row).getByLabelText('Quantity for Rice')).toHaveAttribute('readonly')
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit quantity details for Rice' }))
+    expect(screen.queryByRole('row', { name: 'Quantity details for Rice' })).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([input, init]) => {
+      if (input !== '/api/private/pos/quote-line' || init?.method !== 'POST') return false
+      const body = JSON.parse(String(init.body))
+      return body.quantity?.kind === 'FIXED_UNIT' && body.quantity.unitId === 'unit-carton' && body.quantity.quantity === '2'
+    })).toBe(true)
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit quantity details for Rice' }))
+    const reopened = screen.getByRole('row', { name: 'Quantity details for Rice' })
+    fireEvent.click(within(reopened).getByRole('combobox', { name: 'Unit for Rice' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Piece' }))
+    await waitFor(() => expect(within(row).getByLabelText('Quantity for Rice')).toHaveValue('2'))
+    expect(within(row).getByLabelText('Quantity for Rice')).not.toHaveAttribute('readonly')
+  })
   it('keeps derived compound Qty read-only and expands the generic editor immediately below the same Cart row', async () => {
     installFetch()
     renderPos()
@@ -804,8 +854,8 @@ describe('Mature POS compound conversion row', () => {
       'Quantity for Muslin Fabric Black',
     )
     expect(qty).toHaveAttribute('readonly')
-    expect(qty).toHaveValue('0.06')
-    expect(within(row).getByText('Gauge')).toBeInTheDocument()
+    expect(qty).toHaveValue('1')
+    expect(within(row).getByText('Gira')).toBeInTheDocument()
 
     fireEvent.click(
       within(row).getByRole('button', {
@@ -825,7 +875,7 @@ describe('Mature POS compound conversion row', () => {
     ).toBeInTheDocument()
   })
 
-  it('sends Gauge/Gira component input, displays rounded 2.31 and keeps exact 2.3125 economics', async () => {
+  it('sends Gauge/Gira input, displays 37 Gira and keeps exact 2.3125 economics', async () => {
     const fetchMock = installFetch()
     renderPos()
 
@@ -887,7 +937,7 @@ describe('Mature POS compound conversion row', () => {
     const qty = within(row).getByLabelText(
       'Quantity for Muslin Fabric Black',
     )
-    await waitFor(() => expect(qty).toHaveValue('2.31'))
+    await waitFor(() => expect(qty).toHaveValue('37'))
     expect(
       within(row).getByLabelText(
         'Selling price for Muslin Fabric Black',

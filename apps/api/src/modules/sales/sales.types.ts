@@ -1,4 +1,5 @@
 import type { ShortageResolution } from './stock-source.types'
+import type { QuantityInput } from '../products/conversion.types'
 
 export interface SalesFifoAllocation {
   lotId: string
@@ -42,6 +43,7 @@ export interface CommitSaleLineInput {
   baseQty: string
   manualUnitSellingPricePaisa?: string
   shortageResolution?: ShortageResolution
+  quantityInput?: QuantityInput
 }
 
 export interface SaleCustomerInput {

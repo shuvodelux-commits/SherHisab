@@ -38,6 +38,11 @@ export type PosQuantityInputDto =
       baseQty: string
     }
   | {
+      kind: 'FIXED_UNIT'
+      unitId: string
+      quantity: string
+    }
+  | {
       kind: 'COMPONENTS'
       profileId: string
       profileVersion: number
@@ -50,6 +55,14 @@ export interface PosNormalizedQuantityDto {
   displayQty: string
   components: Record<string, string>
   snapshot: PosConversionProfileDto | null
+  fixedUnitSnapshot?: {
+    productId: string
+    unitId: string
+    unitName: string
+    unitSymbol: string | null
+    quantity: string
+    conversionToBase: string
+  } | null
 }
 
 export interface PosLineQuoteDto {
@@ -64,6 +77,12 @@ export interface PosLineQuoteDto {
   sellingSegments: PosSellingSegmentDto[]
   configuredPurchasePricePaisa?: string
   conversion: PosNormalizedQuantityDto
+  fixedUnitOptions?: Array<{
+    unitId: string
+    unitName: string
+    unitSymbol: string | null
+    conversionToBase: string
+  }>
 }
 
 export interface PosProductSearchDto {
@@ -145,6 +164,7 @@ export interface CommitSaleLinePayload {
   baseQty: string
   manualUnitSellingPricePaisa?: string
   shortageResolution?: PosShortageResolutionDto
+  quantityInput?: PosQuantityInputDto
 }
 
 export type PosPaymentMethod =

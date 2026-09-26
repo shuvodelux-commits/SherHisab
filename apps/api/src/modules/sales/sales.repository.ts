@@ -418,6 +418,8 @@ export class SalesRepository {
     unitNameSnapshot?: string
     unitSymbolSnapshot?: string
     pricingQty?: string
+    displayComponentsSnapshot?: Record<string, string>
+    conversionSnapshot?: unknown
     trackingSnapshot?: Record<string, unknown>
     grossAmountPaisa?: string
     allocatedDiscountPaisa?: string
@@ -442,6 +444,8 @@ export class SalesRepository {
          unit_name_snapshot,
          unit_symbol_snapshot,
          pricing_qty,
+         display_components_snapshot,
+         conversion_snapshot,
          tracking_snapshot,
          gross_amount_paisa,
          allocated_discount_paisa,
@@ -449,7 +453,7 @@ export class SalesRepository {
        )
        VALUES (
          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-         $17::jsonb,$18,$19,$20
+         $17::jsonb,$18::jsonb,$19::jsonb,$20,$21,$22
        )
        RETURNING id`,
       [
@@ -469,6 +473,8 @@ export class SalesRepository {
         input.unitNameSnapshot ?? null,
         input.unitSymbolSnapshot ?? null,
         input.pricingQty ?? null,
+        JSON.stringify(input.displayComponentsSnapshot ?? {}),
+        input.conversionSnapshot ? JSON.stringify(input.conversionSnapshot) : null,
         JSON.stringify(input.trackingSnapshot ?? {}),
         input.grossAmountPaisa ?? null,
         input.allocatedDiscountPaisa ?? '0',

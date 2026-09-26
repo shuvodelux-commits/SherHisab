@@ -125,6 +125,11 @@ describe.skipIf(!hasDatabase)('product master routes', () => {
     )
 
     expect(response.status).toBe(401)
+    const unitEdit = await app.request(`http://localhost/api/private/units/${randomUUID()}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Forged Unit', symbol: 'fake' }),
+    })
+    expect(unitEdit.status).toBe(401)
   })
 
   it('uses the authenticated tenant and ignores a spoofed tenantId in Product create', async () => {

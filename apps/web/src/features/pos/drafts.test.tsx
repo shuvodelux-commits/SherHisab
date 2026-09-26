@@ -113,6 +113,82 @@ function renderPos() {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('POS drafts', () => {
+  it('warns on a new active profile version even when entered base quantity matches', async () => {
+    const oldProfile = { id: 'profile-old', productId: 'product-1', type: 'COMPOUND' as const,
+      version: 1, baseUnitId: 'unit-1', pricingUnitId: 'unit-1',
+      pricingBaseFactorNumerator: '1', pricingBaseFactorDenominator: '1', displayPrecision: 0,
+      components: [{ id: 'component-1', key: 'length', label: 'Length', unitId: 'unit-1',
+        baseFactorNumerator: '1', baseFactorDenominator: '1', sortOrder: 0,
+        minValue: '0', maxExclusive: null, allowFraction: false, autoNormalizeRemainder: false }],
+    }
+    const selectedDraft: SalesDraftDto = { ...draft, lines: [{ ...draft.lines[0]!,
+      quantityInput: { kind: 'COMPONENTS', profileId: oldProfile.id, profileVersion: 1, components: { length: '2' } },
+      normalizedQuantitySnapshot: { baseQty: '2', pricingQty: '2', displayQty: '2', components: { length: '2' }, snapshot: oldProfile },
+    }] }
+    const fetchMock = installFetch(selectedDraft)
+    const originalFetch = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/private/pos/quote-line' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body))
+        const profile = body.quantity?.profileVersion === 1 ? oldProfile : { ...oldProfile, version: 2 }
+        return jsonResponse({ variantId: 'variant-1', baseQty: '2', pricingQty: '2', displayQty: '2',
+          availableOwnBaseQty: '10', shortfallBaseQty: '0', automaticSalesTotalPaisa: '20000',
+          effectiveUnitSellingPricePaisa: '10000', sellingSegments: [],
+          conversion: { baseQty: '2', pricingQty: '2', displayQty: '2', components: { length: '2' }, snapshot: profile },
+        })
+      }
+      return originalFetch(input, init)
+    })
+    renderPos()
+    fireEvent.click(screen.getByRole('button', { name: /Recent Drafts/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /DRAFT-000001.*Ayesha/i }))
+    expect(await screen.findByText(/conversion profile changed/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Complete Sale' })).toBeDisabled()
+  })
+  it('reopens a fixed-unit Draft, warns on a changed ratio, and adopts the current rule explicitly', async () => {
+    const fixedDraft: SalesDraftDto = {
+      ...draft, lines: [{ ...draft.lines[0]!,
+        quantityInput: { kind: 'FIXED_UNIT', unitId: 'unit-carton', quantity: '1' },
+        normalizedQuantitySnapshot: { baseQty: '24', pricingQty: '24', displayQty: '1',
+          components: {}, snapshot: null,
+          fixedUnitSnapshot: { productId: 'product-1', unitId: 'unit-carton', unitName: 'Carton',
+            unitSymbol: 'ctn', quantity: '1', conversionToBase: '24' },
+        },
+      }],
+    }
+    const fetchMock = installFetch(fixedDraft)
+    const originalFetch = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/private/pos/quote-line' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body))
+        const fixed = body.quantity?.kind === 'FIXED_UNIT'
+        const qty = fixed ? Number(body.quantity.quantity) * 50 : Number(body.baseQty ?? 24)
+        return jsonResponse({ variantId: 'variant-1', baseQty: String(qty), pricingQty: String(qty),
+          displayQty: fixed ? body.quantity.quantity : String(qty), availableOwnBaseQty: '100',
+          shortfallBaseQty: '0', automaticSalesTotalPaisa: String(qty * 10000),
+          effectiveUnitSellingPricePaisa: '10000', sellingSegments: [],
+          fixedUnitOptions: [{ unitId: 'unit-carton', unitName: 'Carton', unitSymbol: 'ctn', conversionToBase: '50' }],
+          conversion: { baseQty: String(qty), pricingQty: String(qty), displayQty: fixed ? body.quantity.quantity : String(qty),
+            components: {}, snapshot: null,
+            fixedUnitSnapshot: fixed ? { productId: 'product-1', unitId: 'unit-carton', unitName: 'Carton',
+              unitSymbol: 'ctn', quantity: body.quantity.quantity, conversionToBase: '50' } : null,
+          },
+        })
+      }
+      return originalFetch(input, init)
+    })
+    renderPos()
+    fireEvent.click(screen.getByRole('button', { name: /Recent Drafts/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /DRAFT-000001.*Ayesha/i }))
+    expect(await screen.findByRole('textbox', { name: 'Quantity for Draft Pipe' })).toHaveValue('24')
+    expect(await screen.findByText(/fixed-unit conversion ratio changed/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Complete Sale' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Use current unit ratio for Draft Pipe' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Quantity for Draft Pipe' })).toHaveValue('50'))
+    expect(screen.getByRole('button', { name: 'Complete Sale' })).toBeEnabled()
+  })
   it('loads a recent draft back into the existing POS editor with every payment line', async () => {
     const fetchMock = installFetch()
     renderPos()
@@ -408,7 +484,7 @@ describe('POS drafts', () => {
     fireEvent.click(await screen.findByRole('button', { name: /DRAFT-000001.*Ayesha/i }))
 
     expect(await screen.findByRole('textbox', { name: 'Quantity for Draft Pipe' })).toHaveValue('2')
-    expect(await screen.findByText(/conversion changed/i)).toBeInTheDocument()
+    expect(await screen.findByText(/conversion profile changed/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Complete Sale' })).toBeDisabled()
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/private/pos/quote-line',

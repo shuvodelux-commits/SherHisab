@@ -33,6 +33,7 @@ import {
   createCategory,
   createProduct,
   createUnit,
+  updateUnit,
   listCategories,
   listUnits,
   updateProduct,
@@ -175,6 +176,8 @@ export function ProductFormDialog({
   const [formError, setFormError] = useState('')
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [unitDialogOpen, setUnitDialogOpen] = useState(false)
+  const [unitDialogTarget, setUnitDialogTarget] = useState<'base' | 'conversion' | number>('base')
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newUnitName, setNewUnitName] = useState('')
   const [newUnitSymbol, setNewUnitSymbol] = useState('')
@@ -208,7 +211,7 @@ export function ProductFormDialog({
     mutationFn: async () => {
       const purchasePrice = parseTakaToPaisa(form.purchasePrice)
       const sellingPrice = parseTakaToPaisa(form.sellingPrice)
-      const advancedPayload = buildAdvancedPayload(advanced, form.baseUnitId)
+      const advancedPayload = buildAdvancedPayload(advanced, form.baseUnitId, unitsQuery.data ?? [])
 
       if (!form.name.trim()) {
         throw new Error('Product name is required.')
@@ -302,26 +305,24 @@ export function ProductFormDialog({
     setMasterError('')
 
     try {
-      const created = await createUnit({
-        name: newUnitName,
-        symbol: newUnitSymbol || null,
-      })
+      const created = editingUnitId
+        ? await updateUnit(editingUnitId, { name: newUnitName, symbol: newUnitSymbol || null })
+        : await createUnit({ name: newUnitName, symbol: newUnitSymbol || null })
       await queryClient.invalidateQueries({
         queryKey: ['product-units'],
       })
       queryClient.setQueryData<ProductUnitDto[]>(
         ['product-units', 'all'],
-        (current = []) => [
-          ...current.filter((item) => item.id !== created.id),
-          created,
-        ],
+        (current = []) => [...current.filter((item) => item.id !== created.id), created],
       )
-      setForm((current) => ({
-        ...current,
-        baseUnitId: created.id,
-      }))
+      if (!editingUnitId) {
+        if (unitDialogTarget === 'base') setForm((current) => ({ ...current, baseUnitId: created.id }))
+        else if (unitDialogTarget === 'conversion') setAdvanced((current) => ({ ...current, conversionGuidedUnitId: created.id }))
+        else setAdvanced((current) => ({ ...current, alternativeUnits: current.alternativeUnits.map((row, index) => index === unitDialogTarget ? { ...row, unitId: created.id } : row) }))
+      }
       setNewUnitName('')
       setNewUnitSymbol('')
+      setEditingUnitId(null)
       setUnitDialogOpen(false)
     } catch (error) {
       setMasterError(
@@ -438,6 +439,8 @@ export function ProductFormDialog({
                       label: '+ Add unit',
                       onSelect: () => {
                         setMasterError('')
+                        setUnitDialogTarget('base')
+                        setEditingUnitId(null)
                         setUnitDialogOpen(true)
                       },
                     }}
@@ -607,6 +610,22 @@ export function ProductFormDialog({
                   onChange={updateAdvanced}
                   state={advanced}
                   units={unitsQuery.data ?? []}
+                  onAddUnit={(target) => {
+                    setUnitDialogTarget(target)
+                    setEditingUnitId(null)
+                    setNewUnitName('')
+                    setNewUnitSymbol('')
+                    setUnitDialogOpen(true)
+                  }}
+                  onEditUnit={(unitId) => {
+                    const unit = unitsQuery.data?.find((item) => item.id === unitId)
+                    if (!unit) return
+                    setUnitDialogTarget('conversion')
+                    setEditingUnitId(unitId)
+                    setNewUnitName(unit.name)
+                    setNewUnitSymbol(unit.symbol ?? '')
+                    setUnitDialogOpen(true)
+                  }}
                 />
               ) : null}
 
@@ -699,9 +718,11 @@ export function ProductFormDialog({
       >
         <DialogContent className="product-quick-master-dialog">
           <DialogHeader>
-            <DialogTitle>Add Unit</DialogTitle>
+            <DialogTitle>{editingUnitId ? 'Edit Unit' : 'Add Unit'}</DialogTitle>
             <DialogDescription>
-              Create a reusable stock unit.
+              {editingUnitId
+                ? 'This shared Unit name and symbol change everywhere it is used. Product conversion ratios stay unchanged.'
+                : 'Create a reusable stock unit.'}
             </DialogDescription>
           </DialogHeader>
           <div className="product-form-body product-quick-unit-grid">
@@ -748,7 +769,7 @@ export function ProductFormDialog({
               onClick={() => void createUnitInline()}
               variant="default"
             >
-              Create unit
+              {editingUnitId ? 'Save unit' : 'Create unit'}
             </Button>
           </DialogFooter>
         </DialogContent>

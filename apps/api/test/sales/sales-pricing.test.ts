@@ -85,6 +85,19 @@ describe.skipIf(!hasDatabase)('FIFO sales pricing', () => {
     await closePool()
   })
 
+  it('prices base-unit allocations in the configured larger pricing unit', async () => {
+    const fixture = await createSalesFixture('Gauge Pricing')
+    await addLot(fixture, {
+      qty: '40', unitCostPaisa: '500', sellingPricePaisa: '30000', businessDate: '2026-01-01',
+    })
+    const quote = await fixture.pricing.quoteFifoLine(
+      fixture.tenant.id, fixture.product.defaultVariantId, '35', '2026-09-25', '16',
+    )
+    expect(quote.automaticSalesTotalPaisa).toBe('65625')
+    expect(quote.cogsPaisa).toBe('17500')
+    expect(quote.allocations[0]?.automaticSalesAmountPaisa).toBe('65625')
+  })
+
   it('quotes one FIFO lot without mutating inventory', async () => {
     const fixture = await createSalesFixture('Single Lot')
     await addLot(fixture, {
