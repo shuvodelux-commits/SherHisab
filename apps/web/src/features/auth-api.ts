@@ -4,6 +4,8 @@ export type UserRole = 'OWNER' | 'ADMIN' | 'STAFF'
 
 export type PermissionKey =
   | 'SALES_OVERRIDE_SELLING_PRICE'
+  | 'SALES_TEMPLATE_VIEW'
+  | 'SALES_TEMPLATE_MANAGE'
   | 'INVENTORY_EDIT_LOT_SELLING_PRICE'
 
 export interface AuthSession {
