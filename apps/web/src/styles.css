@@ -2406,6 +2406,16 @@ p {
   padding-bottom: 6px;
 }
 
+.pos-template-components {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pos-template-components .ui-input {
+  width: 74px;
+}
+
 .pos-template-edit-line > span:first-child {
   overflow: hidden;
   color: var(--text-muted);
