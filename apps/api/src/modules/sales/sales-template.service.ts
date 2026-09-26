@@ -86,7 +86,8 @@ export class SalesTemplateService {
       const quote = await pos.quoteLine({
         variantId: saved.variantId, quantity: quantityInput,
       }, [])
-      lines.push({ ...saved, quantityInput, product, quote })
+      lines.push({ ...saved, quantityInput,
+        normalizedQuantitySnapshot: quote.conversion, product, quote })
     }
     return { id: record.id, name: record.name, version: record.version, lines }
   }
