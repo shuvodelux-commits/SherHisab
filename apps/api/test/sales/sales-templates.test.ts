@@ -5,6 +5,7 @@ import { closePool, getPool } from '../../src/db/pool'
 import { AuthService } from '../../src/modules/auth/auth.service'
 import { InventoryService } from '../../src/modules/products/inventory.service'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
+import { SalesService } from '../../src/modules/sales/sales.service'
 import {
   cleanupProductTestTenants,
   createProductTestTenant,
@@ -189,6 +190,92 @@ describe.skipIf(!hasDatabase)('reusable sales templates', () => {
     expect((await f.request(f.ownerCookie, `/${created.id}/archive`, 'POST', {
       expectedVersion: updated.version,
     })).status).toBe(200)
+  })
+
+  it('requires an override grant for deliberate fixed manual template pricing', async () => {
+    const f = await fixture('Template Fixed Price')
+    const staff = await f.auth.createUser({
+      tenantId: f.tenant.id, name: 'Template Manager',
+      email: `template-manager-${randomUUID()}@example.com`,
+      password: 'strong-password-123', role: 'STAFF',
+    })
+    for (const permission of ['SALES_TEMPLATE_VIEW', 'SALES_TEMPLATE_MANAGE'] as const) {
+      await f.auth.grantPermission({
+        tenantId: f.tenant.id, userId: staff.id,
+        permission, grantedByUserId: f.owner.id,
+      })
+    }
+    const staffCookie = await f.login(staff.email)
+    const input = {
+      name: 'Fixed price package',
+      lines: [{ ...f.line, pricingStrategy: 'FIXED_MANUAL',
+        manualUnitSellingPricePaisa: '1800' }],
+    }
+    expect((await f.request(staffCookie, '', 'POST', input)).status).toBe(403)
+    const createdResponse = await f.request(f.ownerCookie, '', 'POST', input)
+    expect(createdResponse.status).toBe(201)
+    const created = await createdResponse.json() as { id: string }
+    expect((await f.request(staffCookie, `/${created.id}`)).status).toBe(403)
+    const ownerLoad = await f.request(f.ownerCookie, `/${created.id}`)
+    expect(ownerLoad.status).toBe(200)
+    expect(await ownerLoad.json()).toMatchObject({
+      lines: [{ pricingStrategy: 'FIXED_MANUAL',
+        manualUnitSellingPricePaisa: '1800' }],
+    })
+  })
+
+  it('re-normalizes fixed-unit defaults under the current Product ratio', async () => {
+    const f = await fixture('Template Current Conversion')
+    const products = new ProductMasterService(f.tenant.id, getPool())
+    const carton = await products.createUnit({ name: 'Carton', symbol: 'ctn' })
+    await products.replaceAlternativeUnits(f.product.id, [
+      { unitId: carton.id, conversionMode: 'FIXED', conversionToBase: '2' },
+    ])
+    const createdResponse = await f.request(f.ownerCookie, '', 'POST', {
+      name: 'Cartons', lines: [{
+        variantId: f.product.defaultVariantId,
+        quantityInput: { kind: 'FIXED_UNIT', unitId: carton.id, quantity: '1' },
+      }],
+    })
+    expect(createdResponse.status).toBe(201)
+    const created = await createdResponse.json() as { id: string }
+    await products.replaceAlternativeUnits(f.product.id, [
+      { unitId: carton.id, conversionMode: 'FIXED', conversionToBase: '3' },
+    ])
+    const load = await f.request(f.ownerCookie, `/${created.id}`)
+    expect(load.status).toBe(200)
+    expect(await load.json()).toMatchObject({
+      lines: [{
+        quantityInput: { kind: 'FIXED_UNIT', unitId: carton.id, quantity: '1' },
+        quote: { baseQty: '3',
+          conversion: { fixedUnitSnapshot: { conversionToBase: '3' } } },
+      }],
+    })
+    const saved = await f.request(f.ownerCookie, `/${created.id}/edit`)
+    expect(await saved.json()).toMatchObject({
+      lines: [{ normalizedQuantitySnapshot: { baseQty: '2' } }],
+    })
+  })
+
+  it('leaves the Template unchanged after a fresh sale and isolates tenants', async () => {
+    const f = await fixture('Template Sale Independence')
+    const createdResponse = await f.request(f.ownerCookie, '', 'POST', {
+      name: 'Reusable', lines: [f.line],
+    })
+    expect(createdResponse.status).toBe(201)
+    const created = await createdResponse.json() as { id: string; version: number }
+    const foreign = await fixture('Template Other Tenant')
+    expect((await foreign.request(foreign.ownerCookie, `/${created.id}`)).status).toBe(404)
+    await new SalesService(getPool()).commitSale(f.tenant.id, f.owner.id, false, {
+      operationId: randomUUID(), businessDate: '2026-09-26',
+      lines: [{ variantId: f.product.defaultVariantId, baseQty: '2' }],
+    })
+    const saved = await f.request(f.ownerCookie, `/${created.id}/edit`)
+    expect(saved.status).toBe(200)
+    expect(await saved.json()).toMatchObject({
+      version: created.version,
+      lines: [{ quantityInput: { kind: 'SIMPLE', baseQty: '2' } }],
+    })
   })
 
   it('keeps duplicates independent and archives templates with version checks', async () => {
