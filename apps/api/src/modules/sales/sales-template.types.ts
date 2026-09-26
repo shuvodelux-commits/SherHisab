@@ -17,6 +17,8 @@ export interface SalesTemplateInput {
 
 export interface SalesTemplateStoredLine {
   variantId: string
+  productName?: string
+  variantName?: string | null
   quantityInput: QuantityInput
   normalizedQuantitySnapshot: NormalizedQuantity
   pricingStrategy: TemplatePriceStrategy
