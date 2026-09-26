@@ -33,6 +33,13 @@ function validName(raw: string): string {
   return name
 }
 
+function validTemplateId(raw: string): string {
+  if (!uuidPattern.test(raw)) {
+    throw new SalesTemplateValidationError('Template ID is invalid.')
+  }
+  return raw
+}
+
 function validPaisa(raw: string): string {
   if (!/^\d+$/.test(raw)) {
     throw new SalesTemplateValidationError('Manual selling price must be a non-negative whole paisa amount.')
@@ -61,12 +68,12 @@ export class SalesTemplateService {
 
   async getSaved(id: string): Promise<SalesTemplateRecord> {
     return requireActive(await new SalesTemplateRepository(this.database)
-      .findById(this.tenantId, id))
+      .findById(this.tenantId, validTemplateId(id)))
   }
 
   async get(id: string, canOverrideSellingPrice: boolean): Promise<SalesTemplateLoaded> {
     const record = requireActive(await new SalesTemplateRepository(this.database)
-      .findById(this.tenantId, id))
+      .findById(this.tenantId, validTemplateId(id)))
     const pos = new PosService(this.tenantId, this.database)
     const conversion = new ConversionService(this.tenantId, this.database)
     const lines = []
@@ -117,7 +124,7 @@ export class SalesTemplateService {
   ): Promise<SalesTemplateRecord> {
     return withDatabaseTransaction(this.database, async (database) => {
       const repository = new SalesTemplateRepository(database)
-      const current = requireActive(await repository.findById(this.tenantId, id, true))
+      const current = requireActive(await repository.findById(this.tenantId, validTemplateId(id), true))
       if (current.version !== expectedVersion) {
         throw new SalesTemplateConflictError(current.version)
       }
@@ -137,7 +144,7 @@ export class SalesTemplateService {
   ): Promise<SalesTemplateRecord> {
     return withDatabaseTransaction(this.database, async (database) => {
       const repository = new SalesTemplateRepository(database)
-      const current = requireActive(await repository.findById(this.tenantId, id))
+      const current = requireActive(await repository.findById(this.tenantId, validTemplateId(id)))
       if (current.lines.some((line) => line.pricingStrategy === 'FIXED_MANUAL') &&
           !canOverrideSellingPrice) {
         throw new SalesTemplatePermissionError('Manual template price requires selling price override permission.')
