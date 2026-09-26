@@ -141,6 +141,9 @@ describe.skipIf(!hasDatabase)('product conversion profiles', () => {
       kind: 'FIXED_UNIT', unitId: carton.id, quantity: '0',
     }, undefined, fixture.product.id)).rejects.toBeInstanceOf(ProductValidationError)
     await expect(fixture.conversion.normalize({
+      kind: 'FIXED_UNIT', unitId: 'not-a-uuid', quantity: '1',
+    }, undefined, fixture.product.id)).rejects.toBeInstanceOf(ProductValidationError)
+    await expect(fixture.conversion.normalize({
       kind: 'FIXED_UNIT', unitId: fixture.gauge.id, quantity: '1',
     }, undefined, fixture.product.id)).rejects.toBeInstanceOf(ProductValidationError)
     const otherTenant = await createConversionFixture('Other Tenant Fixed')

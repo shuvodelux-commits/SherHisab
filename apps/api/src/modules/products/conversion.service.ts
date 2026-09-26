@@ -381,6 +381,9 @@ export class ConversionService {
       if (!productId) {
         throw new ProductValidationError('Product is required for fixed-unit quantity')
       }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.unitId)) {
+        throw new ProductValidationError('Fixed unit ID is invalid')
+      }
       const quantity = decimalQuantity(input.quantity, 'Quantity')
       if (quantity.lte(0)) {
         throw new ProductValidationError('Quantity must be greater than zero')
