@@ -296,7 +296,12 @@ export interface SalesTemplateSummaryDto {
   updatedAt: string
 }
 
-export interface SalesTemplateRecordDto extends SalesTemplateSummaryDto {
+export interface SalesTemplateRecordDto {
+  id: string
+  name: string
+  version: number
+  createdAt: string
+  updatedAt: string
   status: 'ACTIVE' | 'ARCHIVED'
   createdByUserId: string
   lines: SalesTemplateStoredLineDto[]
