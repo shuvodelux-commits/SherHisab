@@ -685,6 +685,8 @@ export function PosPage() {
 
   const currentTemplateLines: SalesTemplateLineInputDto[] = cart.map((line) => ({
     variantId: line.product.variantId,
+    productName: line.product.productName,
+    variantName: line.product.variantName,
     quantityInput: lineQuantityInput(line),
     pricingStrategy: 'CURRENT_AUTO',
   }))
