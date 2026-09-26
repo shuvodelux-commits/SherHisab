@@ -29,6 +29,11 @@ export type SalesDraftQuantityInput =
       baseQty: string
     }
   | {
+      kind: 'FIXED_UNIT'
+      unitId: string
+      quantity: string
+    }
+  | {
       kind: 'COMPONENTS'
       profileId: string
       profileVersion: number
@@ -41,6 +46,7 @@ export interface SalesDraftNormalizedQuantitySnapshot {
   displayQty: string
   components: Record<string, string>
   snapshot: unknown | null
+  fixedUnitSnapshot?: unknown | null
 }
 
 export type SalesDraftShortageResolution =

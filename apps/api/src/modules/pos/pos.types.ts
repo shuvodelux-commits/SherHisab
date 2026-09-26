@@ -51,6 +51,12 @@ export interface PosLineQuote {
   sellingSegments: PosSellingSegment[]
   configuredPurchasePricePaisa?: string
   conversion: NormalizedQuantity
+  fixedUnitOptions: Array<{
+    unitId: string
+    unitName: string
+    unitSymbol: string | null
+    conversionToBase: string
+  }>
 }
 
 export interface PosLineQuoteInput {

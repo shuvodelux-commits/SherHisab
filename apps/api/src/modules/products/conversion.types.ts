@@ -55,11 +55,25 @@ export type QuantityInput =
       baseQty: string
     }
   | {
+      kind: 'FIXED_UNIT'
+      unitId: string
+      quantity: string
+    }
+  | {
       kind: 'COMPONENTS'
       profileId: string
       profileVersion: number
       components: Record<string, string>
     }
+
+export interface FixedUnitSnapshot {
+  productId: string
+  unitId: string
+  unitName: string
+  unitSymbol: string | null
+  quantity: string
+  conversionToBase: string
+}
 
 export interface NormalizedQuantity {
   baseQty: string
@@ -67,4 +81,5 @@ export interface NormalizedQuantity {
   displayQty: string
   components: Record<string, string>
   snapshot: ConversionProfileSnapshot | null
+  fixedUnitSnapshot?: FixedUnitSnapshot | null
 }

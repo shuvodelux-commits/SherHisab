@@ -15,6 +15,7 @@ export interface CartLineState {
   showBreakdown: boolean
   conversionExpanded: boolean
   conversionComponents: Record<string, string>
+  fixedUnitInput?: { unitId: string; quantity: string }
   shortageResolution: 'VENDOR' | 'NEGATIVE_STOCK' | null
   vendorId: string | null
   vendorName: string
@@ -24,6 +25,7 @@ export interface CartLineState {
   savedDraftLine?: SalesDraftLineDto
   draftLineEdited?: boolean
   currentConversionProfile?: PosConversionProfileDto
+  currentFixedUnitQuote?: PosLineQuoteDto
 }
 
 export type CartAction =

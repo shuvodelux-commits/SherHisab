@@ -12,6 +12,8 @@ import { ConversionService } from '../../src/modules/products/conversion.service
 import { InventoryService } from '../../src/modules/products/inventory.service'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
 import { SalesDraftService } from '../../src/modules/sales/sales-draft.service'
+import { SalesService } from '../../src/modules/sales/sales.service'
+import { SalesConflictError } from '../../src/modules/sales/sales.errors'
 import { VendorService } from '../../src/modules/vendors/vendor.service'
 import {
   cleanupProductTestTenants,
@@ -109,6 +111,58 @@ describe.skipIf(!hasDatabase)('versioned POS Drafts', () => {
 
   afterAll(async () => {
     await closePool()
+  })
+
+  it('rejects a no-payment direct sale reusing a posted Draft operation ID', async () => {
+    const fixture = await postableDraftFixture('Draft Operation Direct')
+    const saved = await fixture.service.create(fixture.owner.id, fixture.state)
+    const operationId = randomUUID()
+    await fixture.service.post(fixture.owner.id, saved.id, saved.version, {
+      operationId, businessDate: '2026-09-25', canOverrideSellingPrice: false,
+    })
+    await expect(new SalesService(getPool()).commitSale(fixture.tenant.id, fixture.owner.id, false, {
+      operationId, businessDate: '2026-09-25',
+      lines: [{ variantId: fixture.product.defaultVariantId, baseQty: '1' }],
+    })).rejects.toBeInstanceOf(SalesConflictError)
+  })
+
+  it('blocks a fixed-unit Draft after its Product ratio changes until explicitly corrected', async () => {
+    const fixture = await postableDraftFixture('Fixed Draft Rule')
+    const products = new ProductMasterService(fixture.tenant.id, getPool())
+    const carton = await products.createUnit({ name: 'Carton', symbol: 'ctn' })
+    await products.replaceAlternativeUnits(fixture.product.id, [
+      { unitId: carton.id, conversionMode: 'FIXED', conversionToBase: '2' },
+    ])
+    const conversion = new ConversionService(fixture.tenant.id, getPool())
+    const quantityInput = { kind: 'FIXED_UNIT' as const, unitId: carton.id, quantity: '1' }
+    const oldQuantity = await conversion.normalize(quantityInput, undefined, fixture.product.id)
+    const state = { ...fixture.state, lines: [{ ...fixture.state.lines[0]!, quantityInput,
+      normalizedQuantitySnapshot: oldQuantity }] }
+    const draft = await fixture.service.create(fixture.owner.id, state)
+    await products.replaceAlternativeUnits(fixture.product.id, [
+      { unitId: carton.id, conversionMode: 'FIXED', conversionToBase: '3' },
+    ])
+    await expect(fixture.service.post(fixture.owner.id, draft.id, draft.version, {
+      operationId: randomUUID(), businessDate: '2026-09-25', canOverrideSellingPrice: false,
+    })).rejects.toThrow(/conversion|ratio/i)
+    expect((await fixture.service.get(draft.id, fixture.owner.id)).status).toBe('ACTIVE')
+    const corrected = await fixture.service.update(fixture.owner.id, draft.id, draft.version, {
+      ...state, lines: [{ ...state.lines[0]!,
+        normalizedQuantitySnapshot: await conversion.normalize(quantityInput, undefined, fixture.product.id),
+      }],
+    })
+    const sale = await fixture.service.post(fixture.owner.id, corrected.id, corrected.version, {
+      operationId: randomUUID(), businessDate: '2026-09-25', canOverrideSellingPrice: false,
+    })
+    expect(sale.lines[0]?.baseQty).toBe('3')
+    await products.updateUnit(carton.id, { name: 'Renamed Carton', symbol: 'newctn' })
+    const historical = await getPool().query<{ conversion_snapshot: { unitName: string; conversionToBase: string } }>(
+      'SELECT conversion_snapshot FROM sales_lines WHERE tenant_id = $1 AND sale_id = $2',
+      [fixture.tenant.id, sale.id],
+    )
+    expect(historical.rows[0]?.conversion_snapshot).toMatchObject({
+      unitName: 'Carton', conversionToBase: '3',
+    })
   })
 
   it('saves full POS transaction state without mutating Sale, stock or accounting domains', async () => {

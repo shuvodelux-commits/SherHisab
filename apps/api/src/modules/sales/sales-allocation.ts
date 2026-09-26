@@ -50,11 +50,13 @@ export function buildPartialFifoLineQuote(
   variantId: string,
   baseQty: string,
   lots: AvailableSalesLot[],
+  pricingBaseFactor = '1',
 ): Omit<FifoLineQuote, 'isSufficient'> & {
   shortfallBaseQty: string
   isSufficient: boolean
 } {
   const requested = positiveQuantity(baseQty)
+  const pricingFactor = positiveQuantity(pricingBaseFactor)
   const available = lots.reduce(
     (total, lot) => total.plus(lot.remainingBaseQty),
     new Decimal(0),
@@ -72,7 +74,7 @@ export function buildPartialFifoLineQuote(
     const lotAvailable = new Decimal(lot.remainingBaseQty)
     const consume = Decimal.min(remaining, lotAvailable)
     const automaticSalesAmount = new Decimal(
-      roundPaisa(consume.times(lot.sellingPricePaisa)),
+      roundPaisa(consume.div(pricingFactor).times(lot.sellingPricePaisa)),
     )
     const cogsAmount = new Decimal(
       roundPaisa(consume.times(lot.unitCostPaisa)),
@@ -115,13 +117,16 @@ export function buildFifoLineQuote(
   variantId: string,
   baseQty: string,
   lots: AvailableSalesLot[],
+  pricingBaseFactor = '1',
 ): FifoLineQuote {
   const partial = buildPartialFifoLineQuote(
     variantId,
     baseQty,
     lots,
+    pricingBaseFactor,
   )
   const requested = new Decimal(partial.requestedBaseQty)
+  const pricingFactor = positiveQuantity(pricingBaseFactor)
   const available = new Decimal(partial.availableBaseQty)
 
   if (!partial.isSufficient) {
@@ -144,7 +149,7 @@ export function buildFifoLineQuote(
     const lotAvailable = new Decimal(lot.remainingBaseQty)
     const consume = Decimal.min(remaining, lotAvailable)
     const automaticSalesAmount = new Decimal(
-      roundPaisa(consume.times(lot.sellingPricePaisa)),
+      roundPaisa(consume.div(pricingFactor).times(lot.sellingPricePaisa)),
     )
     const cogsAmount = new Decimal(
       roundPaisa(consume.times(lot.unitCostPaisa)),

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LanguageProvider } from '../../app/language'
 import { ProductFormDialog } from './product-form-dialog'
+import { buildAdvancedPayload, emptyAdvancedFormState } from './product-advanced-fields'
 import type { ProductDetailDto } from './product-types'
 
 function jsonResponse(body: unknown, status = 200) {
@@ -17,6 +18,8 @@ const archivedCategory = { id: 'category-archived', name: 'Old Category', isActi
 const activeUnit = { id: 'unit-active', name: 'Piece', symbol: 'pcs', isActive: true }
 const activeGiraUnit = { id: 'unit-gira', name: 'Gira', symbol: 'gira', isActive: true }
 const activeGaugeUnit = { id: 'unit-gauge', name: 'Gauge', symbol: 'gauge', isActive: true }
+const activeCartonUnit = { id: 'unit-carton', name: 'Carton', symbol: 'ctn', isActive: true }
+const activeBagUnit = { id: 'unit-bag', name: 'Bag', symbol: 'bag', isActive: true }
 const archivedUnit = { id: 'unit-archived', name: 'Old Unit', symbol: 'old', isActive: false }
 
 function createdProduct(): ProductDetailDto {
@@ -143,6 +146,7 @@ function archivedProduct(): ProductDetailDto {
 }
 
 function installFetch(options: { productError?: string } = {}) {
+  const unitList = [activeUnit, activeGiraUnit, activeGaugeUnit, activeCartonUnit, activeBagUnit, archivedUnit]
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
       typeof input === 'string'
@@ -162,18 +166,17 @@ function installFetch(options: { productError?: string } = {}) {
     }
 
     if (url.startsWith('/api/private/units')) {
-      if (init?.method === 'POST') {
-        return jsonResponse(
-          { id: 'unit-new', name: 'Box', symbol: 'box', isActive: true },
-          201,
-        )
+      if (url === '/api/private/units/unit-gauge' && init?.method === 'PATCH') {
+        const updated = { ...activeGaugeUnit, name: 'Gaz' }
+        unitList.splice(unitList.findIndex((item) => item.id === updated.id), 1, updated)
+        return jsonResponse(updated)
       }
-      return jsonResponse([
-        activeUnit,
-        activeGiraUnit,
-        activeGaugeUnit,
-        archivedUnit,
-      ])
+      if (init?.method === 'POST') {
+        const created = { id: 'unit-new', name: 'Box', symbol: 'box', isActive: true }
+        unitList.push(created)
+        return jsonResponse(created, 201)
+      }
+      return jsonResponse(unitList)
     }
 
     if (url === '/api/private/products' && init?.method === 'POST') {
@@ -253,6 +256,117 @@ afterEach(() => {
 })
 
 describe('ProductFormDialog', () => {
+  it('uses distinct component keys for Bengali unit names', () => {
+    const state = {
+      ...emptyAdvancedFormState('SIMPLE'),
+      conversionEnabled: true,
+      conversionGuidedUnitId: 'unit-boro',
+      conversionGuidedRatio: '16',
+    }
+    const units = [
+      { id: 'unit-boro', name: 'গজ', symbol: 'গজ', isActive: true },
+      { id: 'unit-choto', name: 'গিরা', symbol: 'গিরা', isActive: true },
+    ]
+    const profile = buildAdvancedPayload(state, 'unit-choto', units).conversionProfile
+    expect(profile?.components.map((component) => component.key)).toEqual(['larger', 'base'])
+  })
+  it('reopens a two-unit profile in the simple ratio editor', async () => {
+    installFetch()
+    renderForm({ mode: 'edit', product: conversionProduct() })
+    fireEvent.click(await screen.findByRole('button', { name: 'Advanced' }))
+    expect(screen.getByRole('combobox', { name: 'Larger unit' })).toHaveTextContent('Gauge')
+    expect(screen.getByLabelText('Units per larger unit')).toHaveValue('16')
+    expect(screen.queryByLabelText('Conversion component key 1')).not.toBeInTheDocument()
+  })
+  // Two Radix selectors can exceed the suite's default timeout under parallel jsdom load.
+  it('saves carton and bag as separate fixed alternatives', async () => {
+    const fetchMock = installFetch()
+    renderForm()
+    fireEvent.change(await screen.findByLabelText('Product Name'), { target: { value: 'Rice' } })
+    fireEvent.change(screen.getByLabelText('Purchase Price'), { target: { value: '10' } })
+    fireEvent.change(screen.getByLabelText('Selling Price'), { target: { value: '20' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Unit' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Piece/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add alternative unit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add alternative unit' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Alternative unit 1' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Carton/ }))
+    fireEvent.change(screen.getByLabelText('Conversion to base 1'), { target: { value: '24' } })
+    fireEvent.click(screen.getByRole('combobox', { name: 'Alternative unit 2' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Bag/ }))
+    fireEvent.change(screen.getByLabelText('Conversion to base 2'), { target: { value: '50' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }))
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([input, init]) => input === '/api/private/products' && init?.method === 'POST')
+      expect(call).toBeDefined()
+      expect(JSON.parse(String(call?.[1]?.body)).advanced.alternativeUnits).toEqual([
+        { unitId: 'unit-carton', conversionMode: 'FIXED', conversionToBase: '24' },
+        { unitId: 'unit-bag', conversionMode: 'FIXED', conversionToBase: '50' },
+      ])
+    })
+  }, 10000)
+  it('configures mixed Gauge and Gira with one everyday ratio', async () => {
+    const fetchMock = installFetch()
+    renderForm()
+    fireEvent.change(await screen.findByLabelText('Product Name'), { target: { value: 'Fabric' } })
+    fireEvent.change(screen.getByLabelText('Purchase Price'), { target: { value: '200' } })
+    fireEvent.change(screen.getByLabelText('Selling Price'), { target: { value: '300' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Unit' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Gira/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable custom quantity conversion' }))
+    expect(screen.queryByLabelText('Conversion component key 1')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('combobox', { name: 'Larger unit' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Gauge/ }))
+    fireEvent.change(screen.getByLabelText('Units per larger unit'), { target: { value: '16' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Product' }))
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([input, init]) => input === '/api/private/products' && init?.method === 'POST')
+      expect(call).toBeDefined()
+      const body = JSON.parse(String(call?.[1]?.body))
+      expect(body.advanced.conversionProfile).toMatchObject({
+        type: 'COMPOUND', baseUnitId: 'unit-gira', pricingUnitId: 'unit-gauge',
+        pricingBaseFactorNumerator: '16', pricingBaseFactorDenominator: '1',
+        components: [
+          expect.objectContaining({ unitId: 'unit-gauge', baseFactorNumerator: '16' }),
+          expect.objectContaining({ unitId: 'unit-gira', baseFactorNumerator: '1', maxExclusive: '16' }),
+        ],
+      })
+    })
+  })
+
+  it('adds a shared unit inside conversion setup without losing the Product form', async () => {
+    const fetchMock = installFetch()
+    renderForm()
+    fireEvent.change(await screen.findByLabelText('Product Name'), { target: { value: 'Fabric Roll' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable custom quantity conversion' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Unit for conversion' }))
+    fireEvent.change(screen.getByLabelText('New unit name'), { target: { value: 'Box' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create unit' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add Unit' })).not.toBeInTheDocument())
+    expect(screen.getByText(/1 Box =/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Larger unit' })).toHaveTextContent('Box'))
+    expect(screen.getByLabelText('Product Name')).toHaveValue('Fabric Roll')
+    expect(fetchMock.mock.calls.some(([input, init]) => input === '/api/private/units' && init?.method === 'POST')).toBe(true)
+  })
+  it('explains a shared Unit edit and retains the Product conversion ratio', async () => {
+    const fetchMock = installFetch()
+    renderForm()
+    fireEvent.click(await screen.findByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable custom quantity conversion' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Larger unit' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Gauge/ }))
+    fireEvent.change(screen.getByLabelText('Units per larger unit'), { target: { value: '16' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit selected Unit' }))
+    expect(screen.getByText(/shared Unit name and symbol change everywhere/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('New unit name'), { target: { value: 'Gaz' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save unit' }))
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Larger unit' })).toHaveTextContent('Gaz'))
+    expect(screen.getByLabelText('Units per larger unit')).toHaveValue('16')
+    expect(fetchMock.mock.calls.some(([input, init]) => input === '/api/private/units/unit-gauge' && init?.method === 'PATCH')).toBe(true)
+  })
   it('renders the exact compact create fields with bilingual helpers', async () => {
     installFetch()
     renderForm()
@@ -321,6 +435,8 @@ describe('ProductFormDialog', () => {
         name: 'Enable custom quantity conversion',
       }),
     )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced conversion settings' }))
 
     fireEvent.click(
       screen.getByRole('combobox', { name: 'Conversion profile type' }),
@@ -664,6 +780,7 @@ describe('ProductFormDialog', () => {
     ).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced conversion settings' }))
 
     expect(
       screen.getByRole('checkbox', {

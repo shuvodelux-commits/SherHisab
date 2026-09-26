@@ -342,6 +342,7 @@ describe('PosPage lot pricing', () => {
         {
           variantId: 'variant-1',
           baseQty: '2',
+          quantityInput: { kind: 'SIMPLE', baseQty: '2' },
         },
       ])
       expect(body.businessDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)

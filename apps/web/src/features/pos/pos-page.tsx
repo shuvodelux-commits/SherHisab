@@ -21,6 +21,7 @@ import { Badge } from '../../components/ui/badge'
 import { BilingualLabel } from '../../components/ui/bilingual-label'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Separator } from '../../components/ui/separator'
 import { formatNumber } from '../../lib/format-number'
 import {
@@ -203,6 +204,22 @@ function sameBaseQuantity(left: string, right: string): boolean {
   return normalizedLeft !== null && normalizedLeft === canonical(right)
 }
 
+function cartQuantity(quote: PosLineQuoteDto): string {
+  return quote.conversion.snapshot || quote.conversion.fixedUnitSnapshot
+    ? quote.baseQty
+    : quote.displayQty
+}
+
+function lineQuantityInput(line: CartLineState) {
+  if (line.fixedUnitInput) return { kind: 'FIXED_UNIT' as const, ...line.fixedUnitInput }
+  const profile = line.quote.conversion.snapshot
+  if (profile?.type === 'COMPOUND') return {
+    kind: 'COMPONENTS' as const, profileId: profile.id,
+    profileVersion: profile.version, components: line.conversionComponents,
+  }
+  return { kind: 'SIMPLE' as const, baseQty: line.quote.baseQty }
+}
+
 export function PosPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -296,6 +313,7 @@ export function PosPage() {
         lines: cart.map((line) => ({
           variantId: line.product.variantId,
           baseQty: line.quote.baseQty,
+          quantityInput: lineQuantityInput(line),
           ...(line.manualUnitSellingPricePaisa
             ? {
                 manualUnitSellingPricePaisa:
@@ -471,15 +489,7 @@ export function PosPage() {
         if (savedLine && !line.draftLineEdited) {
           return savedLine
         }
-        const profile = line.quote.conversion.snapshot
-        const quantityInput = profile?.type === 'COMPOUND'
-          ? {
-              kind: 'COMPONENTS' as const,
-              profileId: profile.id,
-              profileVersion: profile.version,
-              components: line.conversionComponents,
-            }
-          : { kind: 'SIMPLE' as const, baseQty: line.quote.baseQty }
+        const quantityInput = lineQuantityInput(line)
         let shortageResolution: SalesDraftLineDto['shortageResolution'] = null
         if (line.shortageResolution === 'NEGATIVE_STOCK') {
           shortageResolution = { type: 'NEGATIVE_STOCK' }
@@ -514,6 +524,7 @@ export function PosPage() {
         const product = await getPosProductByVariant(savedLine.variantId)
         let conversionError = ''
         let currentConversionProfile: CartLineState['currentConversionProfile']
+        let currentFixedUnitQuote: CartLineState['currentFixedUnitQuote']
         let quote: PosLineQuoteDto
         try {
           // Validate the stored components against the current Product profile.
@@ -522,12 +533,26 @@ export function PosPage() {
             savedLine.quantityInput.kind === 'SIMPLE'
               ? savedLine.quantityInput.baseQty
               : undefined,
-            savedLine.quantityInput.kind === 'COMPONENTS'
+            savedLine.quantityInput.kind === 'COMPONENTS' || savedLine.quantityInput.kind === 'FIXED_UNIT'
               ? savedLine.quantityInput
               : undefined,
           )
+          if (savedLine.quantityInput.kind === 'FIXED_UNIT') {
+            const saved = savedLine.normalizedQuantitySnapshot.fixedUnitSnapshot
+            const current = quote.conversion.fixedUnitSnapshot
+            if (!saved || !current ||
+                saved.conversionToBase !== current.conversionToBase ||
+                !sameBaseQuantity(savedLine.normalizedQuantitySnapshot.baseQty, quote.baseQty) ||
+                !sameBaseQuantity(savedLine.normalizedQuantitySnapshot.pricingQty, quote.pricingQty)) {
+              currentFixedUnitQuote = quote
+              conversionError = 'Draft fixed-unit conversion ratio changed. Use the current unit ratio to correct it.'
+              const historical = await quoteSaleLine(savedLine.variantId, savedLine.normalizedQuantitySnapshot.baseQty)
+              quote = { ...historical, conversion: savedLine.normalizedQuantitySnapshot,
+                fixedUnitOptions: currentFixedUnitQuote.fixedUnitOptions }
+            }
+          }
         } catch (error) {
-          if (savedLine.quantityInput.kind !== 'COMPONENTS') throw error
+          if (savedLine.quantityInput.kind === 'SIMPLE') throw error
           conversionError = error instanceof Error
             ? error.message
             : 'Conversion profile changed. Review this quantity before posting.'
@@ -553,6 +578,10 @@ export function PosPage() {
               throw new Error('Draft conversion profile is no longer compatible with this Product.')
             }
             currentConversionProfile = activeProfile
+            if (activeProfile.id !== savedLine.quantityInput.profileId ||
+                activeProfile.version !== savedLine.quantityInput.profileVersion) {
+              conversionError ||= 'Draft conversion profile changed. Review quantity details under the current profile.'
+            }
             const currentQuote = await quoteSaleLine(
               savedLine.variantId,
               undefined,
@@ -581,7 +610,7 @@ export function PosPage() {
           : null
         return {
           product,
-          quantity: savedLine.normalizedQuantitySnapshot.displayQty,
+          quantity: cartQuantity(quote),
           quote,
           priceInput: formatPaisaToTaka(
             savedLine.manualUnitSellingPricePaisa ?? quote.effectiveUnitSellingPricePaisa,
@@ -590,6 +619,12 @@ export function PosPage() {
           showBreakdown: false,
           conversionExpanded: false,
           conversionComponents: { ...savedLine.normalizedQuantitySnapshot.components },
+          ...(savedLine.quantityInput.kind === 'FIXED_UNIT' ? {
+            fixedUnitInput: {
+              unitId: savedLine.quantityInput.unitId,
+              quantity: savedLine.quantityInput.quantity,
+            },
+          } : {}),
           shortageResolution: savedLine.shortageResolution?.type ?? null,
           vendorId: vendor?.vendorId ?? null,
           vendorName: '',
@@ -597,6 +632,7 @@ export function PosPage() {
           isQuoting: false,
           error: conversionError,
           currentConversionProfile,
+          currentFixedUnitQuote,
           savedDraftLine: savedLine,
         }
       }))
@@ -730,7 +766,7 @@ export function PosPage() {
         ...lines,
         {
           product,
-          quantity: quote.displayQty,
+          quantity: cartQuantity(quote),
           quote,
           priceInput: formatPaisaToTaka(
             quote.effectiveUnitSellingPricePaisa,
@@ -810,7 +846,7 @@ export function PosPage() {
           return {
             ...line,
             quote,
-            quantity: quote.displayQty,
+            quantity: cartQuantity(quote),
             conversionComponents: quote.conversion.components,
             draftLineEdited: true,
             ...(Number(quote.shortfallBaseQty) <= 0
@@ -849,6 +885,36 @@ export function PosPage() {
     }
   }
 
+  async function updateFixedUnitInput(
+    variantId: string,
+    patch: Partial<{ unitId: string; quantity: string }>,
+  ) {
+    const target = cart.find((line) => line.product.variantId === variantId)
+    if (!target) return
+    const entered = {
+      unitId: target.fixedUnitInput?.unitId ?? '',
+      quantity: target.fixedUnitInput?.quantity ?? '1',
+      ...patch,
+    }
+    setCart((lines) => lines.map((line) => line.product.variantId === variantId
+      ? { ...line, fixedUnitInput: entered.unitId ? entered : undefined, draftLineEdited: true, isQuoting: true, error: '' }
+      : line))
+    try {
+      const quote = entered.unitId
+        ? await quoteSaleLine(variantId, undefined, { kind: 'FIXED_UNIT', ...entered })
+        : await quoteSaleLine(variantId, entered.quantity)
+      setCart((lines) => lines.map((line) => line.product.variantId === variantId
+        ? { ...line, quote, quantity: cartQuantity(quote), isQuoting: false,
+            priceInput: line.manualUnitSellingPricePaisa ? line.priceInput
+              : formatPaisaToTaka(quote.effectiveUnitSellingPricePaisa), error: '' }
+        : line))
+    } catch (error) {
+      setCart((lines) => lines.map((line) => line.product.variantId === variantId
+        ? { ...line, isQuoting: false, error: error instanceof Error ? error.message : 'Could not quote this unit.' }
+        : line))
+    }
+  }
+
   async function adoptCurrentConversionProfile(variantId: string) {
     const target = cart.find((line) => line.product.variantId === variantId)
     if (!target?.currentConversionProfile) return
@@ -873,7 +939,7 @@ export function PosPage() {
           profileVersion: profile.version, components,
         })
         setCart((lines) => lines.map((line) => line.product.variantId === variantId
-          ? { ...line, quote, quantity: quote.displayQty,
+          ? { ...line, quote, quantity: cartQuantity(quote),
               conversionComponents: quote.conversion.components,
               currentConversionProfile: undefined, draftLineEdited: true,
               conversionExpanded: true, isQuoting: false, error: '' }
@@ -892,6 +958,15 @@ export function PosPage() {
         ? { ...line, isQuoting: false, error: error instanceof Error ? error.message : 'Could not load current conversion profile.' }
         : line))
     }
+  }
+
+  function adoptCurrentFixedUnitRatio(variantId: string) {
+    setCart((lines) => lines.map((line) => {
+      if (line.product.variantId !== variantId || !line.currentFixedUnitQuote) return line
+      const quote = line.currentFixedUnitQuote
+      return { ...line, quote, quantity: cartQuantity(quote), currentFixedUnitQuote: undefined,
+        draftLineEdited: true, conversionExpanded: true, error: '' }
+    }))
   }
 
   function toggleConversionEditor(variantId: string) {
@@ -1307,12 +1382,13 @@ export function PosPage() {
                               }
                               readOnly={
                                 line.quote.conversion.snapshot?.type ===
-                                'COMPOUND'
+                                'COMPOUND' || Boolean(line.fixedUnitInput)
                               }
                               value={line.quantity}
                             />
-                            {line.quote.conversion.snapshot?.type ===
-                            'COMPOUND' ? (
+                            {line.quote.conversion.snapshot?.type === 'COMPOUND' ||
+                              Boolean(line.quote.fixedUnitOptions?.length) ||
+                              Boolean(line.fixedUnitInput) ? (
                               <Button
                                 aria-label={`Edit quantity details for ${line.product.productName}`}
                                 onClick={() =>
@@ -1380,6 +1456,13 @@ export function PosPage() {
                                 Use current conversion profile
                               </Button>
                             ) : null}
+                            {line.currentFixedUnitQuote ? (
+                              <Button aria-label={`Use current unit ratio for ${line.product.productName}`}
+                                onClick={() => adoptCurrentFixedUnitRatio(line.product.variantId)}
+                                size="xs" type="button" variant="link">
+                                Use current unit ratio
+                              </Button>
+                            ) : null}
                           </div>
                         </td>
                         <td className="pos-number-column">
@@ -1428,6 +1511,38 @@ export function PosPage() {
                               profile={conversionProfile}
                               values={line.conversionComponents}
                             />
+                          </td>
+                        </tr>,
+                      )
+                    }
+
+                    if (line.conversionExpanded && conversionProfile?.type !== 'COMPOUND' &&
+                        (line.quote.fixedUnitOptions?.length || line.fixedUnitInput)) {
+                      detailRows.push(
+                        <tr aria-label={`Quantity details for ${line.product.productName}`}
+                          className="pos-conversion-row" key={`${line.product.variantId}-fixed-unit`}>
+                          <td colSpan={6}>
+                            <div className="pos-conversion-editor">
+                              <label className="pos-conversion-field">
+                                <span>Unit</span>
+                                <Select value={line.fixedUnitInput?.unitId || '__base__'}
+                                  onValueChange={(value) => { if (value) void updateFixedUnitInput(line.product.variantId, { unitId: value === '__base__' ? '' : value }) }}>
+                                  <SelectTrigger aria-label={`Unit for ${line.product.productName}`}><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__base__">{line.product.unitName}</SelectItem>
+                                    {line.quote.fixedUnitOptions?.map((unit) => (
+                                      <SelectItem key={unit.unitId} value={unit.unitId}>{unit.unitName}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </label>
+                              <label className="pos-conversion-field">
+                                <span>Entered quantity</span>
+                                <Input aria-label={`Entered quantity for ${line.product.productName}`}
+                                  inputMode="decimal" value={line.fixedUnitInput?.quantity ?? '1'}
+                                  onChange={(event) => void updateFixedUnitInput(line.product.variantId, { quantity: event.target.value })} />
+                              </label>
+                            </div>
                           </td>
                         </tr>,
                       )

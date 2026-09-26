@@ -2,6 +2,8 @@ import Decimal from 'decimal.js'
 import type { DatabaseClient } from '../../db/request-database'
 import { withDatabaseTransaction } from '../../db/transaction'
 import { InventoryRepository } from '../products/inventory.repository'
+import { ConversionService } from '../products/conversion.service'
+import type { NormalizedQuantity } from '../products/conversion.types'
 import type { CustomerRecord } from '../customers/customer.types'
 import { CustomerResolutionService } from './customer-resolution.service'
 import { PaymentPostingService } from './payment-posting.service'
@@ -94,6 +96,7 @@ function normalizeLines(lines: CommitSaleLineInput[]): CommitSaleLineInput[] {
       ...(line.shortageResolution === undefined
         ? {}
         : { shortageResolution: line.shortageResolution }),
+      ...(line.quantityInput === undefined ? {} : { quantityInput: line.quantityInput }),
     }
   })
 }
@@ -122,6 +125,7 @@ interface PlannedLine {
     totalCostPaisa: string
   } | null
   snapshot: Awaited<ReturnType<SalesRepository['getVariantSnapshot']>>
+  conversion: NormalizedQuantity
 }
 
 export class SalesService {
@@ -229,21 +233,37 @@ export class SalesService {
           let totalCogs = 0n
 
           for (const line of input.lines) {
+            const variantSnapshot =
+              await salesRepository.getVariantSnapshot(tenantId, line.variantId)
+            const conversionService = new ConversionService(tenantId, database)
+            const activeProfile = await conversionService.getActiveProfile(variantSnapshot.productId)
+            const quantityInput = line.quantityInput ?? { kind: 'SIMPLE' as const, baseQty: line.baseQty }
+            if (quantityInput.kind === 'COMPONENTS' &&
+                (activeProfile?.id !== quantityInput.profileId ||
+                 activeProfile.version !== quantityInput.profileVersion)) {
+              throw new SalesConflictError('Conversion profile changed. Correct the quantity before posting.')
+            }
+            const conversion = await conversionService.normalize(
+              quantityInput,
+              quantityInput.kind === 'COMPONENTS' ? undefined : activeProfile ?? undefined,
+              variantSnapshot.productId,
+            )
+            if (!new Decimal(line.baseQty).eq(conversion.baseQty)) {
+              throw new SalesValidationError('Sale base quantity does not match current conversion.')
+            }
+            const pricingBaseFactor = new Decimal(conversion.baseQty)
+              .div(conversion.pricingQty).toFixed()
             const lockedLots =
               await salesRepository.listAvailableLotsForSaleForUpdate(
                 tenantId,
                 line.variantId,
                 input.businessDate,
               )
-            const variantSnapshot =
-              await salesRepository.getVariantSnapshot(
-                tenantId,
-                line.variantId,
-              )
             const partial = buildPartialFifoLineQuote(
               line.variantId,
               line.baseQty,
               lockedLots,
+              pricingBaseFactor,
             )
             const sourceDecision = new StockSourceService().plan({
               requestedBaseQty: line.baseQty,
@@ -316,7 +336,7 @@ export class SalesService {
             )
             const shortageSales = BigInt(
               roundPaisa(
-                shortfall.times(
+                shortfall.div(pricingBaseFactor).times(
                   variantSnapshot.defaultSellingPricePaisa,
                 ),
               ),
@@ -353,7 +373,7 @@ export class SalesService {
               line.manualUnitSellingPricePaisa ?? null
             const grossAmountPaisa = manualUnit
               ? roundPaisa(
-                  new Decimal(effectiveRequested).times(manualUnit),
+                  new Decimal(conversion.pricingQty).times(manualUnit),
                 )
               : automaticSalesTotalPaisa
 
@@ -377,6 +397,7 @@ export class SalesService {
                   : null,
               vendorSource,
               snapshot: variantSnapshot,
+              conversion,
             })
           }
 
@@ -462,7 +483,9 @@ export class SalesService {
               variantNameSnapshot: planned.snapshot.variantName,
               unitNameSnapshot: planned.snapshot.unitName,
               unitSymbolSnapshot: planned.snapshot.unitSymbol,
-              pricingQty: planned.quote.requestedBaseQty,
+              pricingQty: planned.conversion.pricingQty,
+              displayComponentsSnapshot: planned.conversion.components,
+              conversionSnapshot: planned.conversion.fixedUnitSnapshot ?? planned.conversion.snapshot,
               trackingSnapshot: {
                 trackingMode: planned.snapshot.trackingMode,
                 allocationPolicy: planned.snapshot.allocationPolicy,
@@ -732,12 +755,17 @@ export class SalesService {
           const inventoryRepository = new InventoryRepository(database)
 
           if (input.operationId) {
+            await salesRepository.lockOperationId(tenantId, input.operationId)
             const existing =
               await salesRepository.findCommittedSaleByOperationId(
                 tenantId,
                 input.operationId,
               )
             if (existing) {
+              const source = await salesRepository.findDraftSourceByOperationId(tenantId, input.operationId)
+              if (source !== null) {
+                throw new SalesConflictError('Operation ID belongs to a different sale or Draft.')
+              }
               return existing
             }
           }
@@ -759,6 +787,21 @@ export class SalesService {
           let totalCogs = new Decimal(0)
 
           for (const inputLine of input.lines) {
+            const variantSnapshot = await salesRepository.getVariantSnapshot(tenantId, inputLine.variantId)
+            const conversionService = new ConversionService(tenantId, database)
+            const activeProfile = await conversionService.getActiveProfile(variantSnapshot.productId)
+            const quantityInput = inputLine.quantityInput ?? { kind: 'SIMPLE' as const, baseQty: inputLine.baseQty }
+            if (quantityInput.kind === 'COMPONENTS' &&
+                (activeProfile?.id !== quantityInput.profileId || activeProfile.version !== quantityInput.profileVersion)) {
+              throw new SalesConflictError('Conversion profile changed. Correct the quantity before posting.')
+            }
+            const conversion = await conversionService.normalize(quantityInput,
+              quantityInput.kind === 'COMPONENTS' ? undefined : activeProfile ?? undefined,
+              variantSnapshot.productId)
+            if (!new Decimal(inputLine.baseQty).eq(conversion.baseQty)) {
+              throw new SalesValidationError('Sale base quantity does not match current conversion.')
+            }
+            const pricingBaseFactor = new Decimal(conversion.baseQty).div(conversion.pricingQty).toFixed()
             const lockedLots =
               await salesRepository.listAvailableLotsForSaleForUpdate(
                 tenantId,
@@ -769,13 +812,14 @@ export class SalesService {
               inputLine.variantId,
               inputLine.baseQty,
               lockedLots,
+              pricingBaseFactor,
             )
             const manualUnit =
               inputLine.manualUnitSellingPricePaisa ?? null
             const pricingMode = manualUnit ? 'MANUAL' : 'LOT'
             const finalSalesTotalPaisa = manualUnit
               ? roundPaisa(
-                  new Decimal(quote.requestedBaseQty).times(
+                  new Decimal(conversion.pricingQty).times(
                     manualUnit,
                   ),
                 )
@@ -796,6 +840,15 @@ export class SalesService {
               manualUnitSellingPricePaisa: manualUnit,
               finalSalesTotalPaisa,
               cogsPaisa: quote.cogsPaisa,
+              productId: variantSnapshot.productId,
+              unitId: variantSnapshot.unitId,
+              productNameSnapshot: variantSnapshot.productName,
+              variantNameSnapshot: variantSnapshot.variantName,
+              unitNameSnapshot: variantSnapshot.unitName,
+              unitSymbolSnapshot: variantSnapshot.unitSymbol,
+              pricingQty: conversion.pricingQty,
+              displayComponentsSnapshot: conversion.components,
+              conversionSnapshot: conversion.fixedUnitSnapshot ?? conversion.snapshot,
             })
 
             const lotById = new Map(
@@ -901,6 +954,11 @@ export class SalesService {
             input.operationId,
           )
         if (existing) {
+          const source = await new SalesRepository(this.database)
+            .findDraftSourceByOperationId(tenantId, input.operationId)
+          if (source !== null) {
+            throw new SalesConflictError('Operation ID belongs to a different sale or Draft.')
+          }
           return existing
         }
       }

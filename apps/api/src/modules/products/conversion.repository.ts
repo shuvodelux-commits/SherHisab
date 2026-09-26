@@ -54,6 +54,63 @@ function mapComponent(
 export class ConversionRepository {
   constructor(private readonly db: DatabaseClient) {}
 
+  async findFixedUnit(tenantId: string, productId: string, unitId: string): Promise<{
+    unitName: string
+    unitSymbol: string | null
+    conversionToBase: string
+  } | null> {
+    const result = await this.db.query<{
+      unit_name: string
+      unit_symbol: string | null
+      conversion_to_base: string
+    }>(
+      `SELECT u.name AS unit_name, u.symbol AS unit_symbol,
+              trim_scale(pu.conversion_to_base)::text AS conversion_to_base
+       FROM product_units pu
+       JOIN units u ON u.tenant_id = pu.tenant_id AND u.id = pu.unit_id
+       JOIN products p ON p.tenant_id = pu.tenant_id AND p.id = pu.product_id
+       WHERE pu.tenant_id = $1 AND pu.product_id = $2 AND pu.unit_id = $3
+         AND pu.is_active AND u.is_active AND p.is_active
+         AND pu.conversion_mode = 'FIXED' AND pu.unit_id <> p.base_unit_id`,
+      [tenantId, productId, unitId],
+    )
+    const row = result.rows[0]
+    return row ? {
+      unitName: row.unit_name,
+      unitSymbol: row.unit_symbol,
+      conversionToBase: row.conversion_to_base,
+    } : null
+  }
+
+  async listFixedUnits(tenantId: string, productId: string): Promise<Array<{
+    unitId: string
+    unitName: string
+    unitSymbol: string | null
+    conversionToBase: string
+  }>> {
+    const result = await this.db.query<{
+      unit_id: string
+      unit_name: string
+      unit_symbol: string | null
+      conversion_to_base: string
+    }>(
+      `SELECT pu.unit_id, u.name AS unit_name, u.symbol AS unit_symbol,
+              trim_scale(pu.conversion_to_base)::text AS conversion_to_base
+       FROM product_units pu
+       JOIN units u ON u.tenant_id = pu.tenant_id AND u.id = pu.unit_id
+       JOIN products p ON p.tenant_id = pu.tenant_id AND p.id = pu.product_id
+       WHERE pu.tenant_id = $1 AND pu.product_id = $2 AND pu.is_active
+         AND u.is_active AND p.is_active AND pu.conversion_mode = 'FIXED'
+         AND pu.unit_id <> p.base_unit_id
+       ORDER BY lower(u.name), pu.unit_id`,
+      [tenantId, productId],
+    )
+    return result.rows.map((row) => ({
+      unitId: row.unit_id, unitName: row.unit_name, unitSymbol: row.unit_symbol,
+      conversionToBase: row.conversion_to_base,
+    }))
+  }
+
   async lockProduct(
     tenantId: string,
     productId: string,

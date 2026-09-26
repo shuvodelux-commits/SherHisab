@@ -8,6 +8,7 @@ import { CustomerService } from '../../src/modules/customers/customer.service'
 import { FinanceRepository } from '../../src/modules/finance/finance.repository'
 import { InventoryService } from '../../src/modules/products/inventory.service'
 import { ProductMasterService } from '../../src/modules/products/product-master.service'
+import { ConversionService } from '../../src/modules/products/conversion.service'
 import { SalesService } from '../../src/modules/sales/sales.service'
 import type { CommitSaleInput } from '../../src/modules/sales/sales.types'
 import {
@@ -247,6 +248,78 @@ describe.skipIf(!hasDatabase)('mature sales checkout customer identity', () => {
 
   afterAll(async () => {
     await closePool()
+  })
+
+  it('posts mixed units with exact pricing quantity and invoice history', async () => {
+    const fixture = await createFixture('Mixed Sale')
+    const gira = await fixture.products.createUnit({ name: 'Gira', symbol: 'gira' })
+    const gauge = await fixture.products.createUnit({ name: 'Gauge', symbol: 'gauge' })
+    const fabric = await fixture.products.createProduct({
+      name: 'Mixed Fabric', baseUnitId: gira.id,
+      defaultPurchasePricePaisa: '500', defaultSellingPricePaisa: '30000',
+      openingStockBaseQty: '0', minimumStockBaseQty: '0', trackingMode: 'SIMPLE',
+    }, fixture.user.id)
+    await fixture.inventory.adjustStock(fixture.tenant.id, fixture.user.id, fabric.defaultVariantId, {
+      deltaBaseQty: '40', note: 'Mixed sale stock', unitCostPaisa: '500',
+      sellingPricePaisa: '30000', businessDate: '2026-09-01',
+    })
+    const profile = await new ConversionService(fixture.tenant.id, getPool()).replaceActiveProfile(fabric.id, {
+      type: 'COMPOUND', baseUnitId: gira.id, pricingUnitId: gauge.id,
+      pricingBaseFactorNumerator: '16', pricingBaseFactorDenominator: '1', displayPrecision: 2,
+      components: [
+        { key: 'gauge', label: 'Gauge', unitId: gauge.id, baseFactorNumerator: '16', baseFactorDenominator: '1', sortOrder: 0, minValue: '0', maxExclusive: null, allowFraction: false, autoNormalizeRemainder: false },
+        { key: 'gira', label: 'Gira', unitId: gira.id, baseFactorNumerator: '1', baseFactorDenominator: '1', sortOrder: 1, minValue: '0', maxExclusive: '16', allowFraction: false, autoNormalizeRemainder: false },
+      ],
+    })
+    const sale = await new SalesService(getPool()).commitSale(fixture.tenant.id, fixture.user.id, false, {
+      operationId: randomUUID(), businessDate: '2026-09-25',
+      customer: { name: 'Buyer', phone: '01711111111' }, discountPaisa: '0',
+      lines: [{ variantId: fabric.defaultVariantId, baseQty: '35', quantityInput: {
+        kind: 'COMPONENTS', profileId: profile.id, profileVersion: profile.version,
+        components: { gauge: '2', gira: '3' },
+      } }],
+      payments: [{ clientLineId: 'cash', method: 'CASH', amountPaisa: '65625' }],
+    })
+    expect(sale.grandTotalPaisa).toBe('65625')
+    expect(sale.lines[0]?.baseQty).toBe('35')
+    const line = await getPool().query<{
+      pricing_qty: string; display_components_snapshot: Record<string, string>;
+      conversion_snapshot: Record<string, unknown> | null
+    }>(`SELECT trim_scale(pricing_qty)::text AS pricing_qty, display_components_snapshot, conversion_snapshot
+       FROM sales_lines WHERE tenant_id = $1 AND sale_id = $2`, [fixture.tenant.id, sale.id])
+    expect(line.rows[0]).toMatchObject({
+      pricing_qty: '2.1875', display_components_snapshot: { gauge: '2', gira: '3' },
+      conversion_snapshot: { id: profile.id, version: profile.version },
+    })
+    const forged = await postSale(fixture.cookie, {
+      operationId: randomUUID(), businessDate: '2026-09-25',
+      customer: { name: 'Buyer', phone: '01711111111' }, discountPaisa: '0',
+      lines: [{ variantId: fabric.defaultVariantId, baseQty: '5', quantityInput: {
+        kind: 'COMPONENTS', profileId: profile.id, profileVersion: profile.version,
+        components: { gauge: '2', gira: '3' },
+      } }],
+      payments: [{ clientLineId: 'cash', method: 'CASH', amountPaisa: '65625' }],
+    })
+    expect(forged.status).toBe(400)
+  })
+
+  it('uses the same authoritative conversion when no payment is entered', async () => {
+    const fixture = await createFixture('Unpaid Fixed Sale')
+    const carton = await fixture.products.createUnit({ name: 'Carton', symbol: 'ctn' })
+    await fixture.products.replaceAlternativeUnits(fixture.product.id, [
+      { unitId: carton.id, conversionMode: 'FIXED', conversionToBase: '2' },
+    ])
+    const sale = await new SalesService(getPool()).commitSale(fixture.tenant.id, fixture.user.id, false, {
+      operationId: randomUUID(), businessDate: '2026-09-25',
+      lines: [{ variantId: fixture.product.defaultVariantId, baseQty: '2',
+        quantityInput: { kind: 'FIXED_UNIT', unitId: carton.id, quantity: '1' } }],
+    })
+    const line = await getPool().query<{ conversion_snapshot: Record<string, unknown> | null }>(
+      'SELECT conversion_snapshot FROM sales_lines WHERE tenant_id = $1 AND sale_id = $2',
+      [fixture.tenant.id, sale.id],
+    )
+    expect(line.rows[0]?.conversion_snapshot).toMatchObject({ unitId: carton.id, conversionToBase: '2' })
+    expect(sale.lines[0]?.baseQty).toBe('2')
   })
 
   it('requires a Customer name before any sale mutation', async () => {

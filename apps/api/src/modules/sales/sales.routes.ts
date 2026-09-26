@@ -23,6 +23,7 @@ import type {
   SalesPaymentMethod,
 } from './sales.types'
 import type { ShortageResolution } from './stock-source.types'
+import type { QuantityInput } from '../products/conversion.types'
 
 function objectBody(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -116,6 +117,10 @@ function draftQuantityInput(value: unknown): SalesDraftQuantityInput {
     }
   }
 
+  if (kind === 'FIXED_UNIT') {
+    return { kind, unitId: stringField(body, 'unitId'), quantity: stringField(body, 'quantity') }
+  }
+
   if (kind === 'COMPONENTS') {
     return {
       kind: 'COMPONENTS',
@@ -126,6 +131,21 @@ function draftQuantityInput(value: unknown): SalesDraftQuantityInput {
   }
 
   throw new SalesValidationError('Unsupported Draft quantity kind.')
+}
+
+function saleQuantityInput(value: unknown): QuantityInput {
+  const body = objectBody(value)
+  const kind = stringField(body, 'kind')
+  if (kind === 'SIMPLE') return { kind, baseQty: stringField(body, 'baseQty') }
+  if (kind === 'FIXED_UNIT') return {
+    kind, unitId: stringField(body, 'unitId'), quantity: stringField(body, 'quantity'),
+  }
+  if (kind === 'COMPONENTS') return {
+    kind, profileId: stringField(body, 'profileId'),
+    profileVersion: positiveIntegerField(body, 'profileVersion'),
+    components: stringRecord(body.components, 'components'),
+  }
+  throw new SalesValidationError('Unsupported sale quantity kind.')
 }
 
 function draftPayment(value: unknown): SalesDraftPaymentState {
@@ -187,6 +207,7 @@ function draftLine(value: unknown): SalesDraftLineInput {
       displayQty: stringField(normalized, 'displayQty'),
       components: stringRecord(normalized.components, 'components'),
       snapshot: normalized.snapshot ?? null,
+      fixedUnitSnapshot: normalized.fixedUnitSnapshot ?? null,
     },
     pricingMode,
     manualUnitSellingPricePaisa: nullableString(
@@ -338,6 +359,9 @@ function commitInput(body: Record<string, unknown>): CommitSaleInput {
       return {
         variantId: stringField(line, 'variantId'),
         baseQty: stringField(line, 'baseQty'),
+        ...(line.quantityInput === undefined ? {} : {
+          quantityInput: saleQuantityInput(line.quantityInput),
+        }),
         ...(manual === undefined
           ? {}
           : { manualUnitSellingPricePaisa: manual }),
