@@ -41,10 +41,14 @@ function validTemplateId(raw: string): string {
 }
 
 function validPaisa(raw: string): string {
-  if (!/^\d+$/.test(raw)) {
+  if (!/^\d+$/.test(raw) || raw.length > 32) {
     throw new SalesTemplateValidationError('Manual selling price must be a non-negative whole paisa amount.')
   }
-  return BigInt(raw).toString()
+  const amount = BigInt(raw)
+  if (amount > 9223372036854775807n) {
+    throw new SalesTemplateValidationError('Manual selling price exceeds the allowed range.')
+  }
+  return amount.toString()
 }
 
 function requireActive(record: SalesTemplateRecord | null): SalesTemplateRecord {
@@ -180,10 +184,11 @@ export class SalesTemplateService {
     const seen = new Set<string>()
     const lines: SalesTemplateStoredLine[] = []
     for (const line of input) {
-      if (!uuidPattern.test(line.variantId) || seen.has(line.variantId)) {
+      const key = line.variantId.toLowerCase()
+      if (!uuidPattern.test(line.variantId) || seen.has(key)) {
         throw new SalesTemplateValidationError('Template lines require distinct valid Variant IDs.')
       }
-      seen.add(line.variantId)
+      seen.add(key)
       const product = (await pos.searchProductsForClient(line.variantId, {
         limit: 1, permissions: [],
       })).find((item) => item.variantId === line.variantId)
