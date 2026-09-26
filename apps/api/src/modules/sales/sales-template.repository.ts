@@ -17,6 +17,8 @@ interface HeaderRow {
 
 interface LineRow {
   variant_id: string
+  product_name: string
+  variant_name: string | null
   quantity_input_snapshot: SalesTemplateStoredLine['quantityInput']
   normalized_quantity_snapshot: SalesTemplateStoredLine['normalizedQuantitySnapshot']
   pricing_strategy: SalesTemplateStoredLine['pricingStrategy']
@@ -34,6 +36,8 @@ function asRecord(header: HeaderRow, lines: LineRow[]): SalesTemplateRecord {
     updatedAt: header.updated_at.toISOString(),
     lines: lines.map((line) => ({
       variantId: line.variant_id,
+      productName: line.product_name,
+      variantName: line.variant_name,
       quantityInput: line.quantity_input_snapshot,
       normalizedQuantitySnapshot: line.normalized_quantity_snapshot,
       pricingStrategy: line.pricing_strategy,
@@ -90,12 +94,18 @@ export class SalesTemplateRepository {
     const header = result.rows[0]
     if (!header) return null
     const lines = await this.db.query<LineRow>(
-      `SELECT variant_id, quantity_input_snapshot,
-              normalized_quantity_snapshot, pricing_strategy,
-              manual_unit_selling_price_paisa::text
-       FROM sales_template_lines
-       WHERE tenant_id = $1 AND template_id = $2
-       ORDER BY sort_order, id`,
+      `SELECT l.variant_id, p.name AS product_name,
+              pv.display_name AS variant_name,
+              l.quantity_input_snapshot,
+              l.normalized_quantity_snapshot, l.pricing_strategy,
+              l.manual_unit_selling_price_paisa::text
+       FROM sales_template_lines l
+       JOIN product_variants pv
+         ON pv.tenant_id = l.tenant_id AND pv.id = l.variant_id
+       JOIN products p
+         ON p.tenant_id = pv.tenant_id AND p.id = pv.product_id
+       WHERE l.tenant_id = $1 AND l.template_id = $2
+       ORDER BY l.sort_order, l.id`,
       [tenantId, id],
     )
     return asRecord(header, lines.rows)
