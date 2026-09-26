@@ -1,4 +1,4 @@
-import { CircleHelp, Plus, Trash2 } from 'lucide-react'
+import { CircleHelp, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useLanguageMode } from '../../app/language'
 import { BilingualLabel } from '../../components/ui/bilingual-label'
 import { Button } from '../../components/ui/button'
@@ -34,6 +34,37 @@ import type {
 } from './product-types'
 
 const SELECT_NONE = '__select_none__'
+
+function AdvancedSectionHelp({
+  titleEn,
+  titleBn,
+  en,
+  bn,
+}: {
+  titleEn: string
+  titleBn: string
+  en: string
+  bn: string
+}) {
+  const { mode } = useLanguageMode()
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-label={mode === 'bn' ? `${titleBn} সম্পর্কে` : `About ${titleEn}`}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <CircleHelp aria-hidden="true" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent className="product-section-help-tooltip">
+        <BilingualLabel en={en} bn={bn} layout="stacked" />
+      </TooltipContent>
+    </Tooltip>
+  )
+}
 
 export interface AlternativeUnitFormRow {
   key: string
@@ -453,20 +484,19 @@ export function ProductAdvancedFields({
       <TooltipProvider>
       <section className="product-advanced-section">
         <div className="product-advanced-heading">
-          <div>
+          <div className="product-section-heading-title">
             <strong>
               <BilingualLabel
                 en="Inventory Tracking"
                 bn="ইনভেন্টরি ট্র্যাকিং"
               />
             </strong>
-            <p>
-              <BilingualLabel
-                layout="stacked"
-                en="Keep ordinary Products simple. Enable serial or batch/expiry tracking only when the business needs it."
-                bn="সাধারণ পণ্য সহজ রাখুন। ব্যবসায় প্রয়োজন হলেই সিরিয়াল বা ব্যাচ/মেয়াদ ট্র্যাকিং চালু করুন।"
-              />
-            </p>
+            <AdvancedSectionHelp
+              titleEn="Inventory Tracking"
+              titleBn="ইনভেন্টরি ট্র্যাকিং"
+              en="Keep ordinary Products simple. Enable serial or batch/expiry tracking only when the business needs it."
+              bn="সাধারণ পণ্য সহজ রাখুন। ব্যবসায় প্রয়োজন হলেই সিরিয়াল বা ব্যাচ/মেয়াদ ট্র্যাকিং চালু করুন।"
+            />
           </div>
         </div>
 
@@ -549,17 +579,16 @@ export function ProductAdvancedFields({
 
       <section className="product-advanced-section">
         <div className="product-advanced-heading">
-          <div>
+          <div className="product-section-heading-title">
             <strong>
               <BilingualLabel en="Warranty" bn="ওয়ারেন্টি" />
             </strong>
-            <p>
-              <BilingualLabel
-                layout="stacked"
-                en="Enable only when this Product carries a warranty. Sale-time warranty details are preserved as history."
-                bn="এই পণ্যে ওয়ারেন্টি থাকলেই চালু করুন। বিক্রির সময়ের ওয়ারেন্টি তথ্য ইতিহাস হিসেবে সংরক্ষিত থাকবে।"
-              />
-            </p>
+            <AdvancedSectionHelp
+              titleEn="Warranty"
+              titleBn="ওয়ারেন্টি"
+              en="Enable only when this Product carries a warranty. Sale-time warranty details are preserved as history."
+              bn="এই পণ্যে ওয়ারেন্টি থাকলেই চালু করুন। বিক্রির সময়ের ওয়ারেন্টি তথ্য ইতিহাস হিসেবে সংরক্ষিত থাকবে।"
+            />
           </div>
         </div>
 
@@ -575,12 +604,6 @@ export function ProductAdvancedFields({
             <strong>
               {t('Enable Warranty', 'ওয়ারেন্টি চালু করুন')}
             </strong>
-            <small>
-              {t(
-                'Keep disabled for Products without warranty.',
-                'ওয়ারেন্টি না থাকলে বন্ধ রাখুন।',
-              )}
-            </small>
           </span>
         </label>
 
@@ -685,20 +708,19 @@ export function ProductAdvancedFields({
 
       <section className="product-advanced-section">
         <div className="product-advanced-heading">
-          <div>
+          <div className="product-section-heading-title">
             <strong>
               <BilingualLabel
                 en="Sale Capture Fields"
                 bn="বিক্রির অতিরিক্ত তথ্য"
               />
             </strong>
-            <p>
-              <BilingualLabel
-                layout="stacked"
-                en="Add only Product-specific information the cashier must capture during a sale."
-                bn="বিক্রির সময় ক্যাশিয়ারের যে পণ্য-নির্দিষ্ট তথ্য দরকার শুধু সেটিই যোগ করুন।"
-              />
-            </p>
+            <AdvancedSectionHelp
+              titleEn="Sale Capture Fields"
+              titleBn="বিক্রির অতিরিক্ত তথ্য"
+              en="Add only Product-specific information the cashier must capture during a sale."
+              bn="বিক্রির সময় ক্যাশিয়ারের যে পণ্য-নির্দিষ্ট তথ্য দরকার শুধু সেটিই যোগ করুন।"
+            />
           </div>
           <Button
             onClick={() =>
@@ -886,20 +908,19 @@ export function ProductAdvancedFields({
 
       <section className="product-advanced-section">
         <div className="product-advanced-heading">
-          <div>
+          <div className="product-section-heading-title">
             <strong>
               <BilingualLabel
                 en="Quantity Conversion"
                 bn="পরিমাণ রূপান্তর"
               />
             </strong>
-            <p>
-              <BilingualLabel
-                layout="stacked"
-                en="Use exact ratios for compound business quantities such as Gauge + Gira, Pipe + Feet, or Carton + Piece."
-                bn="গজ + গিরা, পাইপ + ফুট বা কার্টন + পিসের মতো যৌগিক পরিমাণে সঠিক অনুপাত ব্যবহার করুন।"
-              />
-            </p>
+            <AdvancedSectionHelp
+              titleEn="Quantity Conversion"
+              titleBn="পরিমাণ রূপান্তর"
+              en="Use exact ratios for quantities such as Gauge + Gira or Carton + Piece. The Product Unit remains the base inventory unit."
+              bn="গজ + গিরা বা কার্টন + পিসের মতো পরিমাণে সঠিক অনুপাত ব্যবহার করুন। পণ্যের এককই মূল স্টক একক থাকবে।"
+            />
           </div>
         </div>
 
@@ -921,12 +942,6 @@ export function ProductAdvancedFields({
                 'কাস্টম পরিমাণ রূপান্তর চালু করুন',
               )}
             </strong>
-            <small>
-              {t(
-                'The selected Product Unit remains the base inventory unit.',
-                'নির্বাচিত পণ্যের এককই মূল স্টক একক থাকবে।',
-              )}
-            </small>
           </span>
         </label>
 
@@ -1463,19 +1478,20 @@ export function ProductAdvancedFields({
 
       <section className="product-advanced-section">
         <div className="product-advanced-heading">
-          <div>
+          <div className="product-section-heading-title">
             <strong>
               <BilingualLabel en="Alternative Units" bn="বিকল্প একক" />
             </strong>
-            <p>
-              <BilingualLabel
-                layout="stacked"
-                en="For example, 1 carton = 24 pieces. Add as many package sizes as this Product needs."
-                bn="যেমন ১ কার্টন = ২৪ পিস। প্রয়োজনমতো একাধিক প্যাকের একক যোগ করুন।"
-              />
-            </p>
+            <AdvancedSectionHelp
+              titleEn="Alternative Units"
+              titleBn="বিকল্প একক"
+              en="For example, 1 carton = 24 pieces. Add as many package sizes as this Product needs."
+              bn="যেমন ১ কার্টন = ২৪ পিস। প্রয়োজনমতো একাধিক প্যাকের একক যোগ করুন।"
+            />
           </div>
           <Button
+            aria-label={t('Add alternative unit', 'বিকল্প একক যোগ করুন')}
+            className="product-heading-action"
             onClick={() =>
               patch({
                 alternativeUnits: [
@@ -1496,16 +1512,16 @@ export function ProductAdvancedFields({
             variant="secondary"
           >
             <Plus aria-hidden="true" data-icon="inline-start" />
-            {t('Add alternative unit', 'বিকল্প একক যোগ করুন')}
+            {t('Add alternative', 'বিকল্প যোগ করুন')}
           </Button>
         </div>
 
         {state.alternativeUnits.map((row, index) => (
-          <div className="product-inline-grid" key={row.key}>
-            <span className="product-variable-unit-note">1 {units.find((unit) => unit.id === row.unitId)?.name ?? t('unit', 'একক')} = {row.conversionToBase || '…'} {units.find((unit) => unit.id === baseUnitId)?.name ?? t('base unit', 'মূল একক')}</span>
-            <label className="product-field">
-              <BilingualLabel en="Unit" bn="একক" />
-              <Select
+          <div className="product-alternative-row" key={row.key}>
+            <div className="product-alternative-unit">
+              <label className="product-field">
+                <BilingualLabel en="Unit" bn="একক" />
+                <Select
                 onValueChange={(value) => {
                   const rows = [...state.alternativeUnits]
                   rows[index] = {
@@ -1544,17 +1560,39 @@ export function ProductAdvancedFields({
                       ))}
                   </SelectGroup>
                 </SelectContent>
-              </Select>
-            </label>
-
-            <Button size="sm" variant="ghost" onClick={() => onAddUnit?.(index)}>
-              {t(`Add Unit for alternative ${index + 1}`, `বিকল্প ${index + 1} একক যোগ করুন`)}
-            </Button>
-            {row.unitId ? (
-              <Button size="sm" variant="ghost" onClick={() => onEditUnit?.(row.unitId)}>
-                {t(`Edit alternative Unit ${index + 1}`, `বিকল্প ${index + 1} একক সম্পাদনা করুন`)}
-              </Button>
-            ) : null}
+                </Select>
+              </label>
+              <div className="product-alternative-unit-actions">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      aria-label={t(`Add Unit for alternative ${index + 1}`, `বিকল্প ${index + 1} একক যোগ করুন`)}
+                      onClick={() => onAddUnit?.(index)}
+                      size="icon-sm"
+                      variant="ghost"
+                    >
+                      <Plus aria-hidden="true" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t('Create a Unit and use it here', 'একক তৈরি করে এখানে ব্যবহার করুন')}</TooltipContent>
+                </Tooltip>
+                {row.unitId ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={t(`Edit alternative Unit ${index + 1}`, `বিকল্প ${index + 1} একক সম্পাদনা করুন`)}
+                        onClick={() => onEditUnit?.(row.unitId)}
+                        size="icon-sm"
+                        variant="ghost"
+                      >
+                        <Pencil aria-hidden="true" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('Edit the selected Unit', 'নির্বাচিত একক সম্পাদনা করুন')}</TooltipContent>
+                  </Tooltip>
+                ) : null}
+              </div>
+            </div>
 
             <label className="product-field">
               <BilingualLabel en="Conversion" bn="রূপান্তর" />
@@ -1641,28 +1679,28 @@ export function ProductAdvancedFields({
                   ),
                 })
               }
-              size="sm"
+              size="icon-sm"
               variant="ghost"
             >
-              <Trash2 aria-hidden="true" data-icon="inline-start" />
+              <Trash2 aria-hidden="true" />
             </Button>
+            <span className="product-variable-unit-note product-alternative-equation">1 {units.find((unit) => unit.id === row.unitId)?.name ?? t('unit', 'একক')} = {row.conversionToBase || '…'} {units.find((unit) => unit.id === baseUnitId)?.name ?? t('base unit', 'মূল একক')}</span>
           </div>
         ))}
       </section>
 
       <section className="product-advanced-section">
         <div className="product-advanced-heading">
-          <div>
+          <div className="product-section-heading-title">
             <strong>
               <BilingualLabel en="Specifications" bn="বৈশিষ্ট্য" />
             </strong>
-            <p>
-              <BilingualLabel
-                layout="stacked"
-                en="Descriptive attributes that do not create stock variants."
-                bn="স্টক ভ্যারিয়েন্ট তৈরি না করে পণ্যের বর্ণনামূলক বৈশিষ্ট্য লিখুন।"
-              />
-            </p>
+            <AdvancedSectionHelp
+              titleEn="Specifications"
+              titleBn="বৈশিষ্ট্য"
+              en="Descriptive attributes that do not create stock variants."
+              bn="স্টক ভ্যারিয়েন্ট তৈরি না করে পণ্যের বর্ণনামূলক বৈশিষ্ট্য লিখুন।"
+            />
           </div>
           <Button
             onClick={() =>
@@ -1746,27 +1784,28 @@ export function ProductAdvancedFields({
       </section>
 
       <section className="product-advanced-section">
-        <label className="product-check-row">
-          <Checkbox
-            aria-label={t('Enable Variants', 'ভ্যারিয়েন্ট চালু করুন')}
-            checked={state.variantsEnabled}
-            onCheckedChange={(checked) =>
-              patch({ variantsEnabled: checked === true })
-            }
+        <div className="product-check-row">
+          <label className="product-check-label">
+            <Checkbox
+              aria-label={t('Enable Variants', 'ভ্যারিয়েন্ট চালু করুন')}
+              checked={state.variantsEnabled}
+              onCheckedChange={(checked) =>
+                patch({ variantsEnabled: checked === true })
+              }
+            />
+            <span>
+              <strong>
+                <BilingualLabel en="Enable Variants" bn="ভ্যারিয়েন্ট চালু করুন" />
+              </strong>
+            </span>
+          </label>
+          <AdvancedSectionHelp
+            titleEn="Enable Variants"
+            titleBn="ভ্যারিয়েন্ট চালু করুন"
+            en="Use only when Color, Size, Grade or another option changes stock."
+            bn="রং, সাইজ, গ্রেড বা অন্য অপশন অনুযায়ী আলাদা স্টক রাখতে হলে ব্যবহার করুন।"
           />
-          <span>
-            <strong>
-              <BilingualLabel en="Enable Variants" bn="ভ্যারিয়েন্ট চালু করুন" />
-            </strong>
-            <small>
-              <BilingualLabel
-                layout="stacked"
-                en="Use only when Color, Size, Grade or another option changes stock."
-                bn="রং, সাইজ, গ্রেড বা অন্য অপশন অনুযায়ী আলাদা স্টক রাখতে হলে ব্যবহার করুন।"
-              />
-            </small>
-          </span>
-        </label>
+        </div>
 
         {state.variantsEnabled ? (
           <div className="product-variant-editor">

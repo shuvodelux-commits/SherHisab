@@ -1659,10 +1659,33 @@ p {
 
 .product-advanced-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.product-section-heading-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.product-section-help-tooltip {
+  max-width: min(320px, calc(100vw - 32px));
+  line-height: 1.35;
+}
+
+.product-section-help-tooltip .bilingual-label-helper {
+  color: inherit;
+  opacity: 0.82;
+}
+
+.product-heading-action {
+  flex: none;
+  white-space: nowrap;
 }
 
 .product-advanced-heading strong,
@@ -1686,6 +1709,39 @@ p {
   margin-top: 8px;
 }
 
+.product-alternative-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(100px, 0.7fr) minmax(0, 1fr) 28px;
+  gap: 8px;
+  align-items: end;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.product-alternative-unit {
+  display: flex;
+  min-width: 0;
+  align-items: end;
+  gap: 4px;
+}
+
+.product-alternative-unit > .product-field {
+  flex: 1;
+}
+
+.product-alternative-unit-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.product-alternative-equation {
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+
 .product-spec-grid,
 .product-option-grid {
   display: grid;
@@ -1698,6 +1754,13 @@ p {
 .product-check-row {
   display: flex;
   align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.product-check-label {
+  display: flex;
+  align-items: center;
   gap: 8px;
   cursor: pointer;
 }
@@ -1896,6 +1959,7 @@ p {
   }
 
   .product-inline-grid,
+  .product-alternative-row,
   .product-spec-grid,
   .product-option-grid,
   .product-variant-grid,

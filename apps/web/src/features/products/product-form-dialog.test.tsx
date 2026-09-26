@@ -278,6 +278,20 @@ describe('ProductFormDialog', () => {
     expect(screen.getByLabelText('Units per larger unit')).toHaveValue('16')
     expect(screen.queryByLabelText('Conversion component key 1')).not.toBeInTheDocument()
   })
+  it('keeps advanced help compact and groups alternative-unit controls', async () => {
+    installFetch()
+    renderForm()
+    fireEvent.click(await screen.findByRole('button', { name: 'Advanced' }))
+
+    expect(screen.queryByText(/For example, 1 carton = 24 pieces/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'About Alternative Units' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add alternative unit' })).toHaveTextContent('Add alternative')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add alternative unit' }))
+    const unitSelector = screen.getByRole('combobox', { name: 'Alternative unit 1' })
+    expect(unitSelector.closest('.product-alternative-row')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add Unit for alternative 1' })).toBeInTheDocument()
+  })
   // Two Radix selectors can exceed the suite's default timeout under parallel jsdom load.
   it('saves carton and bag as separate fixed alternatives', async () => {
     const fetchMock = installFetch()
