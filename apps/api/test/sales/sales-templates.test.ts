@@ -11,9 +11,11 @@ import {
 } from '../products/product-test-helpers'
 
 const hasDatabase = Boolean(process.env.DATABASE_URL)
+const createdTenantIds: string[] = []
 
 async function fixture(name: string) {
   const tenant = await createProductTestTenant(name)
+  createdTenantIds.push(tenant.id)
   const auth = new AuthService()
   const password = 'strong-password-123'
   const owner = await auth.createUser({
@@ -64,7 +66,16 @@ async function fixture(name: string) {
 }
 
 describe.skipIf(!hasDatabase)('reusable sales templates', () => {
-  afterEach(async () => { await cleanupProductTestTenants() })
+  afterEach(async () => {
+    if (createdTenantIds.length > 0) {
+      await getPool().query(
+        'DELETE FROM sales_templates WHERE tenant_id = ANY($1::uuid[])',
+        [createdTenantIds],
+      )
+      createdTenantIds.length = 0
+    }
+    await cleanupProductTestTenants()
+  })
   afterAll(async () => { await closePool() })
 
   it('separates view and manage permissions for Staff', async () => {
