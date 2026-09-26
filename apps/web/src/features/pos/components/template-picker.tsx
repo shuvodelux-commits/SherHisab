@@ -35,6 +35,7 @@ interface Editor {
   name: string
   lines: SalesTemplateLineInputDto[]
   priceInputs: Record<string, string>
+  originalLines: string | null
 }
 
 function errorMessage(error: unknown): string {
@@ -117,6 +118,7 @@ export function TemplatePicker({
       const loaded = await getSalesTemplateForEdit(template.id)
       setEditor({
         id: loaded.id, version: loaded.version, name: loaded.name,
+        originalLines: JSON.stringify(cleanLines(loaded.lines)),
         priceInputs: Object.fromEntries(loaded.lines.flatMap((line) =>
           line.manualUnitSellingPricePaisa === null ? [] : [[line.variantId,
             formatPaisaToTaka(line.manualUnitSellingPricePaisa)]])),
@@ -141,7 +143,7 @@ export function TemplatePicker({
     setError('')
     setSearch('')
     setEditor({
-      id: null, version: null, name: '',
+      id: null, version: null, name: '', originalLines: null,
       priceInputs: Object.fromEntries(currentLines.flatMap((line) =>
         line.manualUnitSellingPricePaisa ? [[line.variantId,
           formatPaisaToTaka(line.manualUnitSellingPricePaisa)]] : [])),
@@ -166,7 +168,8 @@ export function TemplatePicker({
       })))
       if (editor.id && editor.version !== null) {
         await updateSalesTemplate(editor.id, {
-          expectedVersion: editor.version, name: editor.name, lines,
+          expectedVersion: editor.version, name: editor.name,
+          ...(JSON.stringify(lines) === editor.originalLines ? {} : { lines }),
         })
       } else {
         await createSalesTemplate({ name: editor.name, lines })
