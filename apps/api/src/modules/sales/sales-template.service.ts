@@ -163,7 +163,7 @@ export class SalesTemplateService {
   async archive(id: string, expectedVersion: number): Promise<SalesTemplateRecord> {
     return withDatabaseTransaction(this.database, async (database) => {
       const repository = new SalesTemplateRepository(database)
-      const current = requireActive(await repository.findById(this.tenantId, id, true))
+      const current = requireActive(await repository.findById(this.tenantId, validTemplateId(id), true))
       if (current.version !== expectedVersion) {
         throw new SalesTemplateConflictError(current.version)
       }
