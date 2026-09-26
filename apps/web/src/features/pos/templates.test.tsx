@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { LanguageProvider } from '../../app/language'
+import { PosPage } from './pos-page'
 import { TemplatePicker } from './components/template-picker'
 
 function jsonResponse(body: unknown, status = 200) {
@@ -80,6 +82,56 @@ describe('TemplatePicker', () => {
     expect(screen.getByText(/replace.*cart/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Load Template' }))
     await waitFor(() => expect(onLoad).toHaveBeenCalledWith(loaded))
+  })
+
+  it('clears checkout identity and payments when loading a Template into POS', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input
+        : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/private/pos/bootstrap') {
+        return jsonResponse({
+          capabilities: { canSell: true, canOverrideSellingPrice: false,
+            canViewConfiguredPurchasePrice: false, canBackdate: false },
+          settings: { showPurchasePrice: false, requireCashSession: false,
+            invoiceShareEnabled: false },
+          financialAccounts: [], activeCashSession: null,
+          recent: { drafts: [], templates: [] },
+        })
+      }
+      if (url === '/api/private/sales/templates') return jsonResponse([saved])
+      if (url === '/api/private/sales/templates/template-1') {
+        return jsonResponse(loaded)
+      }
+      return jsonResponse({ error: `Unexpected request: ${url}` }, 404)
+    }))
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    queryClient.setQueryData(['auth', 'session'], {
+      authenticated: true, userId: 'user-1', tenantId: 'tenant-1',
+      role: 'STAFF', permissions: [
+        'POS_VIEW', 'POS_SELL', 'SALES_TEMPLATE_VIEW', 'SALES_TEMPLATE_MANAGE',
+      ], expiresAt: '2026-09-26T00:00:00Z',
+    })
+    render(
+      <LanguageProvider>
+        <QueryClientProvider client={queryClient}><PosPage /></QueryClientProvider>
+      </LanguageProvider>,
+    )
+    fireEvent.change(screen.getByRole('textbox', { name: 'Customer Name' }), {
+      target: { value: 'Old customer' },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Payment amount 1' }), {
+      target: { value: '12.00' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Templates' }))
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Bathroom package · 1 items',
+    }))
+    await screen.findByText('Loaded Bathroom package into a new cart')
+    expect(screen.getByRole('textbox', { name: 'Customer Name' })).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: 'Payment amount 1' })).toHaveValue('')
+    expect(screen.getByText('Pipe')).toBeInTheDocument()
   })
 
   it('loads without a warning when the cart is empty', async () => {
