@@ -60,8 +60,9 @@ export function ProductCatalog({
 
       <div className="pos-saved-carts">
         <RecentDrafts onOpen={onOpenDraft} onArchived={onArchiveDraft} />
-        {canViewTemplates ? (
+        {canViewTemplates || canManageTemplates ? (
           <TemplatePicker
+            canView={canViewTemplates}
             canManage={canManageTemplates}
             canOverrideSellingPrice={canOverrideSellingPrice}
             cartHasLines={cartHasLines}
