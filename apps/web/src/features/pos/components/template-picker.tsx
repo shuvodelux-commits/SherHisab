@@ -20,6 +20,7 @@ import type {
 } from '../pos-types'
 
 interface TemplatePickerProps {
+  canView: boolean
   canManage: boolean
   canOverrideSellingPrice?: boolean
   cartHasLines: boolean
@@ -58,7 +59,7 @@ function cleanLines(lines: SalesTemplateLineInputDto[]): SalesTemplateLineInputD
 }
 
 export function TemplatePicker({
-  canManage, canOverrideSellingPrice = false, cartHasLines,
+  canView, canManage, canOverrideSellingPrice = false, cartHasLines,
   currentLines, onLoad,
 }: TemplatePickerProps) {
   const queryClient = useQueryClient()
@@ -232,12 +233,16 @@ export function TemplatePicker({
           {listQuery.data?.length === 0 ? <p className="pos-muted">No saved templates.</p> : null}
           {listQuery.data?.map((template) => (
             <div className="pos-template-row" key={template.id}>
-              <Button
-                disabled={busy} onClick={() => void choose(template)}
-                size="sm" type="button" variant="ghost"
-              >
-                {template.name} · {template.lineCount} items
-              </Button>
+              {canView ? (
+                <Button
+                  disabled={busy} onClick={() => void choose(template)}
+                  size="sm" type="button" variant="ghost"
+                >
+                  {template.name} · {template.lineCount} items
+                </Button>
+              ) : (
+                <span>{template.name} · {template.lineCount} items</span>
+              )}
               {canManage ? (
                 <Button
                   aria-label={`Manage ${template.name}`}
