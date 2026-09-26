@@ -176,6 +176,14 @@ export function getSalesTemplate(templateId: string): Promise<SalesTemplateLoade
   )
 }
 
+export function getSalesTemplateForEdit(
+  templateId: string,
+): Promise<SalesTemplateRecordDto> {
+  return apiRequest<SalesTemplateRecordDto>(
+    `${API_ROOT}/sales/templates/${encodeURIComponent(templateId)}/edit`,
+  )
+}
+
 export function createSalesTemplate(input: {
   name: string
   lines: SalesTemplateLineInputDto[]
