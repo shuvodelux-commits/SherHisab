@@ -59,6 +59,11 @@ export class SalesTemplateService {
     return new SalesTemplateRepository(this.database).listActive(this.tenantId)
   }
 
+  async getSaved(id: string): Promise<SalesTemplateRecord> {
+    return requireActive(await new SalesTemplateRepository(this.database)
+      .findById(this.tenantId, id))
+  }
+
   async get(id: string, canOverrideSellingPrice: boolean): Promise<SalesTemplateLoaded> {
     const record = requireActive(await new SalesTemplateRepository(this.database)
       .findById(this.tenantId, id))
