@@ -127,6 +127,16 @@ describe.skipIf(!hasDatabase)('reusable sales templates', () => {
     })
     expect(createdResponse.status).toBe(201)
     const created = await createdResponse.json() as { id: string }
+    const oldLot = await getPool().query<{ id: string }>(
+      `SELECT id FROM inventory_lots
+       WHERE tenant_id = $1 AND variant_id = $2
+       ORDER BY received_on, id LIMIT 1`,
+      [f.tenant.id, f.product.defaultVariantId],
+    )
+    if (!oldLot.rows[0]) throw new Error('Fixture lot missing')
+    await f.inventory.updateLotSellingPrice(
+      f.tenant.id, f.product.id, oldLot.rows[0].id, '2200', f.owner.id,
+    )
     await f.inventory.adjustStock(f.tenant.id, f.owner.id, f.product.defaultVariantId, {
       deltaBaseQty: '5', note: 'New current-price lot',
       unitCostPaisa: '1000', sellingPricePaisa: '2200',
@@ -140,7 +150,7 @@ describe.skipIf(!hasDatabase)('reusable sales templates', () => {
     expect(loaded.name).toBe('Bathroom package')
     expect(loaded.lines).toHaveLength(1)
     expect(loaded.lines[0]?.quote.availableOwnBaseQty).toBe('15')
-    expect(loaded.lines[0]?.quote.effectiveUnitSellingPricePaisa).toBe('1400')
+    expect(loaded.lines[0]?.quote.effectiveUnitSellingPricePaisa).toBe('2200')
     expect(loaded.lines[0]?.shortageResolution).toBeUndefined()
     expect(loaded).not.toHaveProperty('customer')
     expect(loaded).not.toHaveProperty('payments')
