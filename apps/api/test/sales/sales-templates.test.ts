@@ -116,6 +116,19 @@ describe.skipIf(!hasDatabase)('reusable sales templates', () => {
     expect((await f.request(staffCookie, '', 'POST', {
       name: 'Allowed', lines: [f.line],
     })).status).toBe(201)
+    const manager = await f.auth.createUser({
+      tenantId: f.tenant.id, name: 'Template Manager Only',
+      email: `template-manager-only-${randomUUID()}@example.com`,
+      password: 'strong-password-123', role: 'STAFF',
+    })
+    await f.auth.grantPermission({
+      tenantId: f.tenant.id, userId: manager.id,
+      permission: 'SALES_TEMPLATE_MANAGE', grantedByUserId: f.owner.id,
+    })
+    const managerCookie = await f.login(manager.email)
+    expect((await f.request(managerCookie, '')).status).toBe(200)
+    expect((await f.request(managerCookie, `/${saved.id}`)).status).toBe(403)
+    expect((await f.request(managerCookie, `/${saved.id}/edit`)).status).toBe(200)
   })
 
   it('loads current stock and automatic lot price without checkout state', async () => {
