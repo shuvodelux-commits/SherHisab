@@ -35,6 +35,7 @@ import type {
 } from './sales.types'
 import type { ShortageResolution } from './stock-source.types'
 import type { QuantityInput } from '../products/conversion.types'
+import { ProductValidationError } from '../products/product.errors'
 
 function objectBody(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -438,7 +439,7 @@ function knownTemplateError(error: unknown): error is Error {
     error instanceof SalesTemplateConflictError ||
     error instanceof SalesTemplateValidationError ||
     error instanceof SalesValidationError ||
-    error instanceof Error
+    error instanceof ProductValidationError
 }
 
 export const salesRoutes = new Hono<AppEnv>()
