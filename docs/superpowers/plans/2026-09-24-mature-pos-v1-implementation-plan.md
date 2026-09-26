@@ -1,6 +1,6 @@
 # SherHisab Mature POS v1 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
+> **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task. The user requested continuing without subagents; preserve that preference unless they change it. Steps use checkbox (- [ ]) syntax for tracking.
 
 **Goal:** Build the approved first mature SherHisab POS release with production-safe quantity conversion, tracking, customer/payment accounting, stock sourcing, drafts/templates, invoice revision, single/batch returns, configurable cash sessions, idempotency, concurrency protection, and the compact legacy-compatible POS workflow.
 
@@ -10,15 +10,23 @@
 
 **Spec:** docs/superpowers/specs/2026-09-24-mature-pos-v1-design.md
 
+## Priority Update — 2026-09-26
+
+The functional baseline includes work through Task 9 at `7535db4a18310044515c83fb004920134a1ec4e2`. The user has rejected the current UI quality. Functional delivery does not imply visual acceptance; earlier task checklists describe their implementation steps, not approval of the present appearance.
+
+**Next: Task 9A — Compact UI Reset and Visual Baseline, before Task 10.** First produce a concrete populated POS preview, then apply the accepted compact pattern to POS and Products. Tasks 10–14 retain their business scope and use that baseline. Task 9A is planned, not implemented or visually approved by this documentation update.
+
+Visual authority: [AI_UI_DESIGN_RULES.md](../../../AI_UI_DESIGN_RULES.md). Read relevant guidance once; avoid bulk skill reading. Preserve all existing business behavior and the GitHub-first verification/deployment sequence.
+
 ## Global Constraints
 
 - Behavioral source of truth: shuvodelux-commits/sherERP_Mohim at 955ed448fbe3f8d37bd89d474490b776ee2c42f2.
 - Planning baseline main: 9063df5244228eb91164eec1394cb3a795f9235f; every implementation slice must branch from the latest main after all earlier approved slices have merged.
 - Do not modify legacy/.
 - Do not use Desktop Commander unless the user explicitly requests local work.
-- Before implementation code in every slice, read AGENTS.md, instruction.md, .agents/skills/README.md, .agents/skills/DESIGN.md, every .agents/skills/**/SKILL.md, the approved spec, this plan, the required Superpowers execution/TDD skill, and SHERHISAB_UI_CODING_INSTRUCTIONS.md for UI work.
+- Follow the focused reading gate in AGENTS.md and instruction.md: the skill index, relevant skills, global constraints, and current spec/task/dependency sections. For UI work read AI_UI_DESIGN_RULES.md; consult the long component manual only by relevant section. Reuse unchanged guidance already available in context.
 - Before implementing a workflow already present in SherERP, inspect the corresponding legacy .gs/.html and regression tests named in that task.
-- TDD is mandatory: add a failing automated test, demonstrate RED, implement the minimum complete behavior, demonstrate GREEN, then run package/full verification.
+- For business logic and observable behavior changes, add a failing automated test, demonstrate RED, implement the behavior, demonstrate GREEN, then run package/full verification. Pure visual changes require rendered comparison; do not invent CSS class assertions as proof of design quality. Full CI still gates all application changes.
 - GitHub CI must apply all migrations and pass pnpm typecheck, pnpm lint, pnpm test, and pnpm build before merge.
 - Tenant identity comes only from authenticated request context; request bodies never select tenant_id.
 - Every business mutation that spans stock/accounting/audit rows executes in one PostgreSQL transaction.
@@ -28,7 +36,7 @@
 - JSONB is allowed for immutable conversion/revision snapshots, but stock, payments, ledgers, returns, serials, and source allocations remain relational and constrained.
 - Do not create fake negative inventory lots. Negative selling is represented by inventory_shortfalls.
 - Refund method is cashier-selected and is not restricted by the original payment channel.
-- No implementation slice is a reduced public release; Mature POS v1 is complete only after Tasks 1-14 integrate and the final release gate is green.
+- No implementation slice is a reduced public release; Mature POS v1 is complete only after Tasks 1-14 plus Task 9A integrate, the visual baseline is accepted, and the final release gate is green.
 - Product principle: DON'T COMPLICATE. MAKE IT EASY FOR ALL.
 
 ## Review Focus
@@ -676,9 +684,9 @@ Merge only on green CI.
 - pos-state reducer keeps one authoritative CartLineState per Variant.
 - TanStack Query owns server data; transaction draft state stays local/reducer state until saved.
 
-- [ ] **Step 1: Re-read mandatory UI rules and use the approved compact design**
+- [ ] **Step 1: Follow the current compact UI rules and workflow spec**
 
-Before UI code, re-read .agents/skills/DESIGN.md and SHERHISAB_UI_CODING_INSTRUCTIONS.md. Use the established SherHisab component tokens; do not redesign the approved two-workspace counter flow.
+Read AI_UI_DESIGN_RULES.md if it is not already available in context. Consult only needed component guidance. Preserve the two-workspace counter flow; Task 9A establishes the new visual baseline. Existing Task 7 styling does not constitute visual acceptance.
 
 - [ ] **Step 2: Write RED Product search/scanner keyboard tests**
 
@@ -843,7 +851,68 @@ Merge only on green CI.
 
 ---
 
+### Task 9A: Compact UI Reset and Visual Baseline
+
+**Status:** Planned after the user's 2026-09-26 design feedback; preview and acceptance pending.
+
+**Implementation branch:** `codex/compact-erp-ui` from the latest GitHub `main`.
+
+**Spec:** Section 3/3A of the mature POS design and [AI_UI_DESIGN_RULES.md](../../../AI_UI_DESIGN_RULES.md).
+
+**References:** The corresponding legacy POS/Product workflows, current rendered screens, and existing shared components. The former gallery extraction is not a layout target.
+
+**Files to inspect/change as needed:**
+
+- `apps/web/src/styles.css` — shared density, typography, spacing, and responsive rules.
+- `apps/web/src/components/app-shell.tsx`, `sidebar.tsx`, `topbar.tsx` — compact shell while retaining navigation behavior.
+- `apps/web/src/components/ui/button.tsx`, `input.tsx`, `data-table.tsx`, `bilingual-label.tsx` — reuse shared primitives; add variants only if the layout requires them.
+- `apps/web/src/features/pos/pos-page.tsx` — Product and Cart workspace composition.
+- `apps/web/src/features/pos/components/product-catalog.tsx`, `customer-panel.tsx`, `cart.tsx`, `cart-line.tsx`, `payment-lines.tsx`, `checkout-summary.tsx`, `recent-drafts.tsx`, `template-picker.tsx` — compact working groups and optional details.
+- `apps/web/src/features/products/product-page.tsx` — validate the accepted pattern on a table and form.
+- Existing shell, POS, draft, template, bilingual, and Product tests — retain behavior coverage and extend only for observable changes.
+- Create `docs/design/2026-09-26-compact-ui-review.md` — brief, references, preview/screenshot links, commit/viewport/data details, acceptance, and any unresolved issues. Create it during execution, not as an empty placeholder.
+
+**Interfaces and scope:** Keep existing API contracts, server financial authority, permissions, conversion/stock rules, and transaction state. Shared visual tokens and components are the output consumed by subsequent UI tasks. No new domain model or migration is expected.
+
+- [ ] **Step 1: Capture the baseline and write the short design brief**
+
+Render current POS and Products with representative data. Inspect the corresponding legacy workflows. Record clutter, wasted height, alignment problems, and difficult actions with evidence. State what remains visible and what opens on demand. Use comparable viewport/data for subsequent screenshots; label fixture data.
+
+- [ ] **Step 2: Build one reviewable POS preview on the GitHub branch**
+
+Use the rulebook's compact measurements, existing shared components, and realistic content. Keep this preview limited to visual composition using existing behavior; add a failing test first if an interaction must change. Show ordinary checkout with six lines and one payment, plus an expanded complex line and multiple payments. Provide a preview and screenshots with the proposed visual target. Work through layout defects before presenting it. This preview is not a production deployment.
+
+- [ ] **Step 3: Record acceptance of the concrete visual baseline**
+
+Let the user review the populated POS preview before broad rollout. Address requested changes and record the accepted screenshot/link and date. Do not treat silence, green tests, or this written plan as visual acceptance. Continue independent verification while review is pending.
+
+- [ ] **Step 4: Pin any changed interaction with a failing test**
+
+Before changing interaction behavior, add tests on GitHub for the affected behavior: optional Customer fields reveal when invalid; Draft/Template dialogs restore focus to their trigger; Product search keyboard selection still adds the intended item; cart editing and payment submission preserve current state. Use the cases that actually change, and demonstrate RED. Reuse existing coverage for unchanged behavior; avoid CSS-string tests for density.
+
+- [ ] **Step 5: Apply the accepted shared layout to POS and Products**
+
+Implement shared compact tokens/variants, aligned rows and labels, grouped totals/actions, and clear optional disclosures. Preserve inline conversion/tracking/shortage placement. Apply the same system to Products' table and form; inspect other routes affected by shared primitives. Keep behavior and permissions intact.
+
+- [ ] **Step 6: Inspect the rendered result and correct defects**
+
+Run the UI rulebook's full visual checklist: 1366×768 and 1280×720 ordinary sale, complex data, 1024×768 tablet, 390×844 mobile, 200% zoom, language modes, themes, keyboard/focus, and error/loading states. Capture comparable before/after evidence. Check loaded fonts, row heights, readable amounts, scrolling, and checkout reachability. Record functional status separately from visual acceptance.
+
+- [ ] **Step 7: Verify on GitHub, review, and merge**
+
+Run affected behavior tests, then the required migration/typecheck/lint/full-test/build CI. Expected result: all required checks green, reviewed diff, and accepted visual baseline with evidence. Resolve remaining defects before merge.
+
+- [ ] **Step 8: Pull, verify locally, and release the same commit**
+
+Follow AGENTS.md: pull merged main, apply any required migrations, run full database-enabled tests, typecheck, lint, and build. Deploy under the user's existing release authorization and serve the LAN app from the same commit after local verification passes. Confirm commit/version alignment and capture a final runtime screen check. Resume Task 10 using the accepted compact pattern.
+
+**Completion:** Working behavior preserved, shared patterns consistent, review evidence saved, and the compact visual baseline accepted. No claim of visual completion based solely on automated tests.
+
+---
+
 ### Task 10: Invoice Read/Reprint/History/Duplicate/Edit and Revision Audit
+
+**UI prerequisite:** Task 9A visual baseline accepted and integrated. Use its compact patterns for invoice, history, and edit screens.
 
 **Implementation branch:** feat/sales-invoice-lifecycle
 
