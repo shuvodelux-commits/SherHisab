@@ -689,6 +689,9 @@ export function PosPage() {
     variantName: line.product.variantName,
     quantityInput: lineQuantityInput(line),
     pricingStrategy: 'CURRENT_AUTO',
+    ...(line.manualUnitSellingPricePaisa
+      ? { manualUnitSellingPricePaisa: line.manualUnitSellingPricePaisa }
+      : {}),
   }))
 
   function changePayment(
