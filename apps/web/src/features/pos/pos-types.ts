@@ -274,6 +274,8 @@ export type SalesTemplatePriceStrategy = 'CURRENT_AUTO' | 'FIXED_MANUAL'
 
 export interface SalesTemplateLineInputDto {
   variantId: string
+  productName?: string
+  variantName?: string | null
   quantityInput: PosQuantityInputDto
   pricingStrategy?: SalesTemplatePriceStrategy
   manualUnitSellingPricePaisa?: string | null
@@ -281,6 +283,8 @@ export interface SalesTemplateLineInputDto {
 
 export interface SalesTemplateStoredLineDto {
   variantId: string
+  productName?: string
+  variantName?: string | null
   quantityInput: PosQuantityInputDto
   normalizedQuantitySnapshot: PosNormalizedQuantityDto
   pricingStrategy: SalesTemplatePriceStrategy
