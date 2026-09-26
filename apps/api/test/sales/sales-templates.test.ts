@@ -225,6 +225,10 @@ describe.skipIf(!hasDatabase)('reusable sales templates', () => {
         manualUnitSellingPricePaisa: '1800' }],
     }
     expect((await f.request(staffCookie, '', 'POST', input)).status).toBe(403)
+    expect((await f.request(f.ownerCookie, '', 'POST', {
+      ...input, lines: [{ ...input.lines[0],
+        manualUnitSellingPricePaisa: '9223372036854775808' }],
+    })).status).toBe(400)
     const createdResponse = await f.request(f.ownerCookie, '', 'POST', input)
     expect(createdResponse.status).toBe(201)
     const created = await createdResponse.json() as { id: string }
@@ -293,6 +297,11 @@ describe.skipIf(!hasDatabase)('reusable sales templates', () => {
 
   it('keeps duplicates independent and archives templates with version checks', async () => {
     const f = await fixture('Template Lifecycle')
+    expect((await f.request(f.ownerCookie, '', 'POST', {
+      name: 'Duplicate variants',
+      lines: [f.line, { ...f.line,
+        variantId: f.product.defaultVariantId.toUpperCase() }],
+    })).status).toBe(400)
     const create = await f.request(f.ownerCookie, '', 'POST', {
       name: 'Original', lines: [f.line],
     })
