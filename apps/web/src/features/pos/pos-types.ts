@@ -269,3 +269,54 @@ export interface CommittedSaleDto {
     finalSalesTotalPaisa: string
   }>
 }
+
+export type SalesTemplatePriceStrategy = 'CURRENT_AUTO' | 'FIXED_MANUAL'
+
+export interface SalesTemplateLineInputDto {
+  variantId: string
+  productName?: string
+  variantName?: string | null
+  quantityInput: PosQuantityInputDto
+  pricingStrategy?: SalesTemplatePriceStrategy
+  manualUnitSellingPricePaisa?: string | null
+}
+
+export interface SalesTemplateStoredLineDto {
+  variantId: string
+  productName?: string
+  variantName?: string | null
+  quantityInput: PosQuantityInputDto
+  normalizedQuantitySnapshot: PosNormalizedQuantityDto
+  pricingStrategy: SalesTemplatePriceStrategy
+  manualUnitSellingPricePaisa: string | null
+}
+
+export interface SalesTemplateSummaryDto {
+  id: string
+  name: string
+  version: number
+  lineCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SalesTemplateRecordDto {
+  id: string
+  name: string
+  version: number
+  createdAt: string
+  updatedAt: string
+  status: 'ACTIVE' | 'ARCHIVED'
+  createdByUserId: string
+  lines: SalesTemplateStoredLineDto[]
+}
+
+export interface SalesTemplateLoadedDto {
+  id: string
+  name: string
+  version: number
+  lines: Array<SalesTemplateStoredLineDto & {
+    product: PosProductSearchDto
+    quote: PosLineQuoteDto
+  }>
+}

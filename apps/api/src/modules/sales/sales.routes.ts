@@ -16,6 +16,17 @@ import type {
   SalesDraftQuantityInput,
 } from './sales-draft.types'
 import { SalesService } from './sales.service'
+import {
+  SalesTemplateConflictError,
+  SalesTemplateNotFoundError,
+  SalesTemplatePermissionError,
+  SalesTemplateService,
+  SalesTemplateValidationError,
+} from './sales-template.service'
+import type {
+  SalesTemplateInput,
+  SalesTemplateLineInput,
+} from './sales-template.types'
 import type {
   CommitSaleInput,
   SaleCustomerInput,
@@ -24,6 +35,7 @@ import type {
 } from './sales.types'
 import type { ShortageResolution } from './stock-source.types'
 import type { QuantityInput } from '../products/conversion.types'
+import { ProductValidationError } from '../products/product.errors'
 
 function objectBody(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -380,6 +392,56 @@ function commitInput(body: Record<string, unknown>): CommitSaleInput {
   }
 }
 
+function templateLineInput(value: unknown): SalesTemplateLineInput {
+  const line = objectBody(value)
+  const strategy = optionalStringField(line, 'pricingStrategy')
+  if (strategy !== undefined &&
+      strategy !== 'CURRENT_AUTO' &&
+      strategy !== 'FIXED_MANUAL') {
+    throw new SalesValidationError('Unsupported Template price strategy.')
+  }
+  const manual = line.manualUnitSellingPricePaisa
+  if (manual !== undefined && manual !== null && typeof manual !== 'string') {
+    throw new SalesValidationError('Manual selling price must be a string.')
+  }
+  return {
+    variantId: stringField(line, 'variantId'),
+    quantityInput: saleQuantityInput(line.quantityInput),
+    ...(strategy === undefined ? {} : { pricingStrategy: strategy }),
+    ...(manual === undefined ? {} : { manualUnitSellingPricePaisa: manual }),
+  }
+}
+
+function templateLinesInput(value: unknown): SalesTemplateLineInput[] {
+  if (!Array.isArray(value)) {
+    throw new SalesValidationError('Template lines must be an array.')
+  }
+  return value.map(templateLineInput)
+}
+
+function templateInput(body: Record<string, unknown>): SalesTemplateInput {
+  return {
+    name: stringField(body, 'name'),
+    lines: templateLinesInput(body.lines),
+  }
+}
+
+function templateErrorStatus(error: unknown): 400 | 403 | 404 | 409 {
+  if (error instanceof SalesTemplatePermissionError) return 403
+  if (error instanceof SalesTemplateNotFoundError) return 404
+  if (error instanceof SalesTemplateConflictError) return 409
+  return 400
+}
+
+function knownTemplateError(error: unknown): error is Error {
+  return error instanceof SalesTemplatePermissionError ||
+    error instanceof SalesTemplateNotFoundError ||
+    error instanceof SalesTemplateConflictError ||
+    error instanceof SalesTemplateValidationError ||
+    error instanceof SalesValidationError ||
+    error instanceof ProductValidationError
+}
+
 export const salesRoutes = new Hono<AppEnv>()
   .post('/sales/quote-line', async (c) => {
     if (!c.get('permissions').includes('POS_VIEW')) {
@@ -679,6 +741,144 @@ export const salesRoutes = new Hono<AppEnv>()
         error instanceof Error
       ) {
         return c.json({ error: error.message }, 400)
+      }
+      throw error
+    }
+  })
+  .get('/sales/templates', async (c) => {
+    if (!c.get('permissions').includes('SALES_TEMPLATE_VIEW') &&
+        !c.get('permissions').includes('SALES_TEMPLATE_MANAGE')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    return withRequestDatabase(c.env, async (database) =>
+      c.json(await new SalesTemplateService(c.get('tenantId'), database).list()),
+    )
+  })
+  .post('/sales/templates', async (c) => {
+    if (!c.get('permissions').includes('SALES_TEMPLATE_MANAGE')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    try {
+      const input = templateInput(objectBody(await c.req.json()))
+      return await withRequestDatabase(c.env, async (database) =>
+        c.json(await new SalesTemplateService(c.get('tenantId'), database).create(
+          c.get('userId'), input,
+          c.get('permissions').includes('SALES_OVERRIDE_SELLING_PRICE'),
+        ), 201),
+      )
+    } catch (error) {
+      if (knownTemplateError(error)) {
+        return c.json({ error: error.message }, templateErrorStatus(error))
+      }
+      throw error
+    }
+  })
+  .get('/sales/templates/:templateId/edit', async (c) => {
+    if (!c.get('permissions').includes('SALES_TEMPLATE_MANAGE')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    try {
+      return await withRequestDatabase(c.env, async (database) =>
+        c.json(await new SalesTemplateService(c.get('tenantId'), database).getSaved(
+          c.req.param('templateId'),
+        )),
+      )
+    } catch (error) {
+      if (knownTemplateError(error)) {
+        return c.json({ error: error.message }, templateErrorStatus(error))
+      }
+      throw error
+    }
+  })
+  .get('/sales/templates/:templateId', async (c) => {
+    if (!c.get('permissions').includes('SALES_TEMPLATE_VIEW')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    try {
+      return await withRequestDatabase(c.env, async (database) =>
+        c.json(await new SalesTemplateService(c.get('tenantId'), database).get(
+          c.req.param('templateId'),
+          c.get('permissions').includes('SALES_OVERRIDE_SELLING_PRICE'),
+        )),
+      )
+    } catch (error) {
+      if (knownTemplateError(error)) {
+        return c.json({ error: error.message }, templateErrorStatus(error))
+      }
+      throw error
+    }
+  })
+  .patch('/sales/templates/:templateId', async (c) => {
+    if (!c.get('permissions').includes('SALES_TEMPLATE_MANAGE')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    try {
+      const body = objectBody(await c.req.json())
+      const expectedVersion = positiveIntegerField(body, 'expectedVersion')
+      const name = optionalStringField(body, 'name')
+      const lines = body.lines === undefined
+        ? undefined : templateLinesInput(body.lines)
+      if (name === undefined && lines === undefined) {
+        throw new SalesValidationError('Template name or lines are required.')
+      }
+      return await withRequestDatabase(c.env, async (database) =>
+        c.json(await new SalesTemplateService(c.get('tenantId'), database).update(
+          c.req.param('templateId'), expectedVersion,
+          { ...(name === undefined ? {} : { name }),
+            ...(lines === undefined ? {} : { lines }) },
+          c.get('permissions').includes('SALES_OVERRIDE_SELLING_PRICE'),
+        )),
+      )
+    } catch (error) {
+      if (knownTemplateError(error)) {
+        return c.json({
+          error: error.message,
+          ...(error instanceof SalesTemplateConflictError
+            ? { currentVersion: error.currentVersion } : {}),
+        }, templateErrorStatus(error))
+      }
+      throw error
+    }
+  })
+  .post('/sales/templates/:templateId/duplicate', async (c) => {
+    if (!c.get('permissions').includes('SALES_TEMPLATE_MANAGE')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    try {
+      const body = objectBody(await c.req.json())
+      const name = optionalStringField(body, 'name')
+      return await withRequestDatabase(c.env, async (database) =>
+        c.json(await new SalesTemplateService(c.get('tenantId'), database).duplicate(
+          c.get('userId'), c.req.param('templateId'), name,
+          c.get('permissions').includes('SALES_OVERRIDE_SELLING_PRICE'),
+        ), 201),
+      )
+    } catch (error) {
+      if (knownTemplateError(error)) {
+        return c.json({ error: error.message }, templateErrorStatus(error))
+      }
+      throw error
+    }
+  })
+  .post('/sales/templates/:templateId/archive', async (c) => {
+    if (!c.get('permissions').includes('SALES_TEMPLATE_MANAGE')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    try {
+      const body = objectBody(await c.req.json())
+      const expectedVersion = positiveIntegerField(body, 'expectedVersion')
+      return await withRequestDatabase(c.env, async (database) =>
+        c.json(await new SalesTemplateService(c.get('tenantId'), database).archive(
+          c.req.param('templateId'), expectedVersion,
+        )),
+      )
+    } catch (error) {
+      if (knownTemplateError(error)) {
+        return c.json({
+          error: error.message,
+          ...(error instanceof SalesTemplateConflictError
+            ? { currentVersion: error.currentVersion } : {}),
+        }, templateErrorStatus(error))
       }
       throw error
     }

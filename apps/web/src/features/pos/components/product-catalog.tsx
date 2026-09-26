@@ -5,8 +5,9 @@ import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { formatNumber } from '../../../lib/format-number'
 import { formatPaisaToTaka } from '../../../lib/money'
-import type { PosProductSearchDto } from '../pos-types'
+import type { PosProductSearchDto, SalesTemplateLineInputDto, SalesTemplateLoadedDto } from '../pos-types'
 import { RecentDrafts } from './recent-drafts'
+import { TemplatePicker } from './template-picker'
 
 interface ProductCatalogProps {
   activeResultIndex: number
@@ -15,6 +16,12 @@ interface ProductCatalogProps {
   isPending: boolean
   onAdd: (product: PosProductSearchDto) => void
   onOpenDraft: (draftId: string) => void
+  onLoadTemplate: (template: SalesTemplateLoadedDto) => void
+  canViewTemplates: boolean
+  canManageTemplates: boolean
+  canOverrideSellingPrice: boolean
+  cartHasLines: boolean
+  currentTemplateLines: SalesTemplateLineInputDto[]
   onArchiveDraft: (draftId: string) => void
   onClear: () => void
   onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void
@@ -30,6 +37,12 @@ export function ProductCatalog({
   isPending,
   onAdd,
   onOpenDraft,
+  onLoadTemplate,
+  canViewTemplates,
+  canManageTemplates,
+  canOverrideSellingPrice,
+  cartHasLines,
+  currentTemplateLines,
   onArchiveDraft,
   onClear,
   onKeyDown,
@@ -45,8 +58,19 @@ export function ProductCatalog({
         <BilingualLabel en="Add Product" bn="পণ্য যোগ করুন" />
       </div>
 
-      <RecentDrafts onOpen={onOpenDraft} onArchived={onArchiveDraft} />
-
+      <div className="pos-saved-carts">
+        <RecentDrafts onOpen={onOpenDraft} onArchived={onArchiveDraft} />
+        {canViewTemplates || canManageTemplates ? (
+          <TemplatePicker
+            canView={canViewTemplates}
+            canManage={canManageTemplates}
+            canOverrideSellingPrice={canOverrideSellingPrice}
+            cartHasLines={cartHasLines}
+            currentLines={currentTemplateLines}
+            onLoad={onLoadTemplate}
+          />
+        ) : null}
+      </div>
 
       <div className="pos-search-wrap">
         <Search aria-hidden="true" />

@@ -1,9 +1,11 @@
 import type { SetStateAction } from 'react'
+import { formatPaisaToTaka } from '../../lib/money'
 import type {
   PosConversionProfileDto,
   PosLineQuoteDto,
   PosProductSearchDto,
   SalesDraftLineDto,
+  SalesTemplateLoadedDto,
 } from './pos-types'
 
 export interface CartLineState {
@@ -82,4 +84,39 @@ export function cartReducer(
       : action.value
 
   return oneLinePerVariant(next)
+}
+
+export function cartLinesFromTemplate(
+  template: SalesTemplateLoadedDto,
+): CartLineState[] {
+  return template.lines.map((line) => {
+    const quote = line.quote
+    const manual = line.pricingStrategy === 'FIXED_MANUAL'
+      ? line.manualUnitSellingPricePaisa : null
+    return {
+      product: line.product,
+      quantity: quote.conversion.snapshot || quote.conversion.fixedUnitSnapshot
+        ? quote.baseQty : quote.displayQty,
+      quote,
+      priceInput: formatPaisaToTaka(
+        manual ?? quote.effectiveUnitSellingPricePaisa,
+      ),
+      manualUnitSellingPricePaisa: manual,
+      showBreakdown: false,
+      conversionExpanded: false,
+      conversionComponents: { ...quote.conversion.components },
+      ...(line.quantityInput.kind === 'FIXED_UNIT' ? {
+        fixedUnitInput: {
+          unitId: line.quantityInput.unitId,
+          quantity: line.quantityInput.quantity,
+        },
+      } : {}),
+      shortageResolution: null,
+      vendorId: null,
+      vendorName: '',
+      vendorUnitCostInput: '',
+      isQuoting: false,
+      error: '',
+    }
+  })
 }

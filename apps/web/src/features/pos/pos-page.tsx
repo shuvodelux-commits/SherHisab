@@ -49,9 +49,12 @@ import type {
   PosVendorSearchDto,
   SalesDraftDto,
   SalesDraftLineDto,
+  SalesTemplateLineInputDto,
+  SalesTemplateLoadedDto,
 } from './pos-types'
 import {
   cartReducer,
+  cartLinesFromTemplate,
   type CartLineState,
 } from './pos-state'
 import {
@@ -664,6 +667,33 @@ export function PosPage() {
     }
   }
 
+  function loadTemplate(template: SalesTemplateLoadedDto) {
+    setCart(cartLinesFromTemplate(template))
+    setCustomer(emptyCustomerDraft())
+    setPayments([newPaymentLine()])
+    setDiscountInput('')
+    setSaleNote('')
+    setActiveDraft(null)
+    setCompletedSale(null)
+    submissionIntentRef.current = null
+    setSearch('')
+    setSearchOpen(false)
+    setActiveResultIndex(-1)
+    setPageError('')
+    setSaleMessage(`Loaded ${template.name} into a new cart`)
+  }
+
+  const currentTemplateLines: SalesTemplateLineInputDto[] = cart.map((line) => ({
+    variantId: line.product.variantId,
+    productName: line.product.productName,
+    variantName: line.product.variantName,
+    quantityInput: lineQuantityInput(line),
+    pricingStrategy: 'CURRENT_AUTO',
+    ...(line.manualUnitSellingPricePaisa
+      ? { manualUnitSellingPricePaisa: line.manualUnitSellingPricePaisa }
+      : {}),
+  }))
+
   function changePayment(
     clientLineId: string,
     patch: Partial<PosPaymentLineDraft>,
@@ -1273,6 +1303,12 @@ export function PosPage() {
             void addProduct(product)
         }}
         onOpenDraft={(draftId) => void openDraft(draftId)}
+        onLoadTemplate={loadTemplate}
+        canViewTemplates={sessionQuery.data?.permissions.includes('SALES_TEMPLATE_VIEW') ?? false}
+        canManageTemplates={sessionQuery.data?.permissions.includes('SALES_TEMPLATE_MANAGE') ?? false}
+        canOverrideSellingPrice={canOverrideSellingPrice}
+        cartHasLines={cart.length > 0}
+        currentTemplateLines={currentTemplateLines}
         onArchiveDraft={(draftId) => {
           if (activeDraft?.id === draftId) {
             setActiveDraft(null)
