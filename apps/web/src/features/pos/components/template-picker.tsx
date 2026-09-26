@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../../components/ui/button'
+import { formatPaisaToTaka, parseTakaToPaisa } from '../../../lib/money'
 import { Input } from '../../../components/ui/input'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -33,6 +34,7 @@ interface Editor {
   version: number | null
   name: string
   lines: SalesTemplateLineInputDto[]
+  priceInputs: Record<string, string>
 }
 
 function errorMessage(error: unknown): string {
@@ -115,6 +117,9 @@ export function TemplatePicker({
       const loaded = await getSalesTemplateForEdit(template.id)
       setEditor({
         id: loaded.id, version: loaded.version, name: loaded.name,
+        priceInputs: Object.fromEntries(loaded.lines.flatMap((line) =>
+          line.manualUnitSellingPricePaisa === null ? [] : [[line.variantId,
+            formatPaisaToTaka(line.manualUnitSellingPricePaisa)]])),
         lines: loaded.lines.map((line) => ({
           variantId: line.variantId,
           productName: line.productName,
@@ -137,6 +142,9 @@ export function TemplatePicker({
     setSearch('')
     setEditor({
       id: null, version: null, name: '',
+      priceInputs: Object.fromEntries(currentLines.flatMap((line) =>
+        line.manualUnitSellingPricePaisa ? [[line.variantId,
+          formatPaisaToTaka(line.manualUnitSellingPricePaisa)]] : [])),
       lines: fromCart ? currentLines.map((line) => ({
         ...line, pricingStrategy: 'CURRENT_AUTO',
       })) : [],
@@ -148,7 +156,14 @@ export function TemplatePicker({
     setBusy(true)
     setError('')
     try {
-      const lines = cleanLines(editor.lines)
+      const lines = cleanLines(editor.lines.map((line) => ({
+        ...line,
+        ...(line.pricingStrategy === 'FIXED_MANUAL' ? {
+          manualUnitSellingPricePaisa: parseTakaToPaisa(
+            editor.priceInputs[line.variantId] ?? '',
+          ),
+        } : {}),
+      })))
       if (editor.id && editor.version !== null) {
         await updateSalesTemplate(editor.id, {
           expectedVersion: editor.version, name: editor.name, lines,
@@ -301,7 +316,21 @@ export function TemplatePicker({
                       ? `${line.productName}${line.variantName ? ` · ${line.variantName}` : ''}`
                       : line.variantId}</span>
                     {line.quantityInput.kind === 'COMPONENTS' ? (
-                      <span>{quantityLabel(line)}</span>
+                      <div className="pos-template-components">
+                        {Object.entries(line.quantityInput.components).map(([key, value]) => (
+                          <Input key={key} aria-label={`${key} quantity ${index + 1}`}
+                            onChange={(event) => updateLine(index, {
+                              ...line,
+                              quantityInput: line.quantityInput.kind === 'COMPONENTS'
+                                ? { ...line.quantityInput, components: {
+                                    ...line.quantityInput.components,
+                                    [key]: event.target.value,
+                                  } }
+                                : line.quantityInput,
+                            })}
+                            value={value} />
+                        ))}
+                      </div>
                     ) : (
                       <Input aria-label={`Quantity ${index + 1}`}
                         onChange={(event) => updateLine(index, {
@@ -327,11 +356,14 @@ export function TemplatePicker({
                       </label>
                     ) : null}
                     {line.pricingStrategy === 'FIXED_MANUAL' && canOverrideSellingPrice ? (
-                      <Input aria-label={`Fixed price paisa ${index + 1}`}
-                        onChange={(event) => updateLine(index, {
-                          ...line, manualUnitSellingPricePaisa: event.target.value,
+                      <Input aria-label={`Fixed price (৳) ${index + 1}`}
+                        onChange={(event) => setEditor({
+                          ...editor, priceInputs: {
+                            ...editor.priceInputs,
+                            [line.variantId]: event.target.value,
+                          },
                         })}
-                        value={line.manualUnitSellingPricePaisa ?? ''} />
+                        value={editor.priceInputs[line.variantId] ?? ''} />
                     ) : null}
                     <Button aria-label={`Remove line ${index + 1}`}
                       onClick={() => setEditor({ ...editor,
@@ -364,9 +396,14 @@ export function TemplatePicker({
                 </div>
               ) : null}
               {cartHasLines && editor.id ? (
-                <Button onClick={() => setEditor({ ...editor, lines: currentLines.map((line) => ({
-                  ...line, pricingStrategy: 'CURRENT_AUTO',
-                })) })}
+                <Button onClick={() => setEditor({ ...editor,
+                  priceInputs: Object.fromEntries(currentLines.flatMap((line) =>
+                    line.manualUnitSellingPricePaisa ? [[line.variantId,
+                      formatPaisaToTaka(line.manualUnitSellingPricePaisa)]] : [])),
+                  lines: currentLines.map((line) => ({
+                    ...line, pricingStrategy: 'CURRENT_AUTO',
+                  })),
+                })}
                   size="sm" type="button" variant="outline">
                   Replace lines with current cart
                 </Button>
