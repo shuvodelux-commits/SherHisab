@@ -44,7 +44,7 @@ const loaded = {
   }],
 }
 
-function renderPicker(cartHasLines: boolean, canView = true) {
+function renderPicker(cartHasLines: boolean, canView = true, canOverrideSellingPrice = false) {
   const onLoad = vi.fn()
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -54,6 +54,7 @@ function renderPicker(cartHasLines: boolean, canView = true) {
       <TemplatePicker
         canView={canView}
         canManage
+        canOverrideSellingPrice={canOverrideSellingPrice}
         cartHasLines={cartHasLines}
         currentLines={[]}
         onLoad={onLoad}
@@ -150,6 +151,46 @@ describe('TemplatePicker', () => {
     expect(screen.queryByRole('button', {
       name: 'Bathroom package · 1 items',
     })).not.toBeInTheDocument()
+  })
+
+  it('edits fixed manual price in taka and submits exact paisa', async () => {
+    let updateBody: unknown = null
+    const editable = {
+      ...loaded, status: 'ACTIVE', createdByUserId: 'user-1',
+      createdAt: saved.createdAt, updatedAt: saved.updatedAt,
+      lines: loaded.lines.map((line) => ({
+        ...line, pricingStrategy: 'FIXED_MANUAL',
+        manualUnitSellingPricePaisa: '1800',
+      })),
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input
+        : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/private/sales/templates') return jsonResponse([saved])
+      if (url === '/api/private/sales/templates/template-1/edit') {
+        return jsonResponse(editable)
+      }
+      if (url === '/api/private/sales/templates/template-1' &&
+          init?.method === 'PATCH') {
+        updateBody = JSON.parse(String(init.body))
+        return jsonResponse({ ...editable, version: 2 })
+      }
+      return jsonResponse({ error: `Unexpected request: ${url}` }, 404)
+    }))
+    renderPicker(false, true, true)
+    fireEvent.click(screen.getByRole('button', { name: 'Templates' }))
+    fireEvent.click(await screen.findByRole('button', {
+      name: 'Manage Bathroom package',
+    }))
+    const input = await screen.findByRole('textbox', { name: 'Fixed price (৳) 1' })
+    expect(input).toHaveValue('18.00')
+    fireEvent.change(input, { target: { value: '19.50' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() => expect(updateBody).toMatchObject({
+      expectedVersion: 1,
+      lines: [{ pricingStrategy: 'FIXED_MANUAL',
+        manualUnitSellingPricePaisa: '1950' }],
+    }))
   })
 
   it('loads without a warning when the cart is empty', async () => {
